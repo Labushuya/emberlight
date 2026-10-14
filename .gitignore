@@ -1,0 +1,21 @@
+# Gradle / Android Studio
+.gradle/
+build/
+/local.properties
+/.idea/
+*.iml
+.DS_Store
+/captures
+.externalNativeBuild/
+.cxx/
+.kotlin/
+
+# Signierung: niemals committen
+*.jks
+*.keystore
+keystore.properties
+
+# Sonstiges
+*.apk
+*.aab
+*.log
