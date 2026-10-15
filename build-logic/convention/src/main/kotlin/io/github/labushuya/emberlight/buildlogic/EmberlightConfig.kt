@@ -11,4 +11,7 @@ object EmberlightConfig {
     const val COMPILE_SDK = 37
     const val TARGET_SDK = 37
     const val MIN_SDK = 26
+
+    /** JDK für Unit-Tests (Robolectric 4.17 mit SDK 37 braucht 21). Der Build selbst bleibt auf JDK 17. */
+    const val TEST_JAVA_VERSION = 21
 }
