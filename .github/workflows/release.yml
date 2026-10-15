@@ -265,8 +265,12 @@ jobs:
             "dist/emberlight-v${VERSION}.apk.sha256"
 
       # Nur beim Probelauf: Dateien zur Kontrolle herunterladen. Es entsteht kein Release.
+      # Der Upload ist Komfort. Scheitert er (z. B. Speicherkontingent des Accounts), bleibt der Lauf grün,
+      # die Prüfwerte in der Zusammenfassung sind dann maßgeblich.
       - name: Probelauf-Artefakte hochladen
+        id: upload
         if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-dry-run
@@ -281,12 +285,19 @@ jobs:
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
           APK_SHA256: ${{ steps.verify.outputs.apk_sha256 }}
           CERT_SHA256: ${{ steps.verify.outputs.cert_sha256 }}
+          UPLOAD_OUTCOME: ${{ steps.upload.outcome }}
         run: |
           set -euo pipefail
+          artifact=""
           if [[ "$EVENT_NAME" == "push" ]]; then
             dry="nein"
           else
             dry="ja, kein Release und kein Tag"
+            case "$UPLOAD_OUTCOME" in
+              success) artifact="ja" ;;
+              failure) artifact="nein, Upload fehlgeschlagen (vermutlich Speicherkontingent); die Prüfwerte oben sind maßgeblich" ;;
+              *) artifact="unbekannt (Upload-Status: ${UPLOAD_OUTCOME})" ;;
+            esac
           fi
           # SC2016 aus: Die Backticks in den printf-Formaten sind Markdown-Literale, keine Shell-Ausdrücke.
           # shellcheck disable=SC2016
@@ -298,6 +309,9 @@ jobs:
             printf '| APK-SHA-256 | `%s` |\n' "$APK_SHA256"
             printf '| Zertifikat-SHA-256 | `%s` |\n' "$CERT_SHA256"
             printf '| Probelauf | %s |\n' "$dry"
+            if [[ -n "$artifact" ]]; then
+              printf '| Artefakt hochgeladen | %s |\n' "$artifact"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keystore entfernen
