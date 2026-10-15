@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FF1B1410</color>
+    <!-- Hintergrund des Banners. Splash, Fensterhintergrund und Launcher-Verlauf verwenden dieselbe Farbe. -->
+    <color name="emberlight_background">#FF0B0810</color>
 </resources>
