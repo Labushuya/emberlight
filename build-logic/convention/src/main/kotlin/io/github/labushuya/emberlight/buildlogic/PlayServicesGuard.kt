@@ -1,4 +1,4 @@
-package de.labushuya.emberlight.buildlogic
+package io.github.labushuya.emberlight.buildlogic
 
 /**
  * Harte Grenze aus CLAUDE.md: keine Abhängigkeit von Google Play Services.

@@ -1,4 +1,4 @@
-package de.labushuya.emberlight.buildlogic
+package io.github.labushuya.emberlight.buildlogic
 
 import com.android.build.api.dsl.LibraryExtension
 import org.gradle.api.Plugin
@@ -10,7 +10,7 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
         target.pluginManager.apply("com.android.library")
 
         target.extensions.configure<LibraryExtension> {
-            // Namespace leitet sich aus dem Modulpfad ab, z. B. :core:design -> de.labushuya.emberlight.core.design
+            // Namespace leitet sich aus dem Modulpfad ab, z. B. :core:design -> io.github.labushuya.emberlight.core.design
             namespace = "${EmberlightConfig.APPLICATION_ID}${target.path.replace(':', '.')}"
             configureSdkLevels()
             compileOptions { useJava17() }

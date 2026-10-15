@@ -25,27 +25,27 @@ gradlePlugin {
     plugins {
         register("androidApplication") {
             id = "emberlight.android.application"
-            implementationClass = "de.labushuya.emberlight.buildlogic.AndroidApplicationConventionPlugin"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.AndroidApplicationConventionPlugin"
         }
         register("androidApplicationCompose") {
             id = "emberlight.android.application.compose"
-            implementationClass = "de.labushuya.emberlight.buildlogic.AndroidApplicationComposeConventionPlugin"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.AndroidApplicationComposeConventionPlugin"
         }
         register("androidLibrary") {
             id = "emberlight.android.library"
-            implementationClass = "de.labushuya.emberlight.buildlogic.AndroidLibraryConventionPlugin"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.AndroidLibraryConventionPlugin"
         }
         register("androidLibraryCompose") {
             id = "emberlight.android.library.compose"
-            implementationClass = "de.labushuya.emberlight.buildlogic.AndroidLibraryComposeConventionPlugin"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.AndroidLibraryComposeConventionPlugin"
         }
         register("androidFeature") {
             id = "emberlight.android.feature"
-            implementationClass = "de.labushuya.emberlight.buildlogic.AndroidFeatureConventionPlugin"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.AndroidFeatureConventionPlugin"
         }
         register("hilt") {
             id = "emberlight.hilt"
-            implementationClass = "de.labushuya.emberlight.buildlogic.HiltConventionPlugin"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.HiltConventionPlugin"
         }
     }
 }
