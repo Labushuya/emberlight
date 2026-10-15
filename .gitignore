@@ -13,6 +13,7 @@ build/
 # Signierung: niemals committen
 *.jks
 *.keystore
+*.p12
 keystore.properties
 
 # Sonstiges
