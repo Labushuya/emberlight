@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome-Ebene für Themed Icons (Android 13+). Der Launcher färbt sie ein, zählt also nur Form und Alpha. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M41,54a13,13 0 1,0 26,0a13,13 0 1,0 -26,0" />
+    <path
+        android:pathData="M34,54a20,20 0 1,0 40,0a20,20 0 1,0 -40,0"
+        android:strokeColor="#FF000000"
+        android:strokeAlpha="0.6"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0"
+        android:trimPathEnd="0.10" />
+    <path
+        android:pathData="M34,54a20,20 0 1,0 40,0a20,20 0 1,0 -40,0"
+        android:strokeColor="#FF000000"
+        android:strokeAlpha="0.6"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.3333"
+        android:trimPathEnd="0.4333" />
+    <path
+        android:pathData="M34,54a20,20 0 1,0 40,0a20,20 0 1,0 -40,0"
+        android:strokeColor="#FF000000"
+        android:strokeAlpha="0.6"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.6667"
+        android:trimPathEnd="0.7667" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M65.6,31.5a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0M30.1,67a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0M77,62.9a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0M32.7,37.3a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0" />
+</vector>
