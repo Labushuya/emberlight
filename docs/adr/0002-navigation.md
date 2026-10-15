@@ -20,6 +20,10 @@ Meilenstein 1 hat zwei Top-Level-Ziele: Galerie und Spaces. Ziele sollen typsich
 
 ## Alternativen
 
-- Navigation 3: Google empfiehlt sie für neue reine Compose-Apps. In Meilenstein 1 bleibt es bei Navigation Compose 2.10. Ein Wechsel wird in einem Folge-ADR geprüft, sobald die Navigation größer wird.
+- Navigation 3: nicht gewählt. Die offizielle Navigation-Doku sagt für Apps, die vollständig mit Jetpack Compose gebaut sind: „If your app is built entirely with Jetpack Compose, use Navigation Compose.“ In Meilenstein 1 bleibt es deshalb bei Navigation Compose 2.10. Navigation 3 wurde geprüft. Ein Wechsel wird in einem Folge-ADR geprüft, sobald die Navigation größer wird.
 - Stringbasierte Routen: verworfen, fehleranfällig und ohne Typprüfung.
 - Eigene Navigations-Logik ohne Bibliothek: verworfen, unnötiger Aufwand für den Umfang.
+
+## Quellen
+
+- Android-Doku, Navigation (Empfehlung für reine Compose-Apps): https://developer.android.com/guide/navigation

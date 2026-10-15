@@ -12,8 +12,8 @@ Galerie und Sharing sollen unabhängig wachsen (siehe [CLAUDE.md](../../CLAUDE.m
 - Alle Versionen im Version Catalog `gradle/libs.versions.toml`.
 - Gemeinsame Einstellungen in Convention-Plugins im Included Build `build-logic` (Application, Library, Feature, Compose, Hilt). Module wenden nur die Plugins an, die sie brauchen.
 - Modulschnitt: `app`, `core:design`, `core:data`, `core:media`, `feature:gallery`, `feature:space`, `share:server`, `share:network`. In Meilenstein 1 sind `core:data`, `core:media`, `share:server` und `share:network` nur ein Gerüst, damit spätere Meilensteine ohne Umbau der Gradle-Struktur auskommen.
-- AGP 9.4.1 mit eingebautem Kotlin. Kotlin 2.3.21 statt 2.4.x, weil Hilt und KSP mit 2.3.21 nachweislich getestet sind.
-- Hilt 2.60.1, Annotation-Processing über KSP statt kapt.
+- AGP 9.4.1 mit eingebautem Kotlin. Kotlin 2.3.21 statt 2.4.x: Dieser Stand ist im Projekt mit Hilt und KSP gebaut und getestet. Für 2.4.x fehlt diese Prüfung.
+- Hilt 2.60.1, Annotation-Processing über KSP statt kapt. Dagger unterstützt KSP offiziell (stabil ab Dagger 2.60 und KSP 2.3.9). Das Plugin kotlin-kapt ist mit dem eingebauten Kotlin von AGP 9 laut Android-Doku nicht kompatibel, die Doku empfiehlt die Migration zu KSP.
 - `minSdk` 26 (Android 8), `compileSdk` und `targetSdk` 37.
 - Quelltext und Bytecode auf Java 17. Unit-Tests laufen auf JDK 21 (siehe ADR 0005).
 - Lint bricht bei Fehlern und Warnungen ab (`warningsAsErrors`), ohne Baseline. Kotlin-Warnungen sind Fehler.
@@ -25,11 +25,16 @@ Galerie und Sharing sollen unabhängig wachsen (siehe [CLAUDE.md](../../CLAUDE.m
 - Neue Module und Einstellungen sind schnell eingebunden. Eine Änderung an den Compile-Optionen wirkt überall gleich.
 - Strenge Lint- und Compiler-Regeln verlangen Disziplin, dafür fallen Fehler früh auf.
 - Ein Upgrade auf Kotlin 2.4.x ist ein eigener Schritt, erst wenn Hilt und KSP ihn tragen.
-- Mit AGP 9 wird das Kotlin-Android-Plugin nicht separat angewendet.
+- Mit AGP 9 wird das Kotlin-Android-Plugin nicht separat angewendet, weil AGP 9 Kotlin eingebaut hat (siehe Quellen).
 
 ## Alternativen
 
 - Groovy-DSL: verworfen, die Kotlin-DSL ist typsicher und passt zum Projekt.
 - Ein einziges App-Modul: verworfen, es widerspricht dem Ziel, Galerie und Sharing getrennt wachsen zu lassen.
-- Kotlin 2.4.x: verworfen, Hilt und KSP sind damit nicht getestet.
-- kapt statt KSP: verworfen, Hilt empfiehlt KSP.
+- Kotlin 2.4.x: vorerst verworfen, weil die Kombination mit Hilt und KSP in diesem Projekt nicht geprüft ist.
+- kapt statt KSP: verworfen. Kotlin-kapt ist laut Android-Doku mit dem eingebauten Kotlin von AGP 9 nicht kompatibel, und Dagger unterstützt KSP offiziell.
+
+## Quellen
+
+- Android-Doku, Migration zu eingebautem Kotlin (kapt, KSP): https://developer.android.com/build/migrate-to-built-in-kotlin
+- Dagger-Doku, KSP-Unterstützung: https://dagger.dev/dev-guide/ksp
