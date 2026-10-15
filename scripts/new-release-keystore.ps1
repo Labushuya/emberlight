@@ -292,6 +292,9 @@ try {
     if ($listing.ExitCode -ne 0) {
         throw "Der erzeugte Keystore ist nicht lesbar (Exit-Code $($listing.ExitCode))."
     }
+    # Die Passwort-Variable wird sofort gelöscht, bevor gh aufgerufen wird. Kindprozesse erben sie sonst.
+    # Das finally oben bleibt als Absicherung.
+    [Environment]::SetEnvironmentVariable($PasswordEnvVar, $null, 'Process')
     $fingerprintMatches = [regex]::Matches(($listing.Output -join "`n"), '(?m)^\s*SHA256:\s*((?:[0-9A-F]{2}:){31}[0-9A-F]{2})\s*$')
     if ($fingerprintMatches.Count -ne 1) {
         throw 'Der SHA-256-Fingerprint konnte nicht aus der keytool-Ausgabe gelesen werden.'
@@ -324,8 +327,9 @@ try {
         'Ein neuer Schlüssel zwingt Nutzer, die App zu deinstallieren. Dabei gehen die lokalen Daten verloren.',
         '',
         'Bitte Ordner und Datei zusätzlich außerhalb dieses Rechners sichern: im Passwort-Manager und als',
-        'Offline-Kopie (z. B. verschlüsselter USB-Stick). Niemals committen, niemals teilen, niemals in Chats',
-        'oder Tickets einfügen.',
+        'Offline-Kopie (z. B. verschlüsselter USB-Stick). Der Ordner ist nur für den aktuellen Benutzer lesbar;',
+        'Backup-Programme, die als System-Dienst laufen, können ihn deshalb nicht sichern. Also manuell sichern.',
+        'Niemals committen, niemals teilen, niemals in Chats oder Tickets einfügen.',
         '',
         'Bei einem späteren Umzug in den Play Store kann derselbe Schlüssel über Play App Signing',
         'weiterverwendet werden. Es ist kein neuer Schlüssel nötig.',
