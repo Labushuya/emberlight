@@ -1,4 +1,4 @@
-package de.labushuya.emberlight
+package io.github.labushuya.emberlight
 
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp

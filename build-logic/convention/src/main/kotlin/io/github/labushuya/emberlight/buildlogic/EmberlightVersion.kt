@@ -1,4 +1,4 @@
-package de.labushuya.emberlight.buildlogic
+package io.github.labushuya.emberlight.buildlogic
 
 /**
  * Version der App, abgeleitet aus dem Git-Tag `vX.Y.Z` (übergeben als Gradle-Property [PROPERTY]).

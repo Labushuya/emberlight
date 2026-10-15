@@ -1,4 +1,4 @@
-package de.labushuya.emberlight.buildlogic
+package io.github.labushuya.emberlight.buildlogic
 
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
