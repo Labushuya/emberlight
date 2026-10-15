@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Fensterhintergrund ist dunkel, damit beim Start nie etwas Weißes aufblitzt.
+        Die Compose-Oberfläche färbt sich über EmberlightTheme selbst.
+    -->
+    <style name="Theme.Emberlight" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/emberlight_background</item>
+        <item name="android:colorBackground">@color/emberlight_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- Splash beim Kaltstart. Nach dem Splash wechselt die Activity auf Theme.Emberlight. -->
+    <style name="Theme.Emberlight.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/emberlight_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Emberlight</item>
+    </style>
+</resources>
