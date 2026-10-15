@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">emberlight</string>
+    <string name="app_name" translatable="false">emberlight</string>
+    <string name="app_nav_gallery">Gallery</string>
+    <string name="app_nav_spaces">Spaces</string>
 </resources>
