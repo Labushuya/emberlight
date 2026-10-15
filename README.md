@@ -4,7 +4,7 @@
 
 **Eine Galerie für deine Fotos und Videos. Und ein eigenes WLAN, über das alle, die gerade dabei sind, ihre Bilder teilen.**
 
-<img alt="Status: Konzeptphase" src="https://img.shields.io/badge/Status-Konzeptphase-ff8a3d?style=flat-square">
+<img alt="Status: in Entwicklung" src="https://img.shields.io/badge/Status-in%20Entwicklung-ff8a3d?style=flat-square">
 <img alt="Android 8 oder neuer" src="https://img.shields.io/badge/Android-8%2B-3DDC84?style=flat-square&logo=android&logoColor=white">
 <img alt="Keine Cloud" src="https://img.shields.io/badge/Cloud-keine-2a1410?style=flat-square">
 <img alt="Alle Rechte vorbehalten" src="https://img.shields.io/badge/Rechte-alle%20vorbehalten-8b2635?style=flat-square">
@@ -34,6 +34,17 @@ Dazu kommt eine Galerie, die so schön und flüssig sein soll wie möglich.
 
 - [Konzept und Entscheidungen](docs/KONZEPT.md)
 - [Hinweise für die Entwicklung mit Claude Code](CLAUDE.md)
+
+## Entwicklung
+
+- JDK 17 für Gradle und den Build, Android SDK mit API 37.
+- JDK 21 für die Unit-Tests lädt Gradle automatisch.
+- Befehle:
+  - `./gradlew check`: Lint, ktlint, Unit-Tests, Prüfung auf Play Services
+  - `./gradlew assembleDebug`: Debug-APK
+  - `./gradlew assembleRelease -Pemberlight.version=0.1.0`: Release-APK
+- [Release-Anleitung](docs/RELEASE.md)
+- [Architekturentscheidungen (ADR)](docs/adr/)
 
 ## Rechte
 
