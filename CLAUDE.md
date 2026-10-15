@@ -14,7 +14,7 @@ Was entschieden ist und warum, steht in [docs/KONZEPT.md](docs/KONZEPT.md). Lies
 - Kotlin, Jetpack Compose, Material 3 mit eigenem Theme (dunkel, warm, siehe `docs/banner.png`)
 - Gradle Kotlin DSL mit Version Catalog (`gradle/libs.versions.toml`)
 - `minSdk 26`, `targetSdk` und `compileSdk` aktuell
-- applicationId: `io.github.labushuya.emberlight` (falls Ashfall eine andere Konvention nutzt, dieser folgen und Don fragen)
+- applicationId: `io.github.labushuya.emberlight` (entschieden, siehe [ADR 0004](docs/adr/0004-versionierung-und-release.md))
 - Hilt, Room, kotlinx.serialization, Coroutines/Flow
 - Bilder und Video-Vorschauen: Coil 3; Wiedergabe: Media3/ExoPlayer
 - Eingebetteter Server: Ktor Server (CIO)
@@ -37,9 +37,18 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
 - `.github/workflows/ci.yml`: bei Push und PR bauen, Lint, Unit-Tests.
 - `.github/workflows/release.yml`: bei Tag `v*.*.*` signierte Release-APK bauen, als `emberlight-vX.Y.Z.apk` benennen, SHA-256 berechnen, GitHub-Release mit APK, `.sha256`-Datei und Prüfsumme in den Notes anlegen. Vorerst in diesem Repo, später im öffentlichen `emberlight-releases`.
 - Signierung über Repository-Secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. Keystore niemals committen. Fehlen die Secrets, bricht der Release-Job mit klarer Meldung ab.
+- Probelauf per Dispatch (`workflow_dispatch`, Version eingeben): baut, signiert und prüft, legt aber kein Release und keinen Tag an. Zertifikats-Pinning über die Repository-Variable `RELEASE_CERT_SHA256`. Anleitung: [docs/RELEASE.md](docs/RELEASE.md).
+
+## Befehle
+
+- `./gradlew check`: Spotless/ktlint, Lint, Unit-Tests, Tests der Convention-Plugins und `checkNoPlayServices`
+- `./gradlew assembleDebug`: Debug-APK
+- `./gradlew assembleRelease -Pemberlight.version=X.Y.Z`: Release-APK. Ohne Property gilt `0.0.0-dev` mit versionCode 1.
+- Signierte Release-APK: Umgebungsvariablen `EMBERLIGHT_KEYSTORE_FILE`, `EMBERLIGHT_KEYSTORE_PASSWORD`, `EMBERLIGHT_KEY_ALIAS`, `EMBERLIGHT_KEY_PASSWORD` setzen. Mit `-Pemberlight.requireReleaseSigning=true` bricht der Build ab, wenn eine fehlt.
 
 ## Arbeitsweise
 
+- Repo ist privat (GitHub Free), daher keine technische Branch Protection. Trotzdem jede Änderung über Branch und PR, Merge nur bei grüner CI.
 - Dokumentation, README und Commit-Beschreibungen auf Deutsch, Code und Bezeichner auf Englisch.
 - Alle Nutzertexte in `strings.xml` (de und en), keine fest eingebauten Texte.
 - Nach jedem Meilenstein: bauen, testen, kurz in `docs/KONZEPT.md` nachtragen, wenn sich eine Entscheidung geändert hat.
