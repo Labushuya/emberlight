@@ -4,7 +4,7 @@ Status: angenommen, 15.10.2026
 
 ## Kontext
 
-Die Oberfläche soll ohne Gerät testbar sein. Robolectric 4.17 läuft auf dem JVM. Die Test-Umgebung nutzt JDK 21. Die Robolectric-Release-Notes nennen JDK 21 für SDK 36 (Version 4.16). Für SDK 37 ist das nicht gesondert belegt, die Festlegung wird bei Updates geprüft. Der Build selbst bleibt auf JDK 17. Instrumentierte Tests auf einem Emulator würden in der CI die 2.000 Actions-Minuten pro Monat (GitHub Free, private Repositories) belasten.
+Die Oberfläche soll ohne Gerät testbar sein. Robolectric 4.17 läuft auf dem JVM und wird im Projekt tatsächlich genutzt: Gradle löst `org.robolectric:robolectric:4.17` aus Maven Central auf (siehe Quellen). Die Test-Umgebung nutzt JDK 21. Die Robolectric-Release-Notes nennen JDK 21 für SDK 36 (Version 4.16). Für SDK 37 ist das nicht gesondert belegt, die Festlegung wird bei Updates geprüft. Der Build selbst bleibt auf JDK 17. Instrumentierte Tests auf einem Emulator würden in der CI die 2.000 Actions-Minuten pro Monat (GitHub Free, private Repositories) belasten.
 
 ## Entscheidung
 
@@ -33,3 +33,5 @@ Die Oberfläche soll ohne Gerät testbar sein. Robolectric 4.17 läuft auf dem J
 ## Quellen
 
 - GitHub-Doku, Actions-Minuten im Free-Plan (2.000 Minuten pro Monat für private Repositories): https://docs.github.com/en/billing/concepts/product-billing/github-actions
+- Robolectric 4.17 auf Maven Central (POM erreichbar, HTTP 200, geprüft 15.10.2026): https://repo1.maven.org/maven2/org/robolectric/robolectric/4.17/robolectric-4.17.pom
+- Projektbeleg: `./gradlew :app:dependencies --configuration debugUnitTestRuntimeClasspath` listet `org.robolectric:robolectric:4.17` (Repository: `mavenCentral()` in `settings.gradle.kts`).
