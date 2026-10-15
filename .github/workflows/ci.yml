@@ -1,0 +1,77 @@
+# CI: Prüft jeden Push und jeden Pull Request auf main. Baut, lintet und testet das Projekt
+# (./gradlew check) und erzeugt die Debug-APK sowie eine unsignierte Release-APK, damit
+# R8-Probleme schon hier auffallen. Reine Doku-Änderungen verbrauchen keine Actions-Minuten.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
+      - 'scripts/**'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
+      - 'scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, Lint und Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Quellcode auschecken
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Die letzte Version (17) wird JAVA_HOME und führt Gradle aus. Die 21 liegt daneben für die Robolectric-Tests.
+      - name: JDK 21 und 17 einrichten
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            17
+
+      # Validiert den Gradle-Wrapper (validate-wrappers ist standardmäßig aktiv) und cacht Gradle.
+      - name: Gradle einrichten
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Toolchains anzeigen
+        run: ./gradlew -q javaToolchains -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+
+      - name: Build, Lint und Tests
+        run: ./gradlew check assembleDebug assembleRelease -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+
+      - name: Debug-APK hochladen
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: emberlight-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Reports bei Fehlschlag hochladen
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reports-bei-fehlschlag
+          path: |
+            **/build/reports/**
+            **/build/test-results/**
+          retention-days: 7
+          if-no-files-found: ignore
