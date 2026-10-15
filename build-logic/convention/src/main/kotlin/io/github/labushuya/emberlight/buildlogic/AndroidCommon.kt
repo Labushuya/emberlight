@@ -7,6 +7,9 @@ import org.gradle.api.JavaVersion
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalog
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.api.tasks.testing.Test
+import org.gradle.jvm.toolchain.JavaLanguageVersion
+import org.gradle.jvm.toolchain.JavaToolchainService
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -22,6 +25,9 @@ private val LINT_VERSION_CHECKS =
 
 internal val Project.catalog: VersionCatalog
     get() = extensions.getByType<VersionCatalogsExtension>().named("libs")
+
+internal fun VersionCatalog.plugin(alias: String) =
+    findPlugin(alias).orElseThrow { IllegalStateException("Katalog-Plugin fehlt: $alias") }
 
 internal fun VersionCatalog.library(alias: String) =
     findLibrary(alias).orElseThrow { IllegalStateException("Katalog-Eintrag fehlt: $alias") }
@@ -60,11 +66,28 @@ internal fun Project.configureKotlinAndroid() {
     }
 }
 
-/** Compose-Compiler-Plugin, Compose-BOM und buildFeatures.compose. */
+/** Compose-Compiler-Plugin, Compose-BOM, Compose-Basis und Tooling. Tooling und Test-Manifest nur im Debug-Build. */
 internal fun Project.configureCompose(extension: CommonExtension) {
     pluginManager.apply("org.jetbrains.kotlin.plugin.compose")
     extension.buildFeatures.compose = true
     dependencies.add("implementation", dependencies.platform(catalog.library("androidx-compose-bom")))
     // Der Compose-Compiler verlangt die Runtime auf dem Classpath, die Version kommt aus der BOM.
     dependencies.add("implementation", catalog.library("androidx-compose-runtime"))
+    dependencies.add("implementation", catalog.library("androidx-compose-ui"))
+    dependencies.add("implementation", catalog.library("androidx-compose-ui-tooling-preview"))
+    dependencies.add("debugImplementation", catalog.library("androidx-compose-ui-tooling"))
+    dependencies.add("debugImplementation", catalog.library("androidx-compose-ui-test-manifest"))
+    dependencies.add("testImplementation", catalog.library("androidx-compose-ui-test-junit4"))
+}
+
+/**
+ * Unit-Tests: JDK 21 als Launcher für alle Test-Tasks. Der Build selbst (Compiler, Lint) bleibt auf JDK 17.
+ */
+internal fun Project.configureUnitTests() {
+    val toolchains = extensions.getByType<JavaToolchainService>()
+    val testLauncher =
+        toolchains.launcherFor { spec ->
+            spec.languageVersion.set(JavaLanguageVersion.of(EmberlightConfig.TEST_JAVA_VERSION))
+        }
+    tasks.withType<Test>().configureEach { task -> task.javaLauncher.set(testLauncher) }
 }

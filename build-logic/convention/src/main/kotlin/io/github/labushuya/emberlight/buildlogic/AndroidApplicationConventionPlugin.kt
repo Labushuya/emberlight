@@ -78,6 +78,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
         }
 
         target.configureKotlinAndroid()
+        target.configureUnitTests()
         target.configureUnitTestDependencies()
 
         val checkNoPlayServices =

@@ -10,14 +10,16 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
         target.pluginManager.apply("com.android.library")
 
         target.extensions.configure<LibraryExtension> {
-            // Namespace leitet sich aus dem Modulpfad ab, z. B. :core:design -> io.github.labushuya.emberlight.core.design
+            // Namespace aus dem Modulpfad, z. B. :core:design -> ...emberlight.core.design
             namespace = "${EmberlightConfig.APPLICATION_ID}${target.path.replace(':', '.')}"
             configureSdkLevels()
             compileOptions { useJava17() }
             lint { applyEmberlightDefaults(checkDependencies = false) }
+            testOptions.targetSdk = EmberlightConfig.TARGET_SDK
         }
 
         target.configureKotlinAndroid()
+        target.configureUnitTests()
         target.configureUnitTestDependencies()
     }
 }
