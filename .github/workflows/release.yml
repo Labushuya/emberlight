@@ -31,6 +31,11 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+    env:
+      # Build-Tools fest gepinnt statt "neueste installierte": Die Prüfung soll reproduzierbar sein, und
+      # Ausgabeformate der apksigner-Versionen unterscheiden sich (37.0.0 schreibt "V2 Signer: certificate ...").
+      # 37.0.0 ist laut actions/runner-images (Ubuntu 24.04) vorinstalliert und lokal gegen den Fingerprint geprüft.
+      ANDROID_BUILD_TOOLS_VERSION: "37.0.0"
     steps:
       # Die Version kommt aus dem Tag oder dem Eingabefeld. Der Eingabewert geht nur über env: in die Shell,
       # nie direkt per ${{ }} in run:, sonst wäre Script-Injection möglich.
@@ -168,17 +173,38 @@ jobs:
             echo "::error title=APK fehlt::Die signierte APK ${apk} wurde nicht erzeugt."
             exit 1
           fi
-          bt_version=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -n 1)
+          bt_version="$ANDROID_BUILD_TOOLS_VERSION"
           bt="$ANDROID_HOME/build-tools/${bt_version}"
+          if [[ ! -x "$bt/apksigner" || ! -x "$bt/aapt2" ]]; then
+            echo "Build-Tools ${bt_version} fehlen auf dem Runner, Installation per sdkmanager."
+            if ! "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;${bt_version}" < /dev/null; then
+              echo "::error title=Build-Tools fehlen::Die Build-Tools ${bt_version} fehlen und konnten nicht installiert werden."
+              exit 1
+            fi
+          fi
+          if [[ ! -x "$bt/apksigner" || ! -x "$bt/aapt2" ]]; then
+            echo "::error title=Build-Tools fehlen::Die Build-Tools ${bt_version} sind nach der Installation nicht vollständig vorhanden."
+            exit 1
+          fi
           echo "Build-Tools: ${bt_version}"
 
           signer_out=$("$bt/apksigner" verify --print-certs "$apk")
+          # Die Zertifikatszeilen (DN, Digests) sind öffentliche Daten des Zertifikats, keine Secrets, und gehören ins Log.
+          printf '%s\n' "$signer_out" | grep 'certificate' || true
           signers=$(printf '%s\n' "$signer_out" | grep -c 'certificate SHA-256 digest' || true)
           if [[ "$signers" != "1" ]]; then
             echo "::error title=Signatur unklar::Die APK hat ${signers} Signaturen statt genau einer."
             exit 1
           fi
-          cert=$(printf '%s\n' "$signer_out" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d '[:space:]:' | tr '[:lower:]' '[:upper:]')
+          # Das Präfix der Zeile variiert je Build-Tools-Version ("Signer #1" bzw. "V2 Signer"), deshalb nur die Zeile
+          # suchen und den 64-stelligen Hex-Wert daraus ziehen, nicht am Zeilenanfang ansetzen.
+          digest_line=$(printf '%s\n' "$signer_out" | grep 'certificate SHA-256 digest')
+          digests=$(printf '%s\n' "$digest_line" | grep -oE '[0-9A-Fa-f]{64}' || true)
+          if [[ $(printf '%s\n' "$digests" | grep -c . || true) != "1" ]]; then
+            echo "::error title=Signatur unklar::Im Digest-Zeile wurde kein eindeutiger SHA-256-Wert gefunden."
+            exit 1
+          fi
+          cert=$(printf '%s\n' "$digests" | tr '[:lower:]' '[:upper:]')
           if [[ ! "$cert" =~ ^[0-9A-F]{64}$ ]]; then
             echo "::error title=Signatur unklar::Der Zertifikats-Fingerprint konnte nicht gelesen werden."
             exit 1
