@@ -16,7 +16,12 @@ class AndroidFeatureConventionPlugin : Plugin<Project> {
         target.pluginManager.apply("emberlight.android.library")
         target.pluginManager.apply("emberlight.android.library.compose")
         target.pluginManager.apply("emberlight.hilt")
-        target.pluginManager.apply(target.catalog.plugin("kotlin-serialization").get().pluginId)
+        target.pluginManager.apply(
+            target.catalog
+                .plugin("kotlin-serialization")
+                .get()
+                .pluginId,
+        )
 
         target.extensions.configure<LibraryExtension> {
             testOptions.unitTests.isIncludeAndroidResources = true

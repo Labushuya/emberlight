@@ -78,7 +78,12 @@ internal fun Project.configureCompose(extension: CommonExtension) {
     dependencies.add("debugImplementation", catalog.library("androidx-compose-ui-tooling"))
     dependencies.add("debugImplementation", catalog.library("androidx-compose-ui-test-manifest"))
     dependencies.add("testImplementation", catalog.library("androidx-compose-ui-test-junit4"))
+    // Compose synchronisiert unter Robolectric über Espresso. Die von ui-test gezogene Version 3.5 scheitert mit SDK 37
+    // (InputManager.getInstance fehlt), daher 3.7.0.
+    dependencies.add("testImplementation", catalog.library("androidx-test-espresso-core"))
 }
+
+private val JDK_INTERNAL_OPENS = listOf("--add-opens", "java.base/jdk.internal.access=ALL-UNNAMED")
 
 /**
  * Unit-Tests: JDK 21 als Launcher für alle Test-Tasks. Der Build selbst (Compiler, Lint) bleibt auf JDK 17.
@@ -89,5 +94,9 @@ internal fun Project.configureUnitTests() {
         toolchains.launcherFor { spec ->
             spec.languageVersion.set(JavaLanguageVersion.of(EmberlightConfig.TEST_JAVA_VERSION))
         }
-    tasks.withType<Test>().configureEach { task -> task.javaLauncher.set(testLauncher) }
+    tasks.withType<Test>().configureEach { task ->
+        task.javaLauncher.set(testLauncher)
+        // Robolectric greift unter JDK 17+ auf interne Klassen zu, die Module-System-Öffnung ist dafür nötig.
+        task.jvmArgs(JDK_INTERNAL_OPENS)
+    }
 }
