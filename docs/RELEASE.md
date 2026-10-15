@@ -35,6 +35,7 @@ Das Skript erzeugt im Zielordner die Keystore-Datei und eine `LIESMICH.txt` mit 
 
 - Keystore-Datei und `LIESMICH.txt` in einem Passwort-Manager ablegen.
 - Zusätzlich eine Offline-Kopie an einem anderen Ort anlegen, z. B. auf einem verschlüsselten USB-Stick.
+- Der Ordner ist nur für den aktuellen Benutzer lesbar. Backup-Programme, die als System-Dienst laufen, können ihn deshalb nicht sichern. Also manuell sichern.
 - Nichts davon committen, in Chats, Tickets oder Mails einfügen oder mit anderen teilen.
 
 **Folgen eines Verlusts:** Android aktualisiert eine installierte App nur mit demselben Signaturschlüssel. Ohne den Schlüssel gibt es keine Updates mehr. Ein neuer Schlüssel zwingt alle Nutzer zur Deinstallation, dabei gehen die lokalen Daten verloren. Das Skript überschreibt deshalb nie einen bestehenden Schlüssel.
@@ -50,6 +51,8 @@ gh workflow run release.yml -R Labushuya/emberlight --ref main -f version=0.1.0
 Alternativ im Browser: Actions, Workflow „Release“, „Run workflow“, Version eintragen.
 
 Das Ergebnis liegt im Lauf unter „Artifacts“ als `release-dry-run` (7 Tage): APK, `.sha256` und Release-Notes. Die Zusammenfassung des Laufs zeigt Version, versionCode, SHA-256 und Zertifikat. Vor jedem Release gehört ein Probelauf mit derselben Version.
+
+Der Artefakt-Upload ist Komfort. Ist das Speicherkontingent des Accounts erschöpft, scheitert nur der Upload, und der Lauf bleibt grün. Die Zusammenfassung meldet das in der Zeile „Artefakt hochgeladen“. Fehlt das Artefakt, sind die Werte in der Job-Zusammenfassung maßgeblich.
 
 ## 4. Release veröffentlichen
 
@@ -121,6 +124,7 @@ Der Wert hinter „Signer #1 certificate SHA-256 digest“ muss mit dem Fingerpr
 | „Falscher Signaturschlüssel“ | Die APK ist mit einem anderen Schlüssel signiert als in `RELEASE_CERT_SHA256` hinterlegt | Nicht weitermachen. Prüfen, ob die Secrets zum gesicherten Keystore gehören, Fingerprint aus `LIESMICH.txt`. Niemals einen neuen Schlüssel erzeugen, um den Fehler zu umgehen |
 | „Ungültige Version“ | Eingabe oder Tag entspricht nicht `X.Y.Z`, oder Y bzw. Z sind 100 oder größer | Version korrigieren. Im Tag ein `v` davor, in der Eingabe nicht |
 | „Falsches Paket“, „Falsche Version“, „Falscher versionCode“ | Die gebaute APK passt nicht zur Eingabe | Logausgabe des Schritts „APK prüfen“ ansehen, meist stimmt Tag oder Eingabe nicht |
+| Warnung „Artefakt nicht hochgeladen“ (CI) oder „Artefakt hochgeladen: nein“ (Probelauf) | Der Upload scheitert, meist wegen des Speicherkontingents des Accounts. Der Build selbst ist erfolgreich | Nichts zu tun. Die Prüfwerte in der Job-Zusammenfassung sind maßgeblich. Speicher aufräumen, wenn Artefakte gebraucht werden |
 | Warnung „RELEASE_CERT_SHA256 fehlt“ | Die Variable ist nicht gesetzt | Variable im Browser setzen: Settings, Secrets and variables, Actions, Variables. Den Fingerprint aus `LIESMICH.txt` ohne Doppelpunkte eintragen. Die Prüfung läuft erst dann gegen den Sollwert |
 
 ## 8. Später
