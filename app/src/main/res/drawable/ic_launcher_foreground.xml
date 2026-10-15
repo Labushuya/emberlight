@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Platzhalter: glühender Punkt. Das finale Icon folgt mit dem Design-System. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFF8A3D"
+        android:pathData="M54,36 A18,18 0 1,1 53.99,36 Z" />
+</vector>
