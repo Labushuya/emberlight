@@ -233,6 +233,8 @@ jobs:
         run: |
           set -euo pipefail
           notes="dist/release-notes-v${VERSION}.md"
+          # SC2016 aus: Die Backticks in den printf-Formaten sind Markdown-Literale, keine Shell-Ausdrücke.
+          # shellcheck disable=SC2016
           {
             printf '## emberlight v%s\n\n' "$VERSION"
             printf '### Installation\n\n'
@@ -286,6 +288,8 @@ jobs:
           else
             dry="ja, kein Release und kein Tag"
           fi
+          # SC2016 aus: Die Backticks in den printf-Formaten sind Markdown-Literale, keine Shell-Ausdrücke.
+          # shellcheck disable=SC2016
           {
             printf '## emberlight v%s\n\n' "$VERSION"
             printf '| Feld | Wert |\n|---|---|\n'
