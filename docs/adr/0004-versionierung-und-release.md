@@ -4,7 +4,7 @@ Status: angenommen, 15.10.2026
 
 ## Kontext
 
-emberlight wird per Sideloading über GitHub verteilt (siehe [KONZEPT](../KONZEPT.md)). Installierte Versionen lassen sich nur mit demselben Signaturschlüssel aktualisieren. Der Schlüssel darf deshalb nie verloren gehen oder wechseln. Das Repository ist privat (GitHub Free), dort gibt es keine technische Branch Protection.
+emberlight wird per Sideloading über GitHub verteilt (siehe [KONZEPT](../KONZEPT.md)). Installierte Versionen lassen sich nur mit demselben Signaturschlüssel aktualisieren. Das Android-System vergleicht beim Update die Zertifikate, und ein anderes Zertifikat ergibt eine neue, separate App (siehe Quellen). Der Schlüssel darf deshalb nie verloren gehen oder wechseln. Das Repository ist privat (GitHub Free), dort gibt es keine technische Branch Protection.
 
 ## Entscheidung
 
@@ -28,3 +28,7 @@ emberlight wird per Sideloading über GitHub verteilt (siehe [KONZEPT](../KONZEP
 - Ein Schlüssel pro Release: verworfen, Updates würden brechen.
 - applicationId `com.labushuya...`: verworfen, die Domain `labushuya.de` existiert nicht.
 - Ein eigener Schlüssel für Debug-Builds: nicht nötig, Debug-Builds werden nicht verteilt.
+
+## Quellen
+
+- Android-Doku, App-Signatur (Updates nur mit demselben Zertifikat): https://developer.android.com/studio/publish/app-signing

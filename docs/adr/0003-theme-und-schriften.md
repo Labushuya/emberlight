@@ -4,7 +4,7 @@ Status: angenommen, 15.10.2026
 
 ## Kontext
 
-Der Banner (`docs/banner.png`) gibt die Stimmung vor: dunkel, warme Glut, Funken. Die Schriften müssen offline funktionieren. Downloadable Fonts von Google brauchen Google Play Services, und die sind verboten (siehe [CLAUDE.md](../../CLAUDE.md)).
+Der Banner (`docs/banner.png`) gibt die Stimmung vor: dunkel, warme Glut, Funken. Die Schriften müssen offline funktionieren. Der Google-Fonts-Provider der Downloadable Fonts setzt Google Play services ab Version 11 voraus, und Play Services sind verboten (siehe [CLAUDE.md](../../CLAUDE.md)).
 
 ## Entscheidung
 
@@ -26,6 +26,6 @@ Der Banner (`docs/banner.png`) gibt die Stimmung vor: dunkel, warme Glut, Funken
 ## Alternativen
 
 - Dynamic Color (Android 12+): verworfen, die Markenfarben würden verloren gehen.
-- Downloadable Fonts: verworfen, sie setzen Google Play Services voraus.
+- Downloadable Fonts über den Google-Fonts-Provider: verworfen, er setzt Google Play services ab Version 11 voraus (https://developer.android.com/develop/ui/views/text-and-emoji/downloadable-fonts).
 - Systemschriften: verworfen, die Marke braucht eigene Schriften.
 - Hell-Modus neben dem dunklen: nicht vorgesehen, siehe Entscheidung.
