@@ -1,0 +1,20 @@
+# Zeilenenden: Repo speichert LF. Arbeitskopien bleiben LF, auch bei core.autocrlf=true,
+# damit .editorconfig und Spotless konsistent sind. Windows-Skripte bleiben CRLF.
+* text=auto eol=lf
+
+gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binärdateien nie anfassen
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.jks binary
+*.keystore binary
+*.ttf binary
+*.otf binary
+*.apk binary
