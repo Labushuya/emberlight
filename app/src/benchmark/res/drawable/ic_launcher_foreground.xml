@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Erzeugt aus app/src/main/res/drawable/ic_launcher_foreground.xml (RGB-Komplement bzw. Graustufen per Luminanz, siehe ADR 0011). -->
+<!--
+    Vordergrund des Launcher-Icons: glühender Kern, Halo und gestrichelte Ringe im Banner-Stil.
+    Alles liegt innerhalb der Safe Zone (Kreis mit 66 dp Durchmesser im 108-dp-Raster).
+    Die Strichelung entsteht über trimPath, weil VectorDrawable keine Strichmuster kennt.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M32,54a22,22 0 1,0 44,0a22,22 0 1,0 -44,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="22"
+                android:startColor="#669D9D9D"
+                android:endColor="#009D9D9D" />
+        </aapt:attr>
+    </path>
+
+    <!-- Innerer gestrichelter Ring, Radius 20 -->
+    <path
+        android:pathData="M34,54a20,20 0 1,0 40,0a20,20 0 1,0 -40,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.45"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0"
+        android:trimPathEnd="0.10" />
+    <path
+        android:pathData="M34,54a20,20 0 1,0 40,0a20,20 0 1,0 -40,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.45"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.1667"
+        android:trimPathEnd="0.2667" />
+    <path
+        android:pathData="M34,54a20,20 0 1,0 40,0a20,20 0 1,0 -40,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.45"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.3333"
+        android:trimPathEnd="0.4333" />
+    <path
+        android:pathData="M34,54a20,20 0 1,0 40,0a20,20 0 1,0 -40,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.45"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.5"
+        android:trimPathEnd="0.6" />
+    <path
+        android:pathData="M34,54a20,20 0 1,0 40,0a20,20 0 1,0 -40,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.45"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.6667"
+        android:trimPathEnd="0.7667" />
+    <path
+        android:pathData="M34,54a20,20 0 1,0 40,0a20,20 0 1,0 -40,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.45"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.8333"
+        android:trimPathEnd="0.9333" />
+
+    <!-- Äußerer gestrichelter Ring, Radius 28, versetzt zum inneren -->
+    <path
+        android:pathData="M26,54a28,28 0 1,0 56,0a28,28 0 1,0 -56,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.30"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.0833"
+        android:trimPathEnd="0.1633" />
+    <path
+        android:pathData="M26,54a28,28 0 1,0 56,0a28,28 0 1,0 -56,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.30"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.25"
+        android:trimPathEnd="0.33" />
+    <path
+        android:pathData="M26,54a28,28 0 1,0 56,0a28,28 0 1,0 -56,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.30"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.4167"
+        android:trimPathEnd="0.4967" />
+    <path
+        android:pathData="M26,54a28,28 0 1,0 56,0a28,28 0 1,0 -56,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.30"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.5833"
+        android:trimPathEnd="0.6633" />
+    <path
+        android:pathData="M26,54a28,28 0 1,0 56,0a28,28 0 1,0 -56,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.30"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.75"
+        android:trimPathEnd="0.83" />
+    <path
+        android:pathData="M26,54a28,28 0 1,0 56,0a28,28 0 1,0 -56,0"
+        android:strokeColor="#FFAAAAAA"
+        android:strokeAlpha="0.30"
+        android:strokeWidth="1.1"
+        android:trimPathStart="0.9167"
+        android:trimPathEnd="0.9967" />
+
+    <!-- Funken auf dem äußeren Ring -->
+    <path
+        android:fillColor="#FFD5D5D5"
+        android:pathData="M65.6,31.5a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0" />
+    <path
+        android:fillColor="#FFBDBDBD"
+        android:pathData="M30.1,67a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0" />
+    <path
+        android:fillColor="#FF9D9D9D"
+        android:pathData="M77,62.9a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0" />
+    <path
+        android:fillColor="#FF858585"
+        android:pathData="M32.7,37.3a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0" />
+
+    <!-- Glühender Kern -->
+    <path android:pathData="M41,54a13,13 0 1,0 26,0a13,13 0 1,0 -26,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="13"
+                android:startColor="#FFD4D4D4"
+                android:endColor="#FF9D9D9D" />
+        </aapt:attr>
+    </path>
+</vector>
