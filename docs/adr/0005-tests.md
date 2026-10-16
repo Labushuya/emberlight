@@ -16,7 +16,7 @@ Die Oberfläche soll ohne Gerät testbar sein. Robolectric 4.17 läuft auf dem J
   - `EmberlightAppNavigationTest`: Navigation zwischen den Top-Level-Zielen.
   - `MainActivitySmokeTest`: Start der Activity mit Hilt.
   - Compose-Tests der Platzhalter-Screens in `feature:gallery` und `feature:space`.
-- Screenshot-Tests (Goldens) kommen ab Meilenstein 2, wenn das Design-System steht. Ein Coverage-Ziel legen wir in Meilenstein 2 fest.
+- Screenshot-Tests (Goldens) kommen ab Meilenstein 2, wenn das Design-System steht. **Erledigt in Meilenstein 2:** Roborazzi-Goldens und Verifikation in `check`, Coverage-Untergrenze 70 % Zeilen (Kover, in CI erzwungen). Details und Messung in [ADR 0006](0006-screenshot-tests-und-coverage.md).
 
 ## Konsequenzen
 
