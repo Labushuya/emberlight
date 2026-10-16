@@ -67,6 +67,15 @@ Release-nah optimiert ist, aber mit der Demo-Bibliothek arbeitet. Zu klären war
 - `assembleBenchmark` ist nicht in der CI. Der Build braucht mit R8 mehrere Minuten zusätzlich, die Release-APK prüft die CI bereits.
   Der Mess-Build wird lokal gebaut und unter `H:\DEV\#claude\emberlight-builds` abgelegt, siehe Abschluss des PR.
 
+### Icon-Varianten
+
+- Das Launcher-Icon hat drei Varianten, um Debug- und Benchmark-Builds auf dem Startbildschirm zu unterscheiden. Release bleibt unverändert.
+- `debug`: RGB-Komplement jeder Farbe (255 minus R, G, B), Alpha unverändert, auch bei Verläufen.
+- `benchmark`: Graustufen per Luminanz (0,2126 R + 0,7152 G + 0,0722 B), Alpha unverändert.
+- Umsetzung über Source-Set-Ressourcen: `app/src/debug/res/drawable` und `app/src/benchmark/res/drawable` überschreiben die Layer Hintergrund und Vordergrund. Der `monochrome`-Layer bleibt aus `main`.
+- Die Varianten sind aus den Original-XMLs erzeugt und eingecheckt. Das Erzeugungsskript liegt nicht im Repo, die Ausgabe ist die Quelle.
+- Kontrolle: Gerenderte PNGs der drei Varianten (Robolectric, native Grafik) wurden per Sichtprüfung abgenommen.
+
 ## Konsequenzen
 
 - Gerätetests ohne private Daten sind möglich. Die Aufnahmen zeigen synthetische Nummern und Datumsangaben.
