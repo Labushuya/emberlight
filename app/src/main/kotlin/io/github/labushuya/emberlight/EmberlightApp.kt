@@ -17,6 +17,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
 import io.github.labushuya.emberlight.feature.gallery.GalleryRoute
+import io.github.labushuya.emberlight.feature.gallery.album.albumScreen
+import io.github.labushuya.emberlight.feature.gallery.album.navigateToAlbum
 import io.github.labushuya.emberlight.feature.gallery.galleryScreen
 import io.github.labushuya.emberlight.feature.gallery.navigateToGallery
 import io.github.labushuya.emberlight.feature.space.navigateToSpaces
@@ -57,7 +59,8 @@ fun EmberlightApp(
         },
     ) {
         NavHost(navController = navController, startDestination = GalleryRoute) {
-            galleryScreen()
+            galleryScreen(onAlbumClick = { bucketId -> navController.navigateToAlbum(bucketId) })
+            albumScreen(onBack = { navController.popBackStack() })
             spacesScreen()
         }
     }
@@ -65,7 +68,7 @@ fun EmberlightApp(
 
 /** Prüft, ob das aktuelle Ziel (oder einer seiner Vorfahren) zum Top-Level-Ziel gehört. */
 private fun NavDestination?.isTopLevel(destination: TopLevelDestination): Boolean =
-    this?.hierarchy?.any { it.hasRoute(destination.route) } == true
+    this?.hierarchy?.any { entry -> destination.routes.any { entry.hasRoute(it) } } == true
 
 /**
  * Standardmuster für Top-Level-Wechsel: Start-Ziel mit Zustand sichern, keine Kopien des Ziels stapeln,
