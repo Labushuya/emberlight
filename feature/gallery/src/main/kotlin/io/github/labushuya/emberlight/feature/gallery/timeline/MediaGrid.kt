@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.feature.gallery.timeline
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,9 +17,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -49,8 +54,8 @@ private const val TYPE_BANNER = "banner"
 private const val KEY_BANNER = "access-banner"
 
 /**
- * Das gemeinsame Raster von Galerie und Album: Überschriften, Medien, Zoom mit Anker, Schnell-Scrollleiste und Hinweis-
- * Banner. Zeichnet den Zustand [state] und meldet Aktionen nach außen. Die Spaltenzahl folgt aus der Breite und der
+ * Das gemeinsame Raster von Galerie und Album: Überschriften, Medien, Zoom mit Anker, Schnell-Scrollleiste und
+ * Hinweis-Banner. Zeichnet den Zustand [state] und meldet Aktionen nach außen. Die Spaltenzahl folgt aus der Breite und der
  * Zoomstufe des Zustands. Eine Stufenänderung (Pinch oder Bedienungshilfe) geht über [onZoomLevelChange].
  *
  * [gridState] gehört dem Aufrufer, damit die Scrollposition den Reiter- oder Ansichtswechsel übersteht.
@@ -77,25 +82,40 @@ internal fun MediaGrid(
     val index =
         remember(state.sections, hasBanner) { TimelineIndex(state.sections, if (hasBanner) 1 else 0, state.today) }
 
-    // Das zuletzt im Viewer angesehene Element. Die Scrollposition wird VOR dem ersten Layout gesetzt: SideEffect läuft nach der
-    // Komposition und vor dem Layout dieses Frames. So liegt die Kachel beim Rückweg schon im Raster (ADR 0010). Die Meldung
-    // wird danach gelöscht, damit ein späteres Wiederkommen nicht erneut springt.
+    // Das zuletzt im Viewer angesehene Element. Die Scrollposition wird VOR dem ersten Layout gesetzt: SideEffect läuft nach
+    // der Komposition und vor dem Layout dieses Frames. So liegt die Kachel beim Rückweg schon im Raster (ADR 0010).
+    // Das Ziel wird genau einmal angewendet (ADR 0008): `applied` merkt sich die Meldung, die schon verbraucht ist. Der
+    // Schlüssel ist die Meldung selbst, daher beginnt ein neuer Rücksprung mit leerem Merkmal. Über einen
+    // Konfigurationswechsel bleibt es
+    // erhalten, sodass dieselbe Meldung nicht erneut springt.
     val lastViewedId = lastViewed.mediaId
-    val lastViewedScroll = remember { LastViewedScroll() }
+    var applied by rememberSaveable(lastViewedId) { mutableStateOf<Long?>(null) }
+    val fastScroll = remember(gridState) { FastScrollState(gridState) }
     val mode = ZoomLevels.groupingFor(state.zoomLevel)
     val gapPx = with(density) { GRID_GAP.toPx() }
-    val paddingTopPx = with(density) { (padding.calculateTopPadding() + GRID_GAP).toPx() }
+    // Das Raster beginnt unter der Kopfzeile (siehe Modifier unten). Oben liegt daher kein Innenabstand mehr.
+    val paddingTopPx = 0f
     val enlarge = stringResource(R.string.feature_gallery_zoom_in)
     val shrink = stringResource(R.string.feature_gallery_zoom_out)
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    // Die Geste der Schnell-Scrollleiste hängt am gemeinsamen Vorfahren von Raster und Leiste (siehe fastScrollGrip).
+    val gripWidthPx = with(density) { FAST_SCROLL_GRIP_WIDTH.roundToPx() }
+    val gripHeightPx = with(density) { FAST_SCROLL_GRIP_HEIGHT.roundToPx() }
+    BoxWithConstraints(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(padding)
+                .fastScrollGrip(state = fastScroll, gripWidthPx = gripWidthPx, gripHeightPx = gripHeightPx),
+    ) {
+        GridProbeHolder.current?.let { probe -> SideEffect { probe.gridComposed() } }
         val widthPx = with(density) { maxWidth.toPx() }
         val columns = ZoomLevels.columnsFor(state.zoomLevel, maxWidth.value)
         val tilePx = ZoomLevels.tileWidth(widthPx, gapPx, columns)
         val cellPx = tilePx + gapPx
         val rows = if (cellPx > 0f) floor(with(density) { maxHeight.toPx() } / cellPx).toInt() else 0
 
-        // Nach dem Stufenwechsel steht das neue Raster in der Komposition. Dann wird der Anker gesetzt, im selben Frame.
+        // Nach dem Stufenwechsel steht das neue Raster in der Komposition. Dann wird der Anker im selben Frame gesetzt.
         SideEffect {
             zoom.resolve(
                 level = state.zoomLevel,
@@ -106,12 +126,11 @@ internal fun MediaGrid(
             )
         }
 
-        // Vor dem ersten Layout: Das Element liegt außerhalb des Bereichs, den das Raster von der gespeicherten Position zeigt,
-        // dann springt es an die Position. Liegt es innerhalb, bleibt die Scrollposition unverändert.
+        // Verbrauch genau einmal: Das Ziel wird angewendet, wenn es außerhalb des sichtbaren Bereichs liegt. Danach ist die
+        // Meldung verbraucht, der Eintrag im Navigations-Stapel wird geleert. Wiederholte Kompositionen tun nichts mehr.
         SideEffect {
-            if (lastViewedId == null) {
-                lastViewedScroll.reset()
-            } else if (lastViewedScroll.claim(lastViewedId)) {
+            if (lastViewedId != null && applied == null) {
+                applied = lastViewedId
                 gridScrollTarget(state.sections, index, lastViewedId)?.let { target ->
                     if (!inVisibleWindow(gridState.firstVisibleItemIndex, target, columns, rows)) {
                         gridState.requestScrollToItem(target)
@@ -152,6 +171,10 @@ internal fun MediaGrid(
             }
         val columnsDescription = pluralStringResource(R.plurals.feature_gallery_zoom_columns, columns, columns)
 
+        // Spalten und Zellhöhe für die Geste der Leiste (siehe fastScrollGrip). Die Geste liest sie beim Ereignis.
+        fastScroll.columns = columns
+        fastScroll.cellPx = cellPx
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
             state = gridState,
@@ -183,12 +206,16 @@ internal fun MediaGrid(
                         customActions = actions
                         stateDescription = columnsDescription
                     },
+            // Oben kein Abstand: Die erste Überschrift sitzt direkt unter der Kopfzeile (ADR 0008). Unten und an
+            // den Seiten
+            // der Abstand zwischen den Kacheln. Der Rand des Scaffolds (Kopfzeile, Navigation) liegt im `padding`
+            // des Modifiers.
             contentPadding =
                 PaddingValues(
                     start = GRID_GAP,
                     end = GRID_GAP,
-                    top = padding.calculateTopPadding() + GRID_GAP,
-                    bottom = padding.calculateBottomPadding() + GRID_GAP,
+                    top = 0.dp,
+                    bottom = GRID_GAP,
                 ),
             horizontalArrangement = Arrangement.spacedBy(GRID_GAP),
             verticalArrangement = Arrangement.spacedBy(GRID_GAP),
@@ -203,27 +230,21 @@ internal fun MediaGrid(
                     onOpenSettings = onOpenSettings,
                 )
             }
-            state.sections.forEach { section ->
+            state.sections.forEachIndexed { sectionIndex, section ->
                 item(key = section.key, span = { GridItemSpan(maxLineSpan) }, contentType = TYPE_HEADER) {
-                    SectionHeader(header = section.header, formats = formats)
+                    SectionHeader(header = section.header, formats = formats, first = sectionIndex == 0 && !hasBanner)
                 }
-                items(
-                    count = section.items.size,
-                    key = { position -> section.items[position].uri },
-                    contentType = { CONTENT_TYPE_MEDIA },
-                ) { position ->
-                    val item = section.items[position]
-                    MediaCell(
-                        item = item,
-                        label = mediaLabel(item, formats),
-                        onClick = { onMediaClick(item) },
-                    )
+                val media = section.items
+                items(count = media.size, key = { media[it].uri }, contentType = { CONTENT_TYPE_MEDIA }) { position ->
+                    val item = media[position]
+                    val onClick = remember(item, onMediaClick) { { onMediaClick(item) } }
+                    MediaCell(item = item, label = mediaLabel(item, formats), onClick = onClick)
                 }
             }
         }
 
         FastScrollBar(
-            gridState = gridState,
+            state = fastScroll,
             index = index,
             mode = mode,
             formats = formats,
@@ -234,7 +255,8 @@ internal fun MediaGrid(
 }
 
 /**
- * Schritt über die Bedienungshilfen. Wirkt wie der Pinch, ohne Geste: Der Anker ist die Zelle in der Mitte des Rasters, die
+ * Schritt über die Bedienungshilfen. Wirkt wie der Pinch, ohne Geste: Der Anker ist die Zelle in der Mitte des
+ * Rasters, die
  * Ansicht bleibt ohne Transformation. Gibt `false` zurück, wenn die Grenze der Stufen erreicht ist.
  */
 private fun stepZoomWithAnchor(
@@ -274,10 +296,16 @@ private fun stepZoomWithAnchor(
     return true
 }
 
+/**
+ * Überschrift einer Gruppe. [first] ist die oberste Überschrift des Rasters: Sie bekommt keinen Abstand nach oben,
+ * damit sie
+ * direkt unter der Kopfzeile steht.
+ */
 @Composable
 private fun SectionHeader(
     header: TimelineHeader,
     formats: TimelineFormats,
+    first: Boolean,
 ) {
     val text =
         when (header) {
@@ -293,7 +321,7 @@ private fun SectionHeader(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(start = 8.dp, top = 20.dp, bottom = 8.dp)
+                .padding(start = 8.dp, top = if (first) 0.dp else 20.dp, bottom = 8.dp)
                 .semantics { heading() },
     )
 }

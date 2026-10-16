@@ -28,23 +28,4 @@ class GridScrollWindowTest {
         assertFalse(inVisibleWindow(firstVisible = 0, target = 0, columns = 0, rows = 5))
         assertFalse(inVisibleWindow(firstVisible = 0, target = 0, columns = 2, rows = 0))
     }
-
-    @Test
-    fun aClaimIsGrantedOnceForEachElement() {
-        val scroll = LastViewedScroll()
-
-        assertTrue(scroll.claim(7L))
-        assertFalse(scroll.claim(7L))
-        assertTrue(scroll.claim(8L))
-    }
-
-    @Test
-    fun resetAllowsTheSameElementAgainAfterANewVisit() {
-        val scroll = LastViewedScroll()
-        assertTrue(scroll.claim(7L))
-
-        scroll.reset()
-
-        assertEquals(true, scroll.claim(7L))
-    }
 }

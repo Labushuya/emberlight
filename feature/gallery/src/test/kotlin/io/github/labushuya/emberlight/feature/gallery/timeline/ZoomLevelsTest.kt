@@ -5,19 +5,41 @@ import org.junit.Test
 
 class ZoomLevelsTest {
     @Test
+    fun narrowestPhoneOuterDisplayGivesTwoToSixColumnsAndIncreases() {
+        // Außendisplay des Magic V2: 353 dp. Stufe 0 hat mindestens zwei Spalten, jede Stufe eine mehr.
+        assertEquals(listOf(2, 3, 4, 5, 6), (0..4).map { ZoomLevels.columnsFor(it, 353f) })
+    }
+
+    @Test
     fun phoneWidthGivesTwoToSevenColumns() {
-        // Handy quer und hoch: 412 dp ergeben 2, 3, 4, 5, 7 Spalten über alle Stufen.
-        assertEquals(listOf(2, 3, 4, 5, 7), (0..4).map { ZoomLevels.columnsFor(it, 412f) })
+        // Handy: 412 dp ergeben 2, 3, 4, 6, 7 Spalten über alle Stufen. Der Standard liegt bei 4.
+        assertEquals(listOf(2, 3, 4, 6, 7), (0..4).map { ZoomLevels.columnsFor(it, 412f) })
+        assertEquals(4, ZoomLevels.columnsFor(ZoomLevels.DEFAULT_LEVEL, 412f))
     }
 
     @Test
     fun foldableInnerDisplayGivesThreeToTwelveColumns() {
-        assertEquals(listOf(3, 5, 7, 9, 12), (0..4).map { ZoomLevels.columnsFor(it, 673f) })
+        assertEquals(listOf(3, 6, 8, 10, 12), (0..4).map { ZoomLevels.columnsFor(it, 673f) })
     }
 
     @Test
-    fun tabletWidthGivesFiveToSeventeenColumns() {
-        assertEquals(listOf(5, 7, 10, 12, 17), (0..4).map { ZoomLevels.columnsFor(it, 900f) })
+    fun largePhoneGivesFourToTwelveColumns() {
+        assertEquals(listOf(4, 6, 8, 10, 12), (0..4).map { ZoomLevels.columnsFor(it, 700f) })
+    }
+
+    @Test
+    fun tabletWidthGivesFiveToSixteenColumns() {
+        assertEquals(listOf(5, 8, 10, 14, 16), (0..4).map { ZoomLevels.columnsFor(it, 900f) })
+    }
+
+    @Test
+    fun everyStageHasItsOwnColumnCountOnPhonesAndFolds() {
+        // Keine zwei Stufen mit gleicher Spaltenzahl, sonst bewirkt ein Stufenwechsel nichts Sichtbares.
+        listOf(353f, 412f, 673f, 700f, 900f).forEach { width ->
+            val columns = (0..4).map { ZoomLevels.columnsFor(it, width) }
+            assertEquals("Spalten bei $width dp: $columns", columns.distinct().size, columns.size)
+            assertEquals("Spalten bei $width dp steigen nicht: $columns", columns.sorted(), columns)
+        }
     }
 
     @Test
