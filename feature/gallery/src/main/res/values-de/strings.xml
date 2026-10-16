@@ -38,4 +38,12 @@
         <item quantity="one">%d Spalte</item>
         <item quantity="other">%d Spalten</item>
     </plurals>
+    <string name="feature_gallery_viewer_play">Abspielen</string>
+    <string name="feature_gallery_viewer_pause">Pause</string>
+    <string name="feature_gallery_viewer_mute">Stummschalten</string>
+    <string name="feature_gallery_viewer_unmute">Ton einschalten</string>
+    <string name="feature_gallery_viewer_seek">Wiedergabeposition</string>
+    <string name="feature_gallery_viewer_position">%1$s von %2$s</string>
+    <string name="feature_gallery_viewer_error_title">Dieses Element kann nicht angezeigt werden</string>
+    <string name="feature_gallery_viewer_error_text">Die Datei wurde möglicherweise verschoben oder gelöscht.</string>
 </resources>

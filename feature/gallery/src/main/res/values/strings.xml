@@ -38,4 +38,12 @@
         <item quantity="one">%d column</item>
         <item quantity="other">%d columns</item>
     </plurals>
+    <string name="feature_gallery_viewer_play">Play</string>
+    <string name="feature_gallery_viewer_pause">Pause</string>
+    <string name="feature_gallery_viewer_mute">Mute</string>
+    <string name="feature_gallery_viewer_unmute">Unmute</string>
+    <string name="feature_gallery_viewer_seek">Playback position</string>
+    <string name="feature_gallery_viewer_position">%1$s of %2$s</string>
+    <string name="feature_gallery_viewer_error_title">This item can\'t be shown</string>
+    <string name="feature_gallery_viewer_error_text">The file may have been moved or deleted.</string>
 </resources>

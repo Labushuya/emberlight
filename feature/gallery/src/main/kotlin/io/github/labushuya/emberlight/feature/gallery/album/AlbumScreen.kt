@@ -38,6 +38,7 @@ import io.github.labushuya.emberlight.feature.gallery.permission.rememberAppSett
 import io.github.labushuya.emberlight.feature.gallery.permission.rememberMediaPermissionRequest
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGrid
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaStateBody
+import io.github.labushuya.emberlight.feature.gallery.viewer.LastViewedMediaId
 
 /**
  * Album-Ansicht mit Zustand. Verbindet das ViewModel mit den Systemdialogen und den Einstellungen. [onBack] führt zurück in
@@ -47,6 +48,7 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.MediaStateBody
 internal fun AlbumScreen(
     onBack: () -> Unit,
     onMediaClick: (MediaItem) -> Unit = {},
+    lastViewed: LastViewedMediaId = LastViewedMediaId.None,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -62,6 +64,7 @@ internal fun AlbumScreen(
         onOpenSettings = rememberAppSettingsOpener(),
         onMediaClick = onMediaClick,
         onZoomLevelChange = viewModel::onZoomLevelChanged,
+        lastViewed = lastViewed,
     )
 }
 
@@ -79,6 +82,7 @@ internal fun AlbumContent(
     onMediaClick: (MediaItem) -> Unit,
     onZoomLevelChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    lastViewed: LastViewedMediaId = LastViewedMediaId.None,
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -117,6 +121,7 @@ internal fun AlbumContent(
                 onMediaClick = onMediaClick,
                 onZoomLevelChange = onZoomLevelChange,
                 gridState = gridState,
+                lastViewed = lastViewed,
             )
         }
     }

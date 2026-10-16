@@ -24,6 +24,7 @@ import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.feature.gallery.album.AlbumGrid
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGrid
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaStateBody
+import io.github.labushuya.emberlight.feature.gallery.viewer.LastViewedMediaId
 
 /** Reiter der Galerie. Wechsel nur per Antippen, nicht per Wischen (ADR 0009). */
 internal enum class GalleryTab(
@@ -50,6 +51,7 @@ internal fun GalleryContent(
     onAlbumClick: (Long?) -> Unit,
     onZoomLevelChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    lastViewed: LastViewedMediaId = LastViewedMediaId.None,
     photosGridState: LazyGridState = rememberLazyGridState(),
     albumsGridState: LazyGridState = rememberLazyGridState(),
 ) {
@@ -92,6 +94,7 @@ internal fun GalleryContent(
                         onMediaClick = onMediaClick,
                         onZoomLevelChange = onZoomLevelChange,
                         gridState = photosGridState,
+                        lastViewed = lastViewed,
                     )
                 }
             }

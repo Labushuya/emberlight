@@ -8,16 +8,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.feature.gallery.permission.rememberAppSettingsOpener
 import io.github.labushuya.emberlight.feature.gallery.permission.rememberMediaPermissionRequest
+import io.github.labushuya.emberlight.feature.gallery.viewer.LastViewedMediaId
 
 /**
  * Galerie mit Zustand. Verbindet das ViewModel mit den Systemdialogen und den Einstellungen. [onAlbumClick] meldet ein
- * Antippen auf ein Album, [onMediaClick] ein Antippen auf ein Medium. Der Viewer (Paket 5) ist noch nicht verdrahtet.
+ * Antippen auf ein Album, [onMediaClick] ein Antippen auf ein Medium. [lastViewed] ist das zuletzt im Viewer angesehene
+ * Medium, das Raster scrollt dorthin.
  */
 @Composable
 internal fun GalleryScreen(
     modifier: Modifier = Modifier,
     onAlbumClick: (Long?) -> Unit = {},
     onMediaClick: (MediaItem) -> Unit = {},
+    lastViewed: LastViewedMediaId = LastViewedMediaId.None,
     viewModel: GalleryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -33,6 +36,7 @@ internal fun GalleryScreen(
         onMediaClick = onMediaClick,
         onAlbumClick = onAlbumClick,
         onZoomLevelChange = viewModel::onZoomLevelChanged,
+        lastViewed = lastViewed,
         modifier = modifier,
     )
 }

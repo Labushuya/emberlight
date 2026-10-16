@@ -5,6 +5,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptions
 import androidx.navigation.compose.composable
 import io.github.labushuya.emberlight.core.media.model.MediaItem
+import io.github.labushuya.emberlight.feature.gallery.viewer.rememberLastViewedMediaId
 import kotlinx.serialization.Serializable
 
 /**
@@ -18,14 +19,18 @@ data class AlbumRoute(
 
 /**
  * Ziel der Album-Ansicht. [onBack] führt zurück in die Alben-Übersicht. [onMediaClick] meldet ein Antippen auf ein Medium,
- * der Viewer (Paket 5) ist noch nicht verdrahtet.
+ * die App öffnet dann den Viewer im Geltungsbereich des Albums.
  */
 fun NavGraphBuilder.albumScreen(
     onBack: () -> Unit,
     onMediaClick: (MediaItem) -> Unit = {},
 ) {
-    composable<AlbumRoute> {
-        AlbumScreen(onBack = onBack, onMediaClick = onMediaClick)
+    composable<AlbumRoute> { entry ->
+        AlbumScreen(
+            onBack = onBack,
+            onMediaClick = onMediaClick,
+            lastViewed = rememberLastViewedMediaId(entry),
+        )
     }
 }
 
