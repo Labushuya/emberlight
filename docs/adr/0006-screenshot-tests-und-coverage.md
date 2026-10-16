@@ -22,6 +22,16 @@ Zwei Fragen waren offen:
 - Verifikation: `roborazzi.test.verify=true` in `gradle.properties`. Jeder Testlauf, auch `check`, vergleicht gegen die Goldens. Ein fehlendes Golden lässt den Test fehlschlagen und erzeugt nichts. Neue oder geänderte Goldens entstehen nur über `./gradlew recordRoborazziDebug`.
 - Bei Abweichung schreibt Roborazzi ein Compare-Bild nach `build/outputs/roborazzi`.
 
+### Deterministische Screenshot-Tests
+
+Die Regeln gelten für alle Goldens, die neuen wie die alten:
+
+- Kein Touch, um einen Zustand zu wechseln. Ein Antippen löst eine Ripple-Animation aus, das Bild wäre zeitabhängig. Stattdessen Semantik-Aktionen (`performSemanticsAction`) oder direkte Zustandswechsel im Test.
+- Vorschaubilder kommen aus einem Fake-ImageLoader (`TestImageLoader`, `coil-test`). Kein echtes Laden, keine Dateizugriffe, keine Wartezeit auf Bilder.
+- Kein `Thread.sleep`.
+- Keine laufenden Animationen im Bild.
+- Ein vermeintliches Flackern war ein veraltetes Golden, kein instabiler Test.
+
 ### Coverage mit Kover 0.9.11
 
 - Kover auf allen Android-Modulen über den Convention-Plugin-Pfad, gemessen wird die Debug-Unit-Test-Variante. Die Aggregation und die Verifikation stehen im Root-Projekt.
