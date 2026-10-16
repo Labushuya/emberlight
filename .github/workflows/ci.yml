@@ -91,6 +91,8 @@ jobs:
           else
             echo "Keine Screenshot-Abweichung gefunden." >> "$summary"
           fi
+          # Die Job-Zusammenfassung steht sonst nur in der Oberfläche. Im Log ist sie nachlesbar.
+          cat "$summary"
 
       # Die Artefakt-Uploads sind Komfort, kein Qualitätsnachweis. Build, Lint und Tests sind an dieser Stelle
       # schon entschieden. Scheitert ein Upload (z. B. weil das Speicherkontingent des Accounts erschöpft ist),
