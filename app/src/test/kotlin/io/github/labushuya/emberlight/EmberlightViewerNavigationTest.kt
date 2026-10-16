@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -42,6 +43,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.TimeZone
 import javax.inject.Inject
 import io.github.labushuya.emberlight.feature.gallery.R as GalleryR
 
@@ -66,23 +68,30 @@ class EmberlightViewerNavigationTest {
 
     private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
 
+    private var hostZone: TimeZone? = null
+
     @Before
     fun setUp() {
         hiltRule.inject()
         TestImageLoader.install()
+        // Der Test darf nicht von der Zeitzone des Rechners abhängen (CI läuft in UTC). Die Zone der Galerie kommt aus der
+        // Injektion (TEST_ZONE), die Standardzone bleibt UTC.
+        hostZone = TimeZone.getDefault()
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
     }
 
     @After
     fun tearDown() {
         scenario?.close()
         TestImageLoader.reset()
+        TimeZone.setDefault(hostZone)
     }
 
     @Test
     fun timelineOpensTheViewerWithoutNavigationBarAndBackReturnsToTheTimeline() {
         launchApp()
 
-        composeRule.onNodeWithContentDescription(photoLabel(DAY_OF_PHOTO_8)).performClick()
+        awaitNode(photoLabel(DAY_OF_PHOTO_8)).performClick()
 
         composeRule.onNodeWithText(titleOf(PHOTO_8_TIME)).assertIsDisplayed()
         // Im Viewer ist die Navigationsleiste ausgeblendet: Ihr Eintrag für die Galerie fehlt.
@@ -124,7 +133,7 @@ class EmberlightViewerNavigationTest {
         selectable(albumsLabel()).performClick()
         composeRule.onNode(hasContentDescription(cameraCardLabel())).performClick()
 
-        composeRule.onNodeWithContentDescription(photoLabel(DAY_OF_PHOTO_8)).performClick()
+        awaitNode(photoLabel(DAY_OF_PHOTO_8)).performClick()
         composeRule.onNodeWithText(titleOf(PHOTO_8_TIME)).assertIsDisplayed()
 
         scenario?.onActivity { it.onBackPressedDispatcher.onBackPressed() }
@@ -139,7 +148,7 @@ class EmberlightViewerNavigationTest {
     @Test
     fun swipingInTheViewerChangesThePageTitle() {
         launchApp()
-        composeRule.onNodeWithContentDescription(photoLabel(DAY_OF_PHOTO_8)).performClick()
+        awaitNode(photoLabel(DAY_OF_PHOTO_8)).performClick()
 
         composeRule.onNodeWithText(titleOf(PHOTO_8_TIME)).assertIsDisplayed()
         composeRule.onRoot().performTouchInput { swipeLeft() }
@@ -148,6 +157,18 @@ class EmberlightViewerNavigationTest {
         // Der Index ist absteigend sortiert. Nach dem Foto von heute 08:15 kommt das Foto vom 15. Oktober 19:40.
         composeRule.onNodeWithText(titleOf(PHOTO_7_TIME)).assertIsDisplayed()
     }
+
+    /**
+     * Wartet, bis das Element im Baum steht. Nach einem Übergang der Navigation ist der Knoten sonst kurz nur im
+     * unverschmolzenen Baum zu finden und ein Klick schlägt fehl.
+     */
+    private fun awaitNode(label: String) =
+        composeRule
+            .also { rule ->
+                rule.waitUntil(
+                    TIMEOUT_MS,
+                ) { rule.onAllNodesWithContentDescription(label).fetchSemanticsNodes().isNotEmpty() }
+            }.onNodeWithContentDescription(label)
 
     private fun launchApp() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
@@ -222,5 +243,6 @@ class EmberlightViewerNavigationTest {
         const val PHOTO_COUNT = 60
         const val DEEP_INDEX = 45
         const val CAMERA_BUCKET = 1L
+        const val TIMEOUT_MS = 5_000L
     }
 }
