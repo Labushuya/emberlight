@@ -1,10 +1,12 @@
 package io.github.labushuya.emberlight
 
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -20,6 +22,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
+import io.github.labushuya.emberlight.core.design.motion.LocalSharedTransitionScope
 import io.github.labushuya.emberlight.feature.gallery.GalleryRoute
 import io.github.labushuya.emberlight.feature.gallery.album.albumScreen
 import io.github.labushuya.emberlight.feature.gallery.album.navigateToAlbum
@@ -79,22 +82,31 @@ fun EmberlightApp(
             }
         },
     ) {
-        NavHost(navController = navController, startDestination = GalleryRoute) {
-            galleryScreen(
-                onAlbumClick = { bucketId -> navController.navigateToAlbum(bucketId) },
-                onMediaClick = { item ->
-                    navController.navigateToViewer(mediaId = item.id, bucketId = null, scopeAll = true)
-                },
-            )
-            albumScreen(
-                onBack = { navController.popBackStack() },
-                // Im Album ist jedes Element aus diesem Ordner, bucketId kommt also von dort.
-                onMediaClick = { item ->
-                    navController.navigateToViewer(mediaId = item.id, bucketId = item.bucketId, scopeAll = false)
-                },
-            )
-            viewerScreen(onBack = { lastViewedMediaId -> navController.popViewer(lastViewedMediaId) })
-            spacesScreen()
+        // Der Übergangs-Scope umschließt den NavHost. Raster und Viewer holen ihn sich über CompositionLocals (ADR 0010).
+        SharedTransitionLayout {
+            CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+                NavHost(navController = navController, startDestination = GalleryRoute) {
+                    galleryScreen(
+                        onAlbumClick = { bucketId -> navController.navigateToAlbum(bucketId) },
+                        onMediaClick = { item ->
+                            navController.navigateToViewer(mediaId = item.id, bucketId = null, scopeAll = true)
+                        },
+                    )
+                    albumScreen(
+                        onBack = { navController.popBackStack() },
+                        // Im Album ist jedes Element aus diesem Ordner, bucketId kommt also von dort.
+                        onMediaClick = { item ->
+                            navController.navigateToViewer(
+                                mediaId = item.id,
+                                bucketId = item.bucketId,
+                                scopeAll = false,
+                            )
+                        },
+                    )
+                    viewerScreen(onBack = { lastViewedMediaId -> navController.popViewer(lastViewedMediaId) })
+                    spacesScreen()
+                }
+            }
         }
     }
 }

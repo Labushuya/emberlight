@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.feature.gallery.viewer
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -9,6 +10,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptions
 import androidx.navigation.compose.composable
+import io.github.labushuya.emberlight.core.design.motion.LocalNavAnimatedVisibilityScope
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaScope
 import kotlinx.serialization.Serializable
 
@@ -34,8 +36,14 @@ internal fun ViewerRoute.scope(): MediaScope = if (scopeAll) MediaScope.All else
  * da ist). Das Raster scrollt dorthin, siehe [popViewer].
  */
 fun NavGraphBuilder.viewerScreen(onBack: (lastViewedMediaId: Long?) -> Unit) {
-    composable<ViewerRoute> {
-        ViewerScreen(onBack = onBack)
+    composable<ViewerRoute>(
+        enterTransition = { viewerEnterTransition() },
+        popExitTransition = { viewerPopExitTransition() },
+    ) {
+        // Der Sichtbarkeits-Scope dieses Ziels, damit die Seiten die gemeinsamen Elemente finden (ADR 0010).
+        CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this@composable) {
+            ViewerScreen(onBack = onBack)
+        }
     }
 }
 

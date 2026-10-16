@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.feature.gallery.viewer
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +12,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -36,14 +38,23 @@ import me.saket.telephoto.zoomable.rememberZoomableState
  */
 internal typealias ViewerImageSource = @Composable (item: ViewerItem, onFailed: () -> Unit) -> ZoomableImageSource
 
-/** Standardquelle der Galerie: das Original über die Content-URI (ADR 0010). */
+/**
+ * Standardquelle der Galerie: das Original über die Content-URI (ADR 0010). Das hochauflösende Bild wartet, bis der Übergang
+ * beendet ist. Bis dahin zeigt die Quelle das Vorschaubild aus dem Speicher-Cache.
+ */
 internal val ContentUriImageSources: ViewerImageSource = { item, onFailed ->
-    remember(item.uri, item.previewKey) { ContentUriImageSource(item.uri, item.previewKey, onFailed) }
+    val settled = rememberPageSettled()
+    remember(item.uri, item.previewKey, settled) {
+        ContentUriImageSource(item.uri, item.previewKey, onFailed, settled)
+    }
 }
 
 /**
  * Eine Bildseite des Viewers mit Pinch-Zoom, Doppeltipp-Zoom und Verschieben (Telephoto). Ist das Bild gezoomt, wischt der
  * Pager erst am Bildrand weiter: Telephoto verbraucht Verschiebungen nur, solange sie im Bild liegen.
+ *
+ * Ungezoomt wischt die Seite nach unten zum Schließen ([dismiss], ADR 0010). [onDismiss] führt zurück. Während des Übergangs
+ * zeigt die Seite das Vorschaubild als gemeinsames Element, das Bild selbst bleibt bis zum Ende unsichtbar.
  *
  * [onTap] meldet ein einfaches Antippen, das die Leisten ein- oder ausblendet. [state] gehört dem Aufrufer, damit Tests den
  * Zoomzustand lesen können.
@@ -56,19 +67,38 @@ internal fun ViewerImagePage(
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
     state: ZoomableImageState = rememberZoomableImageState(rememberZoomableState()),
+    dismiss: DismissState = rememberDismissState(),
+    onDismiss: () -> Unit = {},
 ) {
     val failed = remember(item.id) { mutableStateOf(false) }
-    if (failed.value) {
-        ViewerLoadError(modifier = modifier.fillMaxSize())
-    } else {
-        ZoomableImage(
-            image = imageSource(item) { failed.value = true },
-            contentDescription = contentDescription,
-            gestures = EnabledZoomGestures.ZoomAndPan,
-            modifier = modifier.fillMaxSize(),
-            state = state,
-            onClick = { _ -> onTap() },
-        )
+    val settled by rememberPageSettled()
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .swipeDownToDismiss(
+                    dismiss = dismiss,
+                    canStart = { canStartDismiss(state.zoomableState.zoomFraction) },
+                    onClose = onDismiss,
+                ),
+    ) {
+        if (failed.value) {
+            ViewerLoadError(modifier = Modifier.fillMaxSize())
+        } else {
+            if (!settled) {
+                // Scheitert nur die Vorschau, bleibt das Original die Quelle. Schlägt auch das fehl, meldet die Quelle den Fehler.
+                ViewerPreview(item = item, onError = {})
+            }
+            ZoomableImage(
+                image = imageSource(item) { failed.value = true },
+                contentDescription = contentDescription,
+                gestures = EnabledZoomGestures.ZoomAndPan,
+                modifier = Modifier.fillMaxSize(),
+                state = state,
+                alpha = if (settled) 1f else 0f,
+                onClick = { _ -> onTap() },
+            )
+        }
     }
 }
 

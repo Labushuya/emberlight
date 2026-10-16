@@ -45,7 +45,8 @@ internal fun ViewerScreen(
     ImmersiveSystemBars(immersive = !chromeVisible)
     // Im Hintergrund pausiert die Wiedergabe. Ein Video startet nie von selbst wieder.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onStopped() }
-    BackHandler { onBack(currentId) }
+    // Mit Inhalt übernimmt ViewerContent die Rückgeste (Predictive Back, ADR 0010). Ohne Inhalt bleibt dieser Weg.
+    BackHandler(enabled = state !is ViewerUiState.Ready) { onBack(currentId) }
     LaunchedEffect(state) {
         // Nichts mehr zu zeigen: zurück ins Raster, das den Grund anzeigt (Berechtigung oder leere Liste).
         if (state == ViewerUiState.Closed) currentOnBack(null)
