@@ -39,7 +39,7 @@ import me.saket.telephoto.zoomable.rememberZoomableState
  * Bildquelle einer Seite. Erhält das Element, den Schalter „Bild darf geladen werden“ und einen Callback bei Fehlern. Die
  * Galerie setzt [ContentUriImageSource] ein, Tests eine feste Quelle.
  */
-internal typealias ViewerImageSource = @Composable (
+typealias ViewerImageSource = @Composable (
     item: ViewerItem,
     settled: State<Boolean>,
     onFailed: () -> Unit,

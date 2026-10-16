@@ -12,6 +12,7 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.Multibinds
 import io.github.labushuya.emberlight.core.media.thumbnail.addMediaThumbnails
 import io.github.labushuya.emberlight.extensions.CoilComponents
+import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerImageSourceContribution
 import javax.inject.Singleton
 
 /**
@@ -62,4 +63,12 @@ abstract class LaunchIntentModule {
 abstract class AppOverlayModule {
     @Multibinds
     abstract fun appOverlays(): Set<io.github.labushuya.emberlight.extensions.AppOverlay>
+}
+
+/** Leere Mehrfachbindung für Bildquellen des Vollbild-Viewers. Ohne Beitrag (Release) gilt die Standardquelle. */
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class ViewerImageSourceModule {
+    @Multibinds
+    abstract fun viewerImageSources(): Set<ViewerImageSourceContribution>
 }

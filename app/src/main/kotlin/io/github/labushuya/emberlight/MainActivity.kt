@@ -12,6 +12,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.extensions.AppOverlay
 import io.github.labushuya.emberlight.extensions.LaunchIntentHandler
+import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerImageSourceContribution
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -23,6 +24,10 @@ class MainActivity : ComponentActivity() {
     /** Zusätzliche Anzeigen über der Oberfläche. Im Release-Build leer. */
     @Inject
     lateinit var appOverlays: Set<@JvmSuppressWildcards AppOverlay>
+
+    /** Zusätzliche Bildquellen des Vollbild-Viewers. Im Release-Build leer. */
+    @Inject
+    lateinit var viewerImageSources: Set<@JvmSuppressWildcards ViewerImageSourceContribution>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Muss vor super.onCreate stehen, damit der Splash beim Kaltstart greift.
@@ -37,7 +42,7 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             EmberlightTheme {
-                EmberlightApp(overlays = appOverlays.toList())
+                EmberlightApp(overlays = appOverlays.toList(), viewerImageSources = viewerImageSources.toList())
             }
         }
     }

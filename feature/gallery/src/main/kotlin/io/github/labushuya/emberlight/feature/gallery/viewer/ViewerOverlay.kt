@@ -86,12 +86,13 @@ internal fun ViewerOverlay(
     items: List<ViewerItem>,
     playback: ViewerPlaybackViewModel,
     modifier: Modifier = Modifier,
-    imageSource: ViewerImageSource = ContentUriImageSources,
+    imageSource: ViewerImageSource? = null,
     initialChromeVisible: Boolean = true,
     zone: ZoneId = ZoneId.systemDefault(),
 ) {
     val id = overlay.shownId ?: return
     val context = LocalContext.current
+    val contributions = LocalViewerImageSources.current
     val locale = LocalConfiguration.current.locales[0]
     val titles = remember(locale, zone) { ViewerFormats(locale, zone) }
     val dates = remember(locale, zone) { TimelineFormats(locale, zone) }
@@ -200,7 +201,7 @@ internal fun ViewerOverlay(
                     ViewerImagePage(
                         item = pageItem,
                         contentDescription = pageLabel,
-                        imageSource = imageSource,
+                        imageSource = imageSource ?: contributions.imageSourceFor(pageItem),
                         overlay = overlay,
                         settled = settled,
                         onTap = { chromeVisible = !chromeVisible },
