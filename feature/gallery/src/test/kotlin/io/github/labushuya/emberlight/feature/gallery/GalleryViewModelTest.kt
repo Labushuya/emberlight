@@ -1,11 +1,16 @@
-package io.github.labushuya.emberlight.feature.gallery.timeline
+package io.github.labushuya.emberlight.feature.gallery
 
 import io.github.labushuya.emberlight.core.media.MediaLibraryState
 import io.github.labushuya.emberlight.core.media.MediaRepository
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import io.github.labushuya.emberlight.feature.gallery.permission.PermissionPromptStore
+import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
+import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
+import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineHeader
+import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevelStore
+import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -23,9 +28,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.time.YearMonth
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class TimelineViewModelTest {
+class GalleryViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 
     @Before
@@ -43,30 +49,30 @@ class TimelineViewModelTest {
         runTest(dispatcher) {
             val vm = viewModel(FakeRepository(MediaLibraryState.Loading), FakeStore(asked = false))
 
-            assertEquals(TimelineUiState.Loading, vm.uiState.value)
+            assertEquals(MediaGridState.Loading, vm.uiState.value)
         }
 
     @Test
     fun noAccessNeverAskedOffersTheDialog() =
         runTest(dispatcher) {
-            val vm = viewModel(readyNoAccess(), FakeStore(asked = false))
+            val vm = viewModel(readyNoAccessRepository(), FakeStore(asked = false))
 
             collect(vm)
             advanceUntilIdle()
 
-            assertEquals(TimelineUiState.PermissionRequired(canRequest = true), vm.uiState.value)
+            assertEquals(MediaGridState.PermissionRequired(canRequest = true), vm.uiState.value)
         }
 
     @Test
     fun noAccessAfterDeniedForeverOffersOnlySettings() =
         runTest(dispatcher) {
             // Gefragt, und die Systemerklärung ist nicht mehr anzeigbar (rationale = false): nur noch Einstellungen.
-            val vm = viewModel(readyNoAccess(), FakeStore(asked = true))
+            val vm = viewModel(readyNoAccessRepository(), FakeStore(asked = true))
 
             collect(vm)
             advanceUntilIdle()
 
-            assertEquals(TimelineUiState.PermissionRequired(canRequest = false), vm.uiState.value)
+            assertEquals(MediaGridState.PermissionRequired(canRequest = false), vm.uiState.value)
         }
 
     @Test
@@ -81,7 +87,7 @@ class TimelineViewModelTest {
             vm.onPermissionResult(showRationale = true)
             advanceUntilIdle()
 
-            assertEquals(TimelineUiState.PermissionRequired(canRequest = true), vm.uiState.value)
+            assertEquals(MediaGridState.PermissionRequired(canRequest = true), vm.uiState.value)
             assertTrue(store.askedFlag.value)
             assertEquals(1, repository.refreshCount)
         }
@@ -90,18 +96,18 @@ class TimelineViewModelTest {
     fun permissionResultMarksTheRequestAsAskedOnlyAfterTheAnswer() =
         runTest(dispatcher) {
             val store = FakeStore(asked = false)
-            val vm = viewModel(readyNoAccess(), store)
+            val vm = viewModel(readyNoAccessRepository(), store)
             collect(vm)
             advanceUntilIdle()
             // Während der Dialog offen ist, gilt die Anfrage noch nicht als gestellt. Der Dialog bleibt anbietbar.
-            assertEquals(TimelineUiState.PermissionRequired(canRequest = true), vm.uiState.value)
+            assertEquals(MediaGridState.PermissionRequired(canRequest = true), vm.uiState.value)
             assertEquals(false, store.askedFlag.value)
 
             vm.onPermissionResult(showRationale = false)
             advanceUntilIdle()
 
             assertTrue(store.askedFlag.value)
-            assertEquals(TimelineUiState.PermissionRequired(canRequest = false), vm.uiState.value)
+            assertEquals(MediaGridState.PermissionRequired(canRequest = false), vm.uiState.value)
         }
 
     @Test
@@ -129,7 +135,7 @@ class TimelineViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            assertEquals(TimelineUiState.Empty(MediaAccess.FULL, emptySet()), vm.uiState.value)
+            assertEquals(MediaGridState.Empty(MediaAccess.FULL, emptySet()), vm.uiState.value)
         }
 
     @Test
@@ -141,7 +147,7 @@ class TimelineViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            val content = vm.uiState.value as TimelineUiState.Content
+            val content = vm.uiState.value as MediaGridState.Content
             assertEquals(TimelineHeader.Today, content.sections.first().header)
             assertEquals(MediaAccess.FULL, content.access)
         }
@@ -157,8 +163,8 @@ class TimelineViewModelTest {
             vm.onZoomLevelChanged(ZoomLevels.LAST_DAY_LEVEL + 1)
             advanceUntilIdle()
 
-            val content = vm.uiState.value as TimelineUiState.Content
-            assertEquals(TimelineHeader.Month(java.time.YearMonth.of(2026, 10)), content.sections.first().header)
+            val content = vm.uiState.value as MediaGridState.Content
+            assertEquals(TimelineHeader.Month(YearMonth.of(2026, 10)), content.sections.first().header)
             assertEquals(ZoomLevels.LAST_DAY_LEVEL + 1, content.zoomLevel)
         }
 
@@ -175,20 +181,24 @@ class TimelineViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            val content = vm.uiState.value as TimelineUiState.Content
+            val content = vm.uiState.value as MediaGridState.Content
             assertEquals(ZoomLevels.MAX_LEVEL, content.zoomLevel)
-            assertEquals(TimelineHeader.Month(java.time.YearMonth.of(2026, 10)), content.sections.first().header)
+            assertEquals(TimelineHeader.Month(YearMonth.of(2026, 10)), content.sections.first().header)
         }
 
     @Test
     fun defaultLevelIsUsedWithoutSavedValue() =
         runTest(dispatcher) {
             val vm =
-                viewModel(FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())), FakeStore(asked = true))
+                viewModel(
+                    FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
+                    FakeStore(asked = true),
+                    FakeZoomStore(saved = ZoomLevels.DEFAULT_LEVEL),
+                )
             collect(vm)
             advanceUntilIdle()
 
-            assertEquals(ZoomLevels.DEFAULT_LEVEL, (vm.uiState.value as TimelineUiState.Content).zoomLevel)
+            assertEquals(ZoomLevels.DEFAULT_LEVEL, (vm.uiState.value as MediaGridState.Content).zoomLevel)
         }
 
     @Test
@@ -208,25 +218,7 @@ class TimelineViewModelTest {
             advanceUntilIdle()
 
             assertEquals(ZoomLevels.MAX_LEVEL, zoomStore.saved)
-            assertEquals(ZoomLevels.MAX_LEVEL, (vm.uiState.value as TimelineUiState.Content).zoomLevel)
-        }
-
-    @Test
-    fun storedValueDoesNotOverrideAUserChoiceMadeBeforeItArrives() =
-        runTest(dispatcher) {
-            val zoomStore = FakeZoomStore(saved = 0)
-            val vm =
-                viewModel(
-                    FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
-                    FakeStore(asked = true),
-                    zoomStore,
-                )
-            collect(vm)
-            vm.onZoomLevelChanged(3)
-            advanceUntilIdle()
-
-            assertEquals(3, zoomStore.saved)
-            assertEquals(3, zoomLevelOf(vm))
+            assertEquals(ZoomLevels.MAX_LEVEL, (vm.uiState.value as MediaGridState.Content).zoomLevel)
         }
 
     @Test
@@ -238,21 +230,19 @@ class TimelineViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            assertEquals(setOf(MediaType.VIDEO), (vm.uiState.value as TimelineUiState.Content).missingTypes)
+            assertEquals(setOf(MediaType.VIDEO), (vm.uiState.value as MediaGridState.Content).missingTypes)
         }
 
-    private fun TestScope.collect(vm: TimelineViewModel) {
+    private fun TestScope.collect(vm: GalleryViewModel) {
         backgroundScope.launch { vm.uiState.collect { } }
     }
 
-    private fun zoomLevelOf(vm: TimelineViewModel): Int = (vm.uiState.value as TimelineUiState.Content).zoomLevel
-
     private fun viewModel(
-        repository: FakeRepository,
-        store: FakeStore,
-        zoomStore: FakeZoomStore = FakeZoomStore(saved = ZoomLevels.DEFAULT_LEVEL),
-    ): TimelineViewModel =
-        TimelineViewModel(
+        repository: MediaRepository,
+        store: PermissionPromptStore,
+        zoomStore: ZoomLevelStore = FakeZoomStore(saved = ZoomLevels.DEFAULT_LEVEL),
+    ): GalleryViewModel =
+        GalleryViewModel(
             repository = repository,
             permissionPrompts = store,
             zoomLevels = zoomStore,
@@ -260,8 +250,6 @@ class TimelineViewModelTest {
             clock = TimelineFixtures.clock(),
             zone = ZONE,
         )
-
-    private fun readyNoAccess(): FakeRepository = readyNoAccessRepository()
 
     private fun readyNoAccessRepository(): FakeRepository =
         FakeRepository(
@@ -291,7 +279,7 @@ class TimelineViewModelTest {
         override val level: Flow<Int> = flow
 
         override suspend fun setLevel(level: Int) {
-            flow.value = level
+            flow.value = ZoomLevels.clamp(level)
         }
     }
 

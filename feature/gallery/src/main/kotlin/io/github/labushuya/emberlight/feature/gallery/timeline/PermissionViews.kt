@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -134,6 +136,34 @@ internal fun AccessBanner(
                 Text(stringResource(R.string.feature_gallery_permission_allow))
             }
         }
+    }
+}
+
+/** `true`, wenn ein Hinweis-Banner über dem Raster stehen muss: nur ein Teil der Medien oder ein Typ fehlt. */
+internal fun needsAccessBanner(
+    access: MediaAccess,
+    missingTypes: Set<MediaType>,
+): Boolean = access == MediaAccess.PARTIAL || missingTypes.isNotEmpty()
+
+/**
+ * Banner als erste Zeile eines Rasters, über die volle Breite. Galerie und Album setzen es gleich, damit der Hinweis in
+ * beiden Reitern erscheint.
+ */
+internal fun LazyGridScope.accessBannerItem(
+    key: String,
+    contentType: String,
+    access: MediaAccess,
+    missingTypes: Set<MediaType>,
+    onRequest: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    item(key = key, span = { GridItemSpan(maxLineSpan) }, contentType = contentType) {
+        AccessBanner(
+            access = access,
+            missingTypes = missingTypes,
+            onRequest = onRequest,
+            onOpenSettings = onOpenSettings,
+        )
     }
 }
 

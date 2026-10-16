@@ -27,6 +27,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
+import io.github.labushuya.emberlight.feature.gallery.GalleryContent
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.TODAY
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
 import org.junit.After
@@ -277,9 +278,9 @@ class GalleryZoomUiTest {
             }
         }
 
-        private fun content(): TimelineUiState.Content {
+        private fun content(): MediaGridState.Content {
             val clamped = ZoomLevels.clamp(level)
-            return TimelineUiState.Content(
+            return MediaGridState.Content(
                 sections = TimelineGrouping.group(items, ZoomLevels.groupingFor(clamped), TODAY, ZONE),
                 access = MediaAccess.FULL,
                 missingTypes = emptySet(),
