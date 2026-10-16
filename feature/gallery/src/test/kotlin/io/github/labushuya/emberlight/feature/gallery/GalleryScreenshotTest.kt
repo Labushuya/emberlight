@@ -273,6 +273,3 @@ class GalleryScreenshotTest {
 
     private fun contentState() = contentOf(sections(), MediaAccess.FULL, emptySet())
 }
-
-/** Zeit, die eine Ripple-Animation nach dem Antippen zum Auslaufen braucht. */
-private const val RIPPLE_SETTLE_MS = 1_000L
