@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import io.github.labushuya.emberlight.feature.gallery.GalleryRoute
 import io.github.labushuya.emberlight.feature.gallery.album.AlbumRoute
+import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerRoute
 import io.github.labushuya.emberlight.feature.space.SpacesRoute
 import kotlin.reflect.KClass
 import io.github.labushuya.emberlight.core.design.R as DesignR
@@ -22,7 +23,7 @@ enum class TopLevelDestination(
         selectedIcon = DesignR.drawable.ic_photo_library_filled,
         unselectedIcon = DesignR.drawable.ic_photo_library_outlined,
         labelRes = R.string.app_nav_gallery,
-        routes = listOf(GalleryRoute::class, AlbumRoute::class),
+        routes = listOf(GalleryRoute::class, AlbumRoute::class, ViewerRoute::class),
     ),
     SPACES(
         selectedIcon = DesignR.drawable.ic_groups_filled,
