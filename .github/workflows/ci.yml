@@ -32,6 +32,10 @@ jobs:
     name: Build, Lint und Tests
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # Ein früher sporadischer Lint-Absturz soll beim Wiederauftreten mit vollständigem Stacktrace im Log stehen
+    # (Wiedervorlage in ADR 0001). Ohne diese Variable zeigt Lint nur die Kurzfassung.
+    env:
+      LINT_PRINT_STACKTRACE: "true"
     steps:
       - name: Quellcode auschecken
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
