@@ -26,9 +26,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.labushuya.emberlight.core.design.motion.sharedMediaBounds
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.feature.gallery.R
+import io.github.labushuya.emberlight.feature.gallery.viewer.viewerSharedKey
 
 /**
  * Eine quadratische Zelle des Rasters. Das Vorschaubild füllt die Zelle mit Zuschnitt. Videos zeigen unten ein
@@ -47,6 +49,8 @@ internal fun MediaCell(
         modifier =
             modifier
                 .aspectRatio(1f)
+                // Gemeinsames Element mit dem Vollbild desselben Mediums (ADR 0010). Ohne Übergangs-Scope bleibt es aus.
+                .sharedMediaBounds(key = viewerSharedKey(item.id))
                 .clip(MaterialTheme.shapes.extraSmall)
                 .clickable(onClick = onClick)
                 .semantics(mergeDescendants = true) { contentDescription = label },

@@ -3,6 +3,7 @@ package io.github.labushuya.emberlight.feature.gallery.viewer
 import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -31,46 +32,43 @@ import me.saket.telephoto.zoomable.ZoomableImageSource
  * es bei der Fehlermeldung der Seite.
  *
  * Bis das Original bereit ist, zeigt die Quelle das Vorschaubild aus dem Speicher-Cache als Platzhalter (und als
- * Vorschau für die Kacheln), damit nichts aufblitzt.
+ * Vorschau für die Kacheln), damit nichts aufblitzt. Das hochauflösende Bild (Subsampling) bleibt bis zum Ende des
+ * Übergangs aus ([settled] ist `false`), damit der Übergang nicht von Kacheln unterbrochen wird.
  */
 internal class ContentUriImageSource(
     private val uri: String,
     private val previewKey: String?,
     private val onFailed: () -> Unit,
+    private val settled: State<Boolean>,
 ) : ZoomableImageSource {
     @Composable
     override fun resolve(canvasSize: Flow<Size>): ZoomableImageSource.ResolveResult {
         val context = LocalContext.current
         val preview = remember(previewKey, context) { previewOf(context, previewKey) }
-        val result by produceState(
-            initialValue = ZoomableImageSource.ResolveResult(delegate = null, placeholder = preview?.painter),
-            key1 = uri,
-        ) {
+        val source by produceState<SubSamplingImageSource?>(initialValue = null, key1 = uri) {
             val readable = withContext(Dispatchers.IO) { isDecodableImage(context, uri) }
-            val source =
+            val created =
                 if (readable) {
-                    SubSamplingImageSource.contentUriOrNull(
-                        uri.toUri(),
-                        preview?.bitmap,
-                    )
+                    SubSamplingImageSource.contentUriOrNull(uri.toUri(), preview?.bitmap)
                 } else {
                     null
                 }
-            if (source == null) {
-                onFailed()
-            } else {
-                value =
-                    ZoomableImageSource.ResolveResult(
-                        delegate =
-                            ZoomableImageSource.SubSamplingDelegate(
-                                source = source,
-                                imageOptions = ImageBitmapOptions.Default,
-                            ),
-                        placeholder = preview?.painter,
-                    )
-            }
+            if (created == null) onFailed() else value = created
         }
-        return result
+        val ready = settled.value
+        val current = source
+        return ZoomableImageSource.ResolveResult(
+            delegate =
+                if (current != null && ready) {
+                    ZoomableImageSource.SubSamplingDelegate(
+                        source = current,
+                        imageOptions = ImageBitmapOptions.Default,
+                    )
+                } else {
+                    null
+                },
+            placeholder = preview?.painter,
+        )
     }
 
     private class Preview(

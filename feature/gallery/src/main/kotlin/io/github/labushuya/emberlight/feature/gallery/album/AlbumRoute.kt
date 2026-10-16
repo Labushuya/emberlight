@@ -1,10 +1,14 @@
 package io.github.labushuya.emberlight.feature.gallery.album
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptions
 import androidx.navigation.compose.composable
+import io.github.labushuya.emberlight.core.design.motion.LocalNavAnimatedVisibilityScope
 import io.github.labushuya.emberlight.core.media.model.MediaItem
+import io.github.labushuya.emberlight.feature.gallery.viewer.gridExitTowardsViewer
+import io.github.labushuya.emberlight.feature.gallery.viewer.gridPopEnterFromViewer
 import io.github.labushuya.emberlight.feature.gallery.viewer.rememberLastViewedMediaId
 import kotlinx.serialization.Serializable
 
@@ -25,12 +29,17 @@ fun NavGraphBuilder.albumScreen(
     onBack: () -> Unit,
     onMediaClick: (MediaItem) -> Unit = {},
 ) {
-    composable<AlbumRoute> { entry ->
-        AlbumScreen(
-            onBack = onBack,
-            onMediaClick = onMediaClick,
-            lastViewed = rememberLastViewedMediaId(entry),
-        )
+    composable<AlbumRoute>(
+        exitTransition = { gridExitTowardsViewer() },
+        popEnterTransition = { gridPopEnterFromViewer() },
+    ) { entry ->
+        CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this@composable) {
+            AlbumScreen(
+                onBack = onBack,
+                onMediaClick = onMediaClick,
+                lastViewed = rememberLastViewedMediaId(entry),
+            )
+        }
     }
 }
 

@@ -1,9 +1,9 @@
 package io.github.labushuya.emberlight.feature.gallery.viewer
 
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -16,7 +16,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -24,6 +27,7 @@ import androidx.media3.common.Player
 import io.github.labushuya.emberlight.feature.gallery.R
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFormats
 import io.github.labushuya.emberlight.feature.gallery.timeline.formatDuration
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.ZoneId
 
@@ -37,6 +41,10 @@ private val PAGE_SPACING = 16.dp
  *
  * [index] ist das gewählte Element. Der Pager folgt ihm, etwa nach dem Verschwinden eines Elements. Umgekehrt meldet der
  * Pager jede eingerastete Seite über [onPageAtRest].
+ *
+ * Wegwischen nach unten und die Vorschau der System-Rückgeste (Predictive Back) steuern dieselbe Ansicht: Der Pager
+ * verschiebt und verkleinert sich, der Grund wird transparent (ADR 0010). Schließen führt über [onBack], der Rückweg zur
+ * Kachel startet aus der aktuellen Position.
  */
 @Composable
 internal fun ViewerContent(
@@ -65,6 +73,20 @@ internal fun ViewerContent(
     val pagerState = rememberPagerState(initialPage = index, pageCount = { items.size })
     val currentItem = items.getOrNull(pagerState.currentPage)
     val attachedHere = currentItem != null && playback.attachedId == currentItem.id
+    val dismiss = rememberDismissState()
+    // Schließen läuft über den Zustand: Der Rückweg startet aus der gezogenen Position, nicht aus der Mitte.
+    val leave: () -> Unit = { dismiss.close(onBack) }
+
+    // Die System-Rückgeste steuert die Vorschau: Der Fortschritt zeigt sich wie beim Ziehen, Abbrechen federt zurück,
+    // Vollenden schließt (ADR 0010).
+    PredictiveBackHandler { progress ->
+        try {
+            progress.collect { event -> dismiss.backProgressed(event.progress) }
+            dismiss.backCommitted(onBack)
+        } catch (e: CancellationException) {
+            dismiss.backCancelled()
+        }
+    }
 
     // Der eine Player hängt an der angehängten Seite. Die Anzeige liest seinen Zustand, auch wenn die Seite gerade nicht
     // die aktuelle ist, etwa während eines Wischens.
@@ -97,11 +119,28 @@ internal fun ViewerContent(
             ?.durationMs
             ?.let(::formatDuration)
     val controlsVideo = if (attachedHere) video else VideoPlaybackUi.idle(currentItem?.durationMs)
+    // Während des Ziehens sind die Leisten aus. Nur die Seite und der Grund bewegen sich.
+    val chromeShown = chromeVisible && !dismiss.dragging
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .onSizeChanged { size -> dismiss.heightPx = size.height.toFloat() }
+                // Der Grund ist schwarz, unabhängig vom Theme. Während des Wegwischens wird er transparent. Gelesen wird in der
+                // Zeichenphase, damit jedes Frame ohne Neuzusammensetzung auskommt.
+                .drawBehind { drawRect(Color.Black, alpha = dismiss.backdropAlpha) },
+    ) {
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier.fillMaxSize(),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationY = dismiss.offsetY
+                        scaleX = dismiss.scale
+                        scaleY = dismiss.scale
+                    },
             key = { page -> items[page].id },
             beyondViewportPageCount = 1,
             pageSpacing = PAGE_SPACING,
@@ -115,6 +154,8 @@ internal fun ViewerContent(
                         contentDescription = label,
                         imageSource = imageSource,
                         onTap = onChromeToggle,
+                        dismiss = dismiss,
+                        onDismiss = leave,
                     )
                 }
 
@@ -128,22 +169,24 @@ internal fun ViewerContent(
                         video = if (attached) video else VideoPlaybackUi.idle(item.durationMs),
                         onPlay = { onPlay(item.id) },
                         onTap = onChromeToggle,
+                        dismiss = dismiss,
+                        onDismiss = leave,
                     )
                 }
             }
         }
 
         AnimatedVisibility(
-            visible = chromeVisible && title != null,
+            visible = chromeShown && title != null,
             modifier = Modifier.align(Alignment.TopCenter),
             enter = fadeIn(),
             exit = fadeOut(),
         ) {
-            ViewerTopBar(title = title.orEmpty(), durationText = durationText, onBack = onBack)
+            ViewerTopBar(title = title.orEmpty(), durationText = durationText, onBack = leave)
         }
 
         AnimatedVisibility(
-            visible = chromeVisible && currentItem?.type == ViewerMediaType.VIDEO,
+            visible = chromeShown && currentItem?.type == ViewerMediaType.VIDEO,
             modifier = Modifier.align(Alignment.BottomCenter),
             enter = fadeIn(),
             exit = fadeOut(),
