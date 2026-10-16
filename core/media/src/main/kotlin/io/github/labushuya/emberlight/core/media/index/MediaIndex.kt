@@ -51,21 +51,26 @@ internal object MediaIndex {
         videos: List<MediaItem>,
         access: MediaAccess,
         missingTypes: Set<MediaType> = emptySet(),
+        order: Comparator<MediaItem> = TIMELINE_ORDER,
     ): MediaLibrary {
-        val items = mergeSorted(images.sortedWith(TIMELINE_ORDER), videos.sortedWith(TIMELINE_ORDER))
+        val items = mergeSorted(images.sortedWith(order), videos.sortedWith(order), order)
         return MediaLibrary(items = items, albums = albums(items), mediaAccess = access, missingTypes = missingTypes)
     }
 
-    /** Führt zwei nach [TIMELINE_ORDER] sortierte Listen in O(n) zusammen. Die Eingaben bleiben unverändert. */
+    /**
+     * Führt zwei nach [order] sortierte Listen in O(n) zusammen. Die Eingaben bleiben unverändert. [order] ist nur
+     * für Tests gedacht, damit Vergleiche gezählt werden können (siehe MediaIndexPerformanceTest).
+     */
     fun mergeSorted(
         first: List<MediaItem>,
         second: List<MediaItem>,
+        order: Comparator<MediaItem> = TIMELINE_ORDER,
     ): List<MediaItem> {
         val merged = ArrayList<MediaItem>(first.size + second.size)
         var i = 0
         var j = 0
         while (i < first.size && j < second.size) {
-            if (TIMELINE_ORDER.compare(first[i], second[j]) <= 0) {
+            if (order.compare(first[i], second[j]) <= 0) {
                 merged.add(first[i++])
             } else {
                 merged.add(second[j++])

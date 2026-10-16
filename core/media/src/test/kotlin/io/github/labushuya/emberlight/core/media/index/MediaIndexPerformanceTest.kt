@@ -6,37 +6,47 @@ import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.ln
 import kotlin.random.Random
 
 /**
- * Plausibilität der Laufzeit: Der Index muss ungefähr linear mit der Anzahl wachsen, also nicht quadratisch.
+ * Komplexität des Index, deterministisch geprüft (ADR 0005). Gezählt werden die Vergleiche des Comparators bei Sortierung
+ * und Zusammenführung, nicht die Laufzeit. Die Zählung hängt nur von den Eingaben und dem JDK-Sortieralgorithmus ab, nicht
+ * von der Last der Maschine, deshalb ist der Test auf geteilten Runnern nicht flaky.
  *
- * Keine feste Millisekunden-Grenze, die auf CI-Maschinen flackern würde. Gemessen wird das Verhältnis
- * 50.000 zu 10.000 Einträge, jeweils als bestes von fünf Läufen nach einem Aufwärmlauf. Für n · log n ergibt
- * sich ein Verhältnis von etwa 5,9, für lineares Wachstum 5, für quadratisches 25. Die Grenze 12 liegt dazwischen.
- * Der Schwellwert ist bewusst großzügig, damit der Test nicht durch Messrauschen rot wird.
+ * Schranken für 10.000 und 50.000 Einträge:
+ * - Höchstens 1,5 · n · log2(n) Vergleiche je Größe. Ein quadratisches Verfahren läge bei 50.000 weit darüber.
+ * - Verhältnis 50.000 zu 10.000 höchstens 7,0. Erwartet: linear 5,0, n log n etwa 5,9, quadratisch 25,0, n^1,5 etwa 11,2.
  *
- * Gemessen wird Erzeugung der Einträge mit Zeitstempel-Auflösung, Sortierung, Zusammenführung und Alben. Das
- * Cursor-Mapping ist Android-Code und steht in [ContentResolverMediaStoreGatewayTest].
+ * Die gemessene Dauer steht nur im Testlog und geht in keine Assertion ein.
  */
 class MediaIndexPerformanceTest {
     @Test
-    fun buildGrowsLinearlyBetween10kAnd50k() {
+    fun buildComparesLikeSortingBetween10kAnd50k() {
         val small = synthetic(10_000)
         val large = synthetic(50_000)
 
-        // Aufwärmen, damit die JIT die Pfade kennt.
-        MediaIndex.build(small.images, small.videos, MediaAccess.FULL)
+        val smallComparisons = comparisons(small)
+        val largeComparisons = comparisons(large)
+        val ratio = largeComparisons.toDouble() / smallComparisons
 
-        val smallNanos = bestOf(runs = 5) { MediaIndex.build(small.images, small.videos, MediaAccess.FULL) }
-        val largeNanos = bestOf(runs = 5) { MediaIndex.build(large.images, large.videos, MediaAccess.FULL) }
-        val ratio = largeNanos.toDouble() / smallNanos
-
+        val smallNanos = bestOf(runs = 3) { MediaIndex.build(small.images, small.videos, MediaAccess.FULL) }
+        val largeNanos = bestOf(runs = 3) { MediaIndex.build(large.images, large.videos, MediaAccess.FULL) }
         println(
-            "MediaIndexPerformance: 10k=${smallNanos / 1_000_000} ms, 50k=${largeNanos / 1_000_000} ms, " +
-                "ratio=${"%.2f".format(ratio)} (linear 5.0, n log n 5.9, quadratisch 25.0)",
+            "MediaIndexPerformance (nur Log, keine Assertion): 10k=${smallNanos / 1_000_000} ms, " +
+                "50k=${largeNanos / 1_000_000} ms, Vergleiche 10k=$smallComparisons, 50k=$largeComparisons, " +
+                "ratio=${"%.2f".format(ratio)}",
         )
-        assertTrue("Verhältnis 50k/10k = $ratio, erwartet unter 12", ratio < MAX_RATIO)
+
+        assertTrue(
+            "50k: $largeComparisons Vergleiche, erwartet höchstens ${bound(50_000)}",
+            largeComparisons <= bound(50_000),
+        )
+        assertTrue(
+            "10k: $smallComparisons Vergleiche, erwartet höchstens ${bound(10_000)}",
+            smallComparisons <= bound(10_000),
+        )
+        assertTrue("Verhältnis 50k/10k = $ratio, erwartet höchstens $MAX_RATIO", ratio <= MAX_RATIO)
     }
 
     @Test
@@ -56,6 +66,13 @@ class MediaIndexPerformanceTest {
         val images: List<MediaItem>,
         val videos: List<MediaItem>,
     )
+
+    /** Anzahl der Vergleiche, die ein vollständiger Aufbau des Index braucht. */
+    private fun comparisons(data: Synthetic): Long {
+        val counter = CountingComparator(MediaIndex.TIMELINE_ORDER)
+        MediaIndex.build(data.images, data.videos, MediaAccess.FULL, order = counter)
+        return counter.count
+    }
 
     /** Zufällige, aber reproduzierbare Einträge. Die Zeitstempel laufen durch die Auflösung der Fallback-Regeln. */
     private fun synthetic(count: Int): Synthetic {
@@ -92,6 +109,22 @@ class MediaIndexPerformanceTest {
         return Synthetic(images = images.sortedBy { it.id }, videos = videos.sortedBy { it.id })
     }
 
+    /** Zählt jeden Vergleich und delegiert die Reihenfolge unverändert an [delegate]. */
+    private class CountingComparator(
+        private val delegate: Comparator<MediaItem>,
+    ) : Comparator<MediaItem> {
+        var count: Long = 0
+            private set
+
+        override fun compare(
+            a: MediaItem,
+            b: MediaItem,
+        ): Int {
+            count++
+            return delegate.compare(a, b)
+        }
+    }
+
     private inline fun bestOf(
         runs: Int,
         block: () -> Unit,
@@ -105,9 +138,12 @@ class MediaIndexPerformanceTest {
         return best
     }
 
+    /** Obergrenze 1,5 · n · log2(n) für Vergleiche. */
+    private fun bound(n: Int): Long = (1.5 * n * (ln(n.toDouble()) / ln(2.0))).toLong()
+
     private companion object {
         const val SEED = 42
-        const val MAX_RATIO = 12.0
+        const val MAX_RATIO = 7.0
         const val MAX_MILLIS = 1_700_000_000_000L
     }
 }
