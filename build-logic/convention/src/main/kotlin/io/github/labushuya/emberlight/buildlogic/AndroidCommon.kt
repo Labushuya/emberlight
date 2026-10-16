@@ -51,10 +51,14 @@ internal fun CompileOptions.useJava17() {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
-/** Lint: Fehler bei Warnungen, Versions-Hinweise deaktiviert, keine Baseline. */
+/**
+ * Lint: Fehler bei Warnungen, Versions-Hinweise deaktiviert, keine Baseline. Die Analyse der Unit-Test-Quellen ist
+ * ausgenommen, weil Lint 32.4.1 dort sporadisch intern abstürzt (ADR 0001). Main-Quellen bleiben vollständig geprüft.
+ */
 internal fun Lint.applyEmberlightDefaults(checkDependencies: Boolean) {
     abortOnError = true
     warningsAsErrors = true
+    ignoreTestSources = true
     this.checkDependencies = checkDependencies
     disable.addAll(LINT_VERSION_CHECKS)
 }
