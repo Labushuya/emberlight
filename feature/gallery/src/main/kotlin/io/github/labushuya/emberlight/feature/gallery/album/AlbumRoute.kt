@@ -1,15 +1,9 @@
 package io.github.labushuya.emberlight.feature.gallery.album
 
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptions
 import androidx.navigation.compose.composable
-import io.github.labushuya.emberlight.core.design.motion.LocalNavAnimatedVisibilityScope
-import io.github.labushuya.emberlight.core.media.model.MediaItem
-import io.github.labushuya.emberlight.feature.gallery.viewer.gridExitTowardsViewer
-import io.github.labushuya.emberlight.feature.gallery.viewer.gridPopEnterFromViewer
-import io.github.labushuya.emberlight.feature.gallery.viewer.rememberLastViewedMediaId
 import kotlinx.serialization.Serializable
 
 /**
@@ -21,25 +15,10 @@ data class AlbumRoute(
     val bucketId: Long?,
 )
 
-/**
- * Ziel der Album-Ansicht. [onBack] führt zurück in die Alben-Übersicht. [onMediaClick] meldet ein Antippen auf ein Medium,
- * die App öffnet dann den Viewer im Geltungsbereich des Albums.
- */
-fun NavGraphBuilder.albumScreen(
-    onBack: () -> Unit,
-    onMediaClick: (MediaItem) -> Unit = {},
-) {
-    composable<AlbumRoute>(
-        exitTransition = { gridExitTowardsViewer() },
-        popEnterTransition = { gridPopEnterFromViewer() },
-    ) { entry ->
-        CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this@composable) {
-            AlbumScreen(
-                onBack = onBack,
-                onMediaClick = onMediaClick,
-                lastViewed = rememberLastViewedMediaId(entry),
-            )
-        }
+/** Ziel der Album-Ansicht. [onBack] führt zurück in die Alben-Übersicht. Der Viewer liegt als Overlay über dem Raster. */
+fun NavGraphBuilder.albumScreen(onBack: () -> Unit) {
+    composable<AlbumRoute> {
+        AlbumScreen(onBack = onBack)
     }
 }
 

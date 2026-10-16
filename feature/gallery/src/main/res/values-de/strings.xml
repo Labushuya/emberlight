@@ -46,4 +46,5 @@
     <string name="feature_gallery_viewer_position">%1$s von %2$s</string>
     <string name="feature_gallery_viewer_error_title">Dieses Element kann nicht angezeigt werden</string>
     <string name="feature_gallery_viewer_error_text">Die Datei wurde möglicherweise verschoben oder gelöscht.</string>
+    <string name="feature_gallery_viewer_demo_unplayable">Im Demo-Modus nicht abspielbar</string>
 </resources>

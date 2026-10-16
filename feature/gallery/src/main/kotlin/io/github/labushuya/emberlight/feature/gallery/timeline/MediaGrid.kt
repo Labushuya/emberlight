@@ -22,7 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
@@ -42,9 +41,7 @@ import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import io.github.labushuya.emberlight.feature.gallery.R
-import io.github.labushuya.emberlight.feature.gallery.viewer.LastViewedMediaId
 import java.time.ZoneId
-import kotlin.math.floor
 
 /** Abstand zwischen Zellen und an den Rändern des Rasters. */
 internal val GRID_GAP: Dp = ZoomLevels.GRID_GAP_DP.dp
@@ -69,7 +66,6 @@ internal fun MediaGrid(
     onMediaClick: (MediaItem) -> Unit,
     onZoomLevelChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    lastViewed: LastViewedMediaId = LastViewedMediaId.None,
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
     val density = LocalDensity.current
@@ -82,14 +78,6 @@ internal fun MediaGrid(
     val index =
         remember(state.sections, hasBanner) { TimelineIndex(state.sections, if (hasBanner) 1 else 0, state.today) }
 
-    // Das zuletzt im Viewer angesehene Element. Die Scrollposition wird VOR dem ersten Layout gesetzt: SideEffect läuft nach
-    // der Komposition und vor dem Layout dieses Frames. So liegt die Kachel beim Rückweg schon im Raster (ADR 0010).
-    // Das Ziel wird genau einmal angewendet (ADR 0008): `applied` merkt sich die Meldung, die schon verbraucht ist. Der
-    // Schlüssel ist die Meldung selbst, daher beginnt ein neuer Rücksprung mit leerem Merkmal. Über einen
-    // Konfigurationswechsel bleibt es
-    // erhalten, sodass dieselbe Meldung nicht erneut springt.
-    val lastViewedId = lastViewed.mediaId
-    var applied by rememberSaveable(lastViewedId) { mutableStateOf<Long?>(null) }
     val fastScroll = remember(gridState) { FastScrollState(gridState) }
     val mode = ZoomLevels.groupingFor(state.zoomLevel)
     val gapPx = with(density) { GRID_GAP.toPx() }
@@ -113,7 +101,6 @@ internal fun MediaGrid(
         val columns = ZoomLevels.columnsFor(state.zoomLevel, maxWidth.value)
         val tilePx = ZoomLevels.tileWidth(widthPx, gapPx, columns)
         val cellPx = tilePx + gapPx
-        val rows = if (cellPx > 0f) floor(with(density) { maxHeight.toPx() } / cellPx).toInt() else 0
 
         // Nach dem Stufenwechsel steht das neue Raster in der Komposition. Dann wird der Anker im selben Frame gesetzt.
         SideEffect {
@@ -124,20 +111,6 @@ internal fun MediaGrid(
                 index = index,
                 gridState = gridState,
             )
-        }
-
-        // Verbrauch genau einmal: Das Ziel wird angewendet, wenn es außerhalb des sichtbaren Bereichs liegt. Danach ist die
-        // Meldung verbraucht, der Eintrag im Navigations-Stapel wird geleert. Wiederholte Kompositionen tun nichts mehr.
-        SideEffect {
-            if (lastViewedId != null && applied == null) {
-                applied = lastViewedId
-                gridScrollTarget(state.sections, index, lastViewedId)?.let { target ->
-                    if (!inVisibleWindow(gridState.firstVisibleItemIndex, target, columns, rows)) {
-                        gridState.requestScrollToItem(target)
-                    }
-                }
-                lastViewed.onHandled()
-            }
         }
 
         val actions =

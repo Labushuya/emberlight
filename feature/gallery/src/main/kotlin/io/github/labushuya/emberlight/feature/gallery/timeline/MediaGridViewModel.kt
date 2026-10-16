@@ -43,7 +43,7 @@ internal abstract class MediaGridViewModel(
     private val zoomLevels: ZoomLevelStore,
     private val defaultDispatcher: CoroutineDispatcher,
     private val clock: Clock,
-    private val zone: ZoneId,
+    val zone: ZoneId,
     private val scope: MediaScope,
 ) : ViewModel() {
     private val rationaleShown = MutableStateFlow(false)

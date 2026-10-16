@@ -12,9 +12,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,30 +36,31 @@ import me.saket.telephoto.zoomable.rememberZoomableImageState
 import me.saket.telephoto.zoomable.rememberZoomableState
 
 /**
- * Bildquelle einer Seite. Erhält das Element und einen Callback, der bei Fehlern aufgerufen wird. Die Galerie setzt
- * [ContentUriImageSource] ein, Tests eine feste Quelle.
+ * Bildquelle einer Seite. Erhält das Element, den Schalter „Bild darf geladen werden“ und einen Callback bei Fehlern. Die
+ * Galerie setzt [ContentUriImageSource] ein, Tests eine feste Quelle.
  */
-internal typealias ViewerImageSource = @Composable (item: ViewerItem, onFailed: () -> Unit) -> ZoomableImageSource
+internal typealias ViewerImageSource = @Composable (
+    item: ViewerItem,
+    settled: State<Boolean>,
+    onFailed: () -> Unit,
+) -> ZoomableImageSource
 
 /**
- * Standardquelle der Galerie: das Original über die Content-URI (ADR 0010). Das hochauflösende Bild wartet, bis der Übergang
- * beendet ist. Bis dahin zeigt die Quelle das Vorschaubild aus dem Speicher-Cache.
+ * Standardquelle der Galerie: das Original über die Content-URI (ADR 0010). Das hochauflösende Bild wartet, bis das Overlay
+ * offen steht. Bis dahin zeigt die Seite das Vorschaubild aus dem Speicher-Cache.
  */
-internal val ContentUriImageSources: ViewerImageSource = { item, onFailed ->
-    val settled = rememberPageSettled()
+internal val ContentUriImageSources: ViewerImageSource = { item, settled, onFailed ->
     remember(item.uri, item.previewKey, settled) {
         ContentUriImageSource(item.uri, item.previewKey, onFailed, settled)
     }
 }
 
 /**
- * Eine Bildseite des Viewers mit Pinch-Zoom, Doppeltipp-Zoom und Verschieben (Telephoto). Ist das Bild gezoomt, wischt der
- * Pager erst am Bildrand weiter: Telephoto verbraucht Verschiebungen nur, solange sie im Bild liegen.
+ * Eine Bildseite des Overlays mit Pinch-Zoom, Doppeltipp-Zoom und Verschieben (Telephoto). Ist das Bild gezoomt, wischt der
+ * Pager erst am Bildrand weiter. Ungezoomt wischt die Seite nach unten zum Schließen ([overlay]).
  *
- * Ungezoomt wischt die Seite nach unten zum Schließen ([dismiss], ADR 0010). [onDismiss] führt zurück. Während des Übergangs
- * zeigt die Seite das Vorschaubild als gemeinsames Element, das Bild selbst bleibt bis zum Ende unsichtbar.
- *
- * [onTap] meldet ein einfaches Antippen, das die Leisten ein- oder ausblendet. [state] gehört dem Aufrufer, damit Tests den
+ * [settled] ist `true`, sobald das Overlay offen steht. Bis dahin zeigt die Seite das Vorschaubild, das Bild selbst bleibt
+ * unsichtbar. [onTap] meldet ein einfaches Antippen, das die Leisten umschaltet. [state] gehört dem Aufrufer, damit Tests den
  * Zoomzustand lesen können.
  */
 @Composable
@@ -64,38 +68,44 @@ internal fun ViewerImagePage(
     item: ViewerItem,
     contentDescription: String,
     imageSource: ViewerImageSource,
+    overlay: ViewerOverlayState,
+    settled: Boolean,
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
     state: ZoomableImageState = rememberZoomableImageState(rememberZoomableState()),
-    dismiss: DismissState = rememberDismissState(),
-    onDismiss: () -> Unit = {},
 ) {
     val failed = remember(item.id) { mutableStateOf(false) }
-    val settled by rememberPageSettled()
+    val isSettled = settled
+    val settledState = rememberUpdatedState(settled)
+    // Der Zoomzustand dieser Seite gehört dem Overlay, damit es ein gezoomtes Bild vor dem Schließen zurücksetzt.
+    val currentOverlay by rememberUpdatedState(overlay)
+    DisposableEffect(item.id, state) {
+        currentOverlay.registerZoom(item.id, state.zoomableState)
+        onDispose { currentOverlay.unregisterZoom(item.id) }
+    }
     Box(
         modifier =
             modifier
                 .fillMaxSize()
                 .swipeDownToDismiss(
-                    dismiss = dismiss,
+                    overlay = overlay,
                     canStart = { canStartDismiss(state.zoomableState.zoomFraction) },
-                    onClose = onDismiss,
                 ),
     ) {
         if (failed.value) {
             ViewerLoadError(modifier = Modifier.fillMaxSize())
         } else {
-            if (!settled) {
+            if (!isSettled) {
                 // Scheitert nur die Vorschau, bleibt das Original die Quelle. Schlägt auch das fehl, meldet die Quelle den Fehler.
                 ViewerPreview(item = item, onError = {})
             }
             ZoomableImage(
-                image = imageSource(item) { failed.value = true },
+                image = imageSource(item, settledState) { failed.value = true },
                 contentDescription = contentDescription,
                 gestures = EnabledZoomGestures.ZoomAndPan,
                 modifier = Modifier.fillMaxSize(),
                 state = state,
-                alpha = if (settled) 1f else 0f,
+                alpha = if (isSettled) 1f else 0f,
                 onClick = { _ -> onTap() },
             )
         }
