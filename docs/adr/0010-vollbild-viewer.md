@@ -76,6 +76,8 @@ Zu klären waren:
 
 ## Übergänge (5b)
 
+Ersetzt durch „Overlay-Architektur und Hero-Animation“ weiter unten. Der Abschnitt beschreibt den verworfenen Ansatz mit eigenem Navigationsziel und geteiltem Übergangs-Scope; der Stand ist nur noch Historie.
+
 Paket 5b bringt den Übergang zwischen Raster und Vollbild, das Wegwischen nach unten und die Vorschau der System-Rückgeste. Der Viewer bleibt in `feature:gallery`. Der Übergangs-Scope liegt in `core:design`, damit die Galerie keine Abhängigkeit zu `app` braucht.
 
 ### Scopes über CompositionLocals
@@ -139,6 +141,88 @@ Paket 5b bringt den Übergang zwischen Raster und Vollbild, das Wegwischen nach 
 - Der Rückweg zu einem Element, das nicht mehr im Raster ist, blendet nur ein.
 - Kein Golden des Übergangs: Die Zwischenstände hängen von Frame-Zeit und Zeichenreihenfolge ab. Ein Golden würde einen Zufall des Test-Laufs festschreiben.
 - Die System-Vorschau ist im Test nur über die Dispatcher-API belegt (Start, Fortschritt, Abbruch, Vollenden), nicht als Systemanimation.
+
+## Overlay-Architektur und Hero-Animation (Korrektur 2)
+
+Status: umgesetzt im Branch `fix/m2-viewer-overlay`. Die Gerätebefunde sind unten festgehalten. Die Geräteprüfung vor dem Merge steht aus, siehe „Geräteprüfung“.
+
+### Begründung: Gerätebefunde
+
+Der Vollbild-Viewer war ein eigenes Navigationsziel mit geteiltem Übergangs-Scope (Abschnitt „Übergänge (5b)“, ersetzt). Auf dem Gerät zeigten sich:
+
+- Beim Wegwischen war der Hintergrund schwarz. Das Raster-Ziel war nicht komponiert, solange der Viewer ein eigenes Ziel war.
+- Der Rückweg traf die falsche oder keine Kachel. Die Kachel des zuletzt angesehenen Elements lag außerhalb des Bildes, und die Rücksprung-Meldung wirkte erst im nächsten Frame.
+- Übergänge sprangen, mit Versatz und kurzzeitig schwarzem Rahmen um das Bild.
+- Die Navigationsleiste verschwand hart, weil `NavigationSuiteType.None` das Layout ohne Übergang wechselt.
+
+Die Abhängigkeit an den Navigations-Übergang war die Ursache. Deshalb ist der Viewer jetzt ein Overlay über dem Raster, ohne eigenes Ziel.
+
+### Overlay statt Ziel
+
+- `MediaBrowser` (Paket `timeline`) legt Raster und Overlay übereinander. Das Raster bleibt komponiert und lebendig. Solange der Viewer ruhig und vollständig deckend steht, zeichnet das Raster nicht (Layer-Alpha 0).
+- Galerie und Album haben je einen `MediaBrowser`. Das Overlay liegt über dem gesamten Ziel, also auch über der Kopfzeile.
+- Entfernt: `ViewerRoute`, `navigateToViewer`, `popViewer`, die Rücksprung-Meldung über `SavedStateHandle`, das Scroll-Fenster `inVisibleWindow`, `SharedElementTransition` und die Locals `LocalSharedTransitionScope` und `LocalNavAnimatedVisibilityScope` in `core:design` (samt ktlint-Freigabe).
+
+### Datenquelle und Zustand
+
+- Die Liste ist die des Rasters: `MediaGridState.Content` des Hosts, geflacht in Rasterreihenfolge. Live-Updates kommen so automatisch mit. Ein zweiter Datenfluss entfällt.
+- Der Zustand des Overlays (`ViewerOverlayState`) trägt Phase, Fortschritt und Zieh-Versatz. Die gezeigte Medien-ID liegt in `rememberSaveable` und übersteht Drehen und Falten. Nach Prozess-Tod ist der Viewer offen, ohne Animation.
+- Der Wiedergabe-Halter `ViewerPlaybackViewModel` gehört dem Ziel des Rasters (Hilt, gescopter Eintrag). Er überlebt Konfigurationswechsel und gibt den einen Player beim Verlassen des Ziels frei.
+- Ein Video, das sich nicht abspielen lässt (Demo-Medium mit Schema `emberlight-demo://`), meldet „Im Demo-Modus nicht abspielbar“ statt still nichts zu tun.
+
+### Raster folgt dem Viewer
+
+- Vor dem Öffnen scrollt das Raster ohne Animation, bis die Kachel des Elements vollständig sichtbar ist. Die Hero-Animation beginnt so an der echten Kachel.
+- Wechselt der Pager die Seite, scrollt das Raster ebenfalls ohne Animation. Damit hat der Rückweg immer ein Ziel.
+
+### Kachelgrenzen
+
+- `MediaCell` meldet `boundsInRoot` in `CellBounds`, einer Tabelle ohne State. Die Animation liest sie beim Öffnen und Schließen, Recomposition gibt es nicht.
+- Fehlt die Kachel (nicht komponiert), blendet der Übergang nur ein. Vor dem Schließen ohne Kachel verkleinert er zur Mitte und blendet aus.
+
+### Hero-Geometrie
+
+- Reine Funktionen in `HeroGeometry.kt`: `fitRect`, `cropSourceRect`, `heroFrame`, `transformRect`, `fallbackTile`, `lerpRect`.
+- Ziel-Rechteck: von der Kachel zum Fit-Rechteck im Overlay. Quell-Ausschnitt: vom zentrierten Zuschnitt der Kachel zum vollen Bild. Beides linear in `t`, gezeichnet über `drawImage(srcOffset, srcSize, dstOffset, dstSize)`. Keine Verzerrung, kein Sprung, kein schwarzer Rahmen.
+- Das Bild kommt aus dem Speicher-Cache von Coil (`MemoryCache`, fester Schlüssel aus ADR 0008). Ohne Cache-Eintrag blendet die Animation nur ein.
+- Die Seite (Telephoto) bleibt während der Animation unsichtbar und erscheint erst mit `OPEN`, am selben Rechteck mit derselben Bitmap.
+- Dauer 350 ms, Kurve `Emphasized` (`EmberlightMotion.HERO_MS`).
+
+### Schließen
+
+- Vom aktuellen Rechteck: Zieh-Versatz und Verkleinerung werden zusammen mit dem Fortschritt auf die Kachel des aktuellen Elements zurückgeführt, in derselben Dauer.
+- Gezoomtes Bild: vor dem Schließen ohne Animation auf ungezoomt zurückgesetzt (`ZoomableState.resetZoom`), dann beginnt die Animation am Fit-Rechteck.
+
+### Wegwischen und Rückgeste
+
+- Wegwischen wie in `SwipeDismiss.kt`: Achse, Schwelle 15 %, Schnellschluss ab 600 dp/s und 5 % der Höhe, Skalierung bis 0,9. Der Hintergrund blendet proportional aus, das Raster scheint durch. Darunter federt das Bild zurück.
+- Predictive Back: Der Fortschritt zieht das Bild in Richtung Kachel. Abbrechen federt zurück, Vollenden schließt. Ein Vollenden ohne vorherigen Fortschritt (Zurück-Taste) schließt ebenfalls.
+
+### Navigationsleiste
+
+- Die Navigation-Suite-Bibliothek bietet keinen Ausblend-Zustand (geprüft in 1.4.0). Deshalb zeichnet `EmberlightApp` die Leiste selbst (`NavigationBar`, auf breiten Displays `NavigationRail`).
+- Im Viewer blendet die Leiste mit `AnimatedVisibility` (Höhe bzw. Breite, 300 ms) aus. Der Zustand kommt über `NavigationChrome` aus `core:design`, den der Host setzt.
+- Das Raster verankert seine Zeilen oben. Beim Ausblenden wächst nur der sichtbare Bereich nach unten, die Spalten brechen nicht neu um.
+
+### Zustandsmaschine
+
+- `OverlayPhase` mit `nextPhase` (rein): `CLOSED`, `OPENING`, `OPEN`, `DRAGGING`, `BACK`, `SETTLING`, `CLOSING`. Veraltete Ereignisse lassen die Phase unverändert.
+
+### Tests
+
+- Unit: `HeroGeometryTest`, `OverlayPhaseTest`, `ViewerOverlayStateTest` (Öffnen, Schließen, Wegwischen über und unter der Schwelle, Schnellschluss, Rückgeste mit Abbruch und Vollenden, Zoom-Reset), `ViewerPlaybackViewModelTest` (ein Player, Freigabe, Stumm, Demo-Medium).
+- Compose: `ViewerOverlayComposeTest` (Antippen öffnet das Overlay, Raster bleibt im Baum), `FastScrollGripTest` und `AlbumContentTest` mit dem Overlay, `EmberlightViewerNavigationTest` (Navigationsleiste aus, Rückkehr mit Reiter und Element sichtbar, Wischen wechselt den Titel).
+- Nicht automatisiert: Mitten-Golden der Öffnen-Animation, Predictive-Back-Abbruch und Vollenden als Compose-Test, Navigationsleiste-Animation als Frame-Test. Sie sind in der Geräteprüfung zu belegen.
+
+### Geräteprüfung
+
+Die Prüfung auf dem Gerät (Demo-Modus, Fotos, `dumpsys gfxinfo`) ist Teil der Abnahme vor dem Merge. Ergebnisse und Messwerte stehen in der PR-Beschreibung. Dieser Abschnitt wird nach der Prüfung um die Befunde ergänzt.
+
+### Konsequenzen
+
+- Der Viewer kennt kein Navigationsziel mehr. Galerie und Album sind für den Viewer nicht mehr auf die Route angewiesen. Die Rücksprung-Meldung entfällt.
+- Die Navigationsleiste ist eine eigene Komponente. Sie muss bei neuen Top-Level-Zielen in `TopLevelDestination` gepflegt werden.
+- Der Halter `ViewerPlaybackViewModel` liegt im Ziel des Rasters. Ein künftiger Space-Viewer bekommt seinen eigenen Halter.
 
 ## Konsequenzen
 
