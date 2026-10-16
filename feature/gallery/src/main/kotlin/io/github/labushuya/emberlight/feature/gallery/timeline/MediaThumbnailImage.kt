@@ -1,6 +1,5 @@
 package io.github.labushuya.emberlight.feature.gallery.timeline
 
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -22,7 +21,7 @@ import io.github.labushuya.emberlight.core.media.thumbnail.MediaThumbnail
 internal fun MediaThumbnailImage(
     uri: String,
     type: MediaType,
-    modifier: Modifier = Modifier.fillMaxSize(),
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalPlatformContext.current
     // Ohne feste Größe misst Coil die Fläche selbst. Die Anfrage ist pro Eintrag gleich, daher einmal gebaut.

@@ -18,6 +18,7 @@ import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.core.media.model.Album
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
+import io.github.labushuya.emberlight.feature.gallery.album.AlbumList
 import io.github.labushuya.emberlight.feature.gallery.album.albumsForDisplay
 import io.github.labushuya.emberlight.feature.gallery.timeline.GroupingMode
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
@@ -207,9 +208,11 @@ class GalleryScreenshotTest {
         composeRule.onRoot().captureRoboImage(path)
     }
 
-    private fun albumList(): List<Album> =
-        albumsForDisplay(
-            TimelineFixtures.albumsOf(TimelineFixtures.sampleItems() + TimelineFixtures.longLibrary()),
+    private fun albumList(): AlbumList =
+        AlbumList(
+            albumsForDisplay(
+                TimelineFixtures.albumsOf(TimelineFixtures.sampleItems() + TimelineFixtures.longLibrary()),
+            ),
         )
 
     private fun setContent(state: GalleryUiState) {
@@ -240,7 +243,7 @@ class GalleryScreenshotTest {
         composeRule.setContent {
             EmberlightTheme {
                 GalleryContent(
-                    state = GalleryUiState(grid = state, albums = emptyList()),
+                    state = GalleryUiState(grid = state, albums = AlbumList(emptyList())),
                     onZoomLevelChange = {},
                     onRequestPermission = {},
                     onOpenSettings = {},

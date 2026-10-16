@@ -5,6 +5,9 @@
     <string name="feature_gallery_tab_albums">Albums</string>
     <string name="feature_gallery_album_other">Other</string>
     <string name="feature_gallery_album_unnamed">Unnamed album</string>
+    <string name="feature_gallery_album_fallback_title">Album</string>
+    <string name="feature_gallery_album_gone">This album no longer exists.</string>
+    <string name="feature_gallery_back">Back</string>
     <string name="feature_gallery_album_label">%1$s, %2$s</string>
     <plurals name="feature_gallery_album_items">
         <item quantity="one">%s item</item>
