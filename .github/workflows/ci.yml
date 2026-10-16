@@ -55,7 +55,7 @@ jobs:
         run: ./gradlew -q javaToolchains -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
 
       - name: Build, Lint und Tests
-        run: ./gradlew check assembleDebug assembleRelease -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+        run: ./gradlew check koverXmlReport assembleDebug assembleRelease -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
 
       # Übersicht in der Job-Zusammenfassung: Zeilenabdeckung aus dem Kover-XML und die Namen abweichender Screenshots.
       # Läuft auch bei Fehlschlag. Der Schritt selbst bricht nicht ab, die Durchsetzung passiert in check.
@@ -78,7 +78,7 @@ jobs:
               printf "Zeilenabdeckung: %.1f %% (%d von %d Zeilen), Untergrenze 70 %%\n\n", (t > 0 ? c * 100 / t : 0), c, t
             }' >> "$summary"
           else
-            echo "Kein Kover-Report gefunden." >> "$summary"
+            echo "Kein Kover-Report gefunden, die Tests sind vor dem Report abgebrochen." >> "$summary"
             echo "" >> "$summary"
           fi
           # Roborazzi meldet abweichende oder fehlende Goldens mit dem Pfad unter src/test/screenshots.

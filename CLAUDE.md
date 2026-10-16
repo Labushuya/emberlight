@@ -41,7 +41,9 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
 
 ## Befehle
 
-- `./gradlew check`: Spotless/ktlint, Lint, Unit-Tests, Tests der Convention-Plugins und `checkNoPlayServices`
+- `./gradlew check`: Spotless/ktlint, Lint, Unit-Tests, Screenshot-Verifikation, Coverage-Untergrenze (`koverVerify`), Tests der Convention-Plugins und `checkNoPlayServices`
+- `./gradlew recordRoborazziDebug`: Screenshot-Goldens bewusst neu aufnehmen (Ablage `src/test/screenshots`, Details in [ADR 0006](docs/adr/0006-screenshot-tests-und-coverage.md)). `./gradlew verifyRoborazziDebug`: nur prüfen.
+- `./gradlew koverHtmlReport` bzw. `./gradlew koverXmlReport`: Coverage-Report (HTML unter `build/reports/kover/html`)
 - `./gradlew assembleDebug`: Debug-APK
 - `./gradlew assembleRelease -Pemberlight.version=X.Y.Z`: Release-APK. Ohne Property gilt `0.0.0-dev` mit versionCode 1.
 - Signierte Release-APK: Umgebungsvariablen `EMBERLIGHT_KEYSTORE_FILE`, `EMBERLIGHT_KEYSTORE_PASSWORD`, `EMBERLIGHT_KEY_ALIAS`, `EMBERLIGHT_KEY_PASSWORD` setzen. Mit `-Pemberlight.requireReleaseSigning=true` bricht der Build ab, wenn eine fehlt.
@@ -52,6 +54,8 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
 - Dokumentation, README und Commit-Beschreibungen auf Deutsch, Code und Bezeichner auf Englisch.
 - Alle Nutzertexte in `strings.xml` (de und en), keine fest eingebauten Texte.
 - Nach jedem Meilenstein: bauen, testen, kurz in `docs/KONZEPT.md` nachtragen, wenn sich eine Entscheidung geändert hat.
+- UI-Änderungen brauchen aktualisierte Screenshot-Goldens im selben PR.
+- Coverage-Untergrenze: 70 % Zeilen (Kover, in CI erzwungen); nicht ohne begründete ADR senken.
 
 ## Meilensteine
 
