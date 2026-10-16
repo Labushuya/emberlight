@@ -50,6 +50,8 @@ import io.github.labushuya.emberlight.feature.gallery.album.albumScreen
 import io.github.labushuya.emberlight.feature.gallery.album.navigateToAlbum
 import io.github.labushuya.emberlight.feature.gallery.galleryScreen
 import io.github.labushuya.emberlight.feature.gallery.navigateToGallery
+import io.github.labushuya.emberlight.feature.gallery.viewer.LocalViewerImageSources
+import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerImageSourceContribution
 import io.github.labushuya.emberlight.feature.space.navigateToSpaces
 import io.github.labushuya.emberlight.feature.space.spacesScreen
 
@@ -65,9 +67,13 @@ fun EmberlightApp(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
     overlays: List<AppOverlay> = emptyList(),
+    viewerImageSources: List<ViewerImageSourceContribution> = emptyList(),
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        EmberlightScaffold(navController = navController, modifier = Modifier.fillMaxSize())
+        // Zusätzliche Bildquellen des Viewers (ADR 0011). Ohne Beiträge gilt die Standardquelle.
+        CompositionLocalProvider(LocalViewerImageSources provides viewerImageSources) {
+            EmberlightScaffold(navController = navController, modifier = Modifier.fillMaxSize())
+        }
         // Zusätzliche Anzeigen (etwa DEMO in Debug-Builds). Ohne Beiträge ist das leer und das Layout unverändert.
         overlays.forEach { overlay -> overlay.Overlay(Modifier.align(Alignment.TopEnd)) }
     }
