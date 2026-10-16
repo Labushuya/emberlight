@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,6 +39,7 @@ import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import io.github.labushuya.emberlight.feature.gallery.R
 import io.github.labushuya.emberlight.feature.gallery.viewer.LastViewedMediaId
 import java.time.ZoneId
+import kotlin.math.floor
 
 /** Abstand zwischen Zellen und an den Rändern des Rasters. */
 internal val GRID_GAP: Dp = ZoomLevels.GRID_GAP_DP.dp
@@ -77,18 +77,11 @@ internal fun MediaGrid(
     val index =
         remember(state.sections, hasBanner) { TimelineIndex(state.sections, if (hasBanner) 1 else 0, state.today) }
 
-    // Das zuletzt im Viewer angesehene Element. Liegt es außerhalb des sichtbaren Bereichs, scrollt das Raster dorthin.
-    // Die Meldung wird danach gelöscht, damit ein späteres Wiederkommen nicht erneut springt.
+    // Das zuletzt im Viewer angesehene Element. Die Scrollposition wird VOR dem ersten Layout gesetzt: SideEffect läuft nach der
+    // Komposition und vor dem Layout dieses Frames. So liegt die Kachel beim Rückweg schon im Raster (ADR 0010). Die Meldung
+    // wird danach gelöscht, damit ein späteres Wiederkommen nicht erneut springt.
     val lastViewedId = lastViewed.mediaId
-    LaunchedEffect(lastViewedId, index) {
-        if (lastViewedId != null) {
-            val target = gridScrollTarget(state.sections, index, lastViewedId)
-            if (target != null && gridState.layoutInfo.visibleItemsInfo.none { it.index == target }) {
-                gridState.scrollToItem(target)
-            }
-            lastViewed.onHandled()
-        }
-    }
+    val lastViewedScroll = remember { LastViewedScroll() }
     val mode = ZoomLevels.groupingFor(state.zoomLevel)
     val gapPx = with(density) { GRID_GAP.toPx() }
     val paddingTopPx = with(density) { (padding.calculateTopPadding() + GRID_GAP).toPx() }
@@ -100,6 +93,7 @@ internal fun MediaGrid(
         val columns = ZoomLevels.columnsFor(state.zoomLevel, maxWidth.value)
         val tilePx = ZoomLevels.tileWidth(widthPx, gapPx, columns)
         val cellPx = tilePx + gapPx
+        val rows = if (cellPx > 0f) floor(with(density) { maxHeight.toPx() } / cellPx).toInt() else 0
 
         // Nach dem Stufenwechsel steht das neue Raster in der Komposition. Dann wird der Anker gesetzt, im selben Frame.
         SideEffect {
@@ -110,6 +104,21 @@ internal fun MediaGrid(
                 index = index,
                 gridState = gridState,
             )
+        }
+
+        // Vor dem ersten Layout: Das Element liegt außerhalb des Bereichs, den das Raster von der gespeicherten Position zeigt,
+        // dann springt es an die Position. Liegt es innerhalb, bleibt die Scrollposition unverändert.
+        SideEffect {
+            if (lastViewedId == null) {
+                lastViewedScroll.reset()
+            } else if (lastViewedScroll.claim(lastViewedId)) {
+                gridScrollTarget(state.sections, index, lastViewedId)?.let { target ->
+                    if (!inVisibleWindow(gridState.firstVisibleItemIndex, target, columns, rows)) {
+                        gridState.requestScrollToItem(target)
+                    }
+                }
+                lastViewed.onHandled()
+            }
         }
 
         val actions =
