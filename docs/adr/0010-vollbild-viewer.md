@@ -144,7 +144,7 @@ Paket 5b bringt den Übergang zwischen Raster und Vollbild, das Wegwischen nach 
 
 ## Overlay-Architektur und Hero-Animation (Korrektur 2)
 
-Status: umgesetzt im Branch `fix/m2-viewer-overlay`. Die Gerätebefunde sind unten festgehalten. Die Geräteprüfung vor dem Merge steht aus, siehe „Geräteprüfung“.
+Status: umgesetzt im Branch `fix/m2-viewer-overlay`. Die Gerätebefunde sind unten festgehalten. Die Geräteprüfung ist gelaufen, Ergebnisse siehe „Geräteprüfung“.
 
 ### Begründung: Gerätebefunde
 
@@ -216,7 +216,26 @@ Die Abhängigkeit an den Navigations-Übergang war die Ursache. Deshalb ist der 
 
 ### Geräteprüfung
 
-Die Prüfung auf dem Gerät (Demo-Modus, Fotos, `dumpsys gfxinfo`) ist Teil der Abnahme vor dem Merge. Ergebnisse und Messwerte stehen in der PR-Beschreibung. Dieser Abschnitt wird nach der Prüfung um die Befunde ergänzt.
+Gerät: Honor Magic V2, Android 16, Außendisplay mit 60 Hz. Debug-Build des Branches, Demo-Modus. Alle Fotos zeigten die Demo-App auf dem richtigen Display mit DEMO-Badge.
+
+Ergebnisse der Szenarien:
+
+- (a) Öffnen per Tap: Das Bild wächst aus der Kachel, die Nummer ist lesbar, die Leiste blendet aus. Zeitgenaue Zwischenbilder (50, 150 und 400 ms) ließen sich mit `screencap` und Fokus-Prüfung nicht erreichen. Die Flüssigkeit der Animation beurteilt der Nutzer visuell (siehe „Offen“).
+- (b) Zweimal wischen, dann Zurück: Der Rückweg führt in die Kachel des dritten Elements, das Raster steht passend. Erfüllt.
+- (c) Wegwischen: Das Bild folgt dem Finger, das echte Raster scheint durch. Über der Schwelle schließt der Viewer in die richtige Kachel, darunter federt er zurück. Erfüllt.
+- (d) Navigationsleiste: Sie blendet aus und wieder ein, das Raster bleibt unverändert. Erfüllt.
+- (e) 2 und 6 Spalten: Nicht automatisiert prüfbar, da kein Pinch per adb möglich ist. Offen, siehe unten.
+- (f) Doppeltipp-Zoom, dann Zurück: Zoom-Reset und sauberes Schließen. Erfüllt.
+- (g) Innendisplay: Das Gerät war zugeklappt. Offen, siehe unten.
+
+Messung mit `dumpsys gfxinfo` über fünf Öffnen-und-Schließen-Zyklen:
+
+| Build | Frames | Janky | P50 / P90 / P95 / P99 | Missed Vsync |
+|---|---|---|---|---|
+| Debug | 473 | 5,92 % | 8 / 23 / 32 / 48 ms | 8 |
+| Benchmark (maßgeblich) | 484 | 2,07 % | 8 / 12 / 15 / 30 ms | 0 |
+
+Maßgeblich ist der Benchmark-Build. Der Debug-Build ist mit Instrumentierung und ohne Optimierung gemessen und zeigt deshalb mehr Janky-Frames.
 
 ### Konsequenzen
 
@@ -264,6 +283,13 @@ Aus Paket 5a (weiterhin offen):
 
 - Verhalten des Pagers am Bildrand bei gezoomtem Bild, Doppeltipp-Gefühl, EXIF-Rotation von Fotos und Videos, Decoder-Last bei sehr großen Bildern, Audio-Fokus und Kopfhörer-Abzug, Wiederherstellung der Systemleisten nach Zurück und Drehen.
 - Die Schwelle für sehr große Bilder und der Speicherverbrauch der Kacheln sind auf dem Gerät zu messen.
+
+Aus der Geräteprüfung (offen):
+
+- Szenario (e), 2 und 6 Spalten, und Szenario (g), Innendisplay: nicht automatisiert, manuell durch den Nutzer zu prüfen.
+- Flüssigkeit der Öffnen-Animation (a): Die Zwischenbilder waren zeitgenau nicht erreichbar. Die visuelle Beurteilung steht aus.
+- P99 von 30 ms beim Benchmark-Build beobachten. Der Wert liegt über P95 (15 ms) und ist nur eine Messung über fünf Zyklen.
+- Ein Debug-Intent-Extra für die Zoomstufe im Demo-Source-Set wäre für künftige automatische Tests hilfreich. Damit ließe sich Zoom ohne Pinch auf dem Gerät prüfen.
 
 ## Alternativen
 
