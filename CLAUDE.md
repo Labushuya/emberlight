@@ -8,6 +8,7 @@ Was entschieden ist und warum, steht in [docs/KONZEPT.md](docs/KONZEPT.md). Lies
 - **Nur lokal.** Kein Backend, kein Relais, keine Cloud-Dienste, keine Konten, kein Tracking, keine Analytics.
 - **Keine Abhängigkeit von Google Play Services** (kein ML Kit, kein Nearby, kein Firebase). Die App wird per Sideloading verteilt und soll auf jedem Android 8+ laufen.
 - Nichts einbauen, was einen späteren Play-Store-Umzug verhindert. Der In-App-Updater kommt später in einen eigenen Build-Flavor.
+- **Strikte Trennung von Space und Galerie.** Ein Space gibt nur Medien preis, die ausdrücklich in ihn geteilt wurden. Die private Galerie ist für Server und Teilnehmer nie erreichbar. Space-Medien liegen nur im app-internen Space-Speicher; in eine Galerie gelangt nur, was ausdrücklich ausgewählt und heruntergeladen wurde. Technische Durchsetzung ab Meilenstein 3: `share:server` darf nicht von `core:media` abhängen (Build-Prüfung), Auslieferung nur aus dem Space-Speicher, Tests dafür.
 
 ## Technik (Vorgabe, begründet abweichen ist erlaubt)
 
@@ -57,7 +58,15 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
 
 1. **Grundgerüst**: Gradle-Projekt, Module, Theme, Navigation, CI und Release-Workflow. Ergebnis: `v0.1.0` baut als signierte APK.
 2. **Galerie**: MediaStore-Zugriff mit Berechtigungen (inkl. „ausgewählte Fotos“ ab Android 14), Zeitleiste mit Pinch-Zoom der Spalten, Alben, Vollbild mit Wischen/Zoom, Video-Wiedergabe, flüssige Übergänge.
-3. **Space im vorhandenen WLAN**: Space anlegen (Name, Titelbild, Farbe, Laufzeit, Rechte), Ktor-Server im Foreground-Service, QR-Code, Gäste-Webseite mit Upload/Download, Ablauf erzwingen, Empfangenes in `Pictures/Emberlight/<Space>` speichern.
+3. **Space im vorhandenen WLAN**:
+   - Space anlegen (Name, Titelbild, Farbe, Laufzeit, Nachhaltefrist, Speicherlimit)
+   - Beitritt mit Anzeigenamen
+   - Ktor-Server im Foreground-Service, QR-Code
+   - Gäste-Webseite mit Upload, Download und Uploader-Anzeige
+   - getrennter Space-Speicher, Ablauf erzwingen
+   - Schutz gegen Manipulation (Details als ADR)
+   - Nachhalten mit Erinnerung und automatischer Löschung
+   - gezielte Übernahme ausgewählter Medien in `Pictures/Emberlight/<Space>`
 4. **Eigenes WLAN**: LocalOnlyHotspot, WLAN-QR-Code plus Beitritts-URL, Hinweise für Gäste ohne Internet, Fallbacks bei Geräten ohne Unterstützung.
 5. **Beitritt per App**: QR-Scan, nativer Space-Bildschirm für Mitglieder.
 6. Danach: Rechte verfeinern, In-App-Updater, öffentliches Releases-Repo, TLS im fremden WLAN.
