@@ -57,6 +57,41 @@ jobs:
       - name: Build, Lint und Tests
         run: ./gradlew check assembleDebug assembleRelease -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
 
+      # Übersicht in der Job-Zusammenfassung: Zeilenabdeckung aus dem Kover-XML und die Namen abweichender Screenshots.
+      # Läuft auch bei Fehlschlag. Der Schritt selbst bricht nicht ab, die Durchsetzung passiert in check.
+      - name: Coverage und Screenshots zusammenfassen
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          summary="$GITHUB_STEP_SUMMARY"
+          report="build/reports/kover/report.xml"
+          echo "## Coverage und Screenshots" >> "$summary"
+          echo "" >> "$summary"
+          if [ -f "$report" ]; then
+            # Der Gesamtwert ist das letzte LINE-Zählerelement im Kover-XML.
+            total=$(grep -o '<counter type="LINE"[^>]*>' "$report" | tail -1 || true)
+            covered=$(sed -E 's/.*covered="([0-9]+)".*/\1/' <<< "$total")
+            missed=$(sed -E 's/.*missed="([0-9]+)".*/\1/' <<< "$total")
+            awk -v c="$covered" -v m="$missed" 'BEGIN {
+              t = c + m
+              printf "Zeilenabdeckung: %.1f %% (%d von %d Zeilen), Untergrenze 70 %%\n\n", (t > 0 ? c * 100 / t : 0), c, t
+            }' >> "$summary"
+          else
+            echo "Kein Kover-Report gefunden." >> "$summary"
+            echo "" >> "$summary"
+          fi
+          # Roborazzi meldet abweichende oder fehlende Goldens mit dem Pfad unter src/test/screenshots.
+          changed=$(find . -path '*/build/test-results/*' -name '*.xml' \
+            -exec grep -hoE 'screenshots[\\/][A-Za-z0-9_.-]+\.png' {} + 2>/dev/null \
+            | sed -E 's|.*[\\/]||' | sort -u || true)
+          if [ -n "$changed" ]; then
+            echo "Screenshots mit Abweichung oder fehlendem Golden:" >> "$summary"
+            sed 's/^/- /' <<< "$changed" >> "$summary"
+          else
+            echo "Keine Screenshot-Abweichung gefunden." >> "$summary"
+          fi
+
       # Die Artefakt-Uploads sind Komfort, kein Qualitätsnachweis. Build, Lint und Tests sind an dieser Stelle
       # schon entschieden. Scheitert ein Upload (z. B. weil das Speicherkontingent des Accounts erschöpft ist),
       # bleibt der Check grün. Der Fehler wird als Warnung und in der Job-Zusammenfassung sichtbar.
@@ -81,6 +116,19 @@ jobs:
           path: |
             **/build/reports/**
             **/build/test-results/**
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Diff-Bilder der Screenshot-Tests (Golden gegen Ist und Vergleich). Nur bei Fehlschlag, nie blockierend.
+      - name: Screenshot-Diffs hochladen
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: screenshot-diffs
+          path: |
+            **/build/outputs/roborazzi/*_compare.png
+            **/build/outputs/roborazzi/*_actual.png
           retention-days: 7
           if-no-files-found: ignore
 
