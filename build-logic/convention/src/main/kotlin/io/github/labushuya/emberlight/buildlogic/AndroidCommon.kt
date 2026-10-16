@@ -7,6 +7,7 @@ import com.android.build.api.variant.AndroidComponentsExtension
 import com.android.build.api.variant.HasHostTestsBuilder
 import com.android.build.api.variant.HostTestBuilder
 import io.github.takahirom.roborazzi.RoborazziExtension
+import org.gradle.api.GradleException
 import org.gradle.api.JavaVersion
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalog
@@ -138,13 +139,34 @@ internal fun Project.configureUnitTests() {
         toolchains.launcherFor { spec ->
             spec.languageVersion.set(JavaLanguageVersion.of(EmberlightConfig.TEST_JAVA_VERSION))
         }
+    val forks = testForks()
     tasks.withType<Test>().configureEach { task ->
         task.javaLauncher.set(testLauncher)
         // Robolectric greift unter JDK 17+ auf interne Klassen zu, die Module-System-Öffnung ist dafür nötig.
         task.jvmArgs(JDK_INTERNAL_OPENS)
+        task.maxParallelForks = forks
     }
     disableReleaseUnitTests()
 }
+
+/**
+ * Parallele Test-JVMs je Test-Task, gesteuert über `-Pemberlight.testForks=N`. Lokal ist der Standard 1, damit der
+ * Speicherbedarf der Robolectric-Prozesse dort unverändert bleibt. Die CI setzt 2 passend zu ihren 4 vCPU (ADR 0006).
+ */
+private fun Project.testForks(): Int {
+    val raw = providers.gradleProperty(TEST_FORKS_PROPERTY).orNull ?: return DEFAULT_TEST_FORKS
+    val value = raw.toIntOrNull()
+    if (value == null || value !in 1..MAX_TEST_FORKS) {
+        throw GradleException(
+            "$TEST_FORKS_PROPERTY muss eine Zahl von 1 bis $MAX_TEST_FORKS sein, gefunden: \"$raw\".",
+        )
+    }
+    return value
+}
+
+private const val TEST_FORKS_PROPERTY = "emberlight.testForks"
+private const val DEFAULT_TEST_FORKS = 1
+private const val MAX_TEST_FORKS = 4
 
 /**
  * Release-Unit-Tests werden nicht ausgeführt: R8 greift in Unit-Tests nicht, die Release-Variante

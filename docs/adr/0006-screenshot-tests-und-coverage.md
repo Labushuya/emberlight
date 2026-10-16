@@ -148,6 +148,30 @@ Kover 0.9.11 läuft mit AGP 9.4.1 und dem eingebauten Kotlin. Es gab keinen Fehl
 
 ## Nachtrag Paket 5a: Viewer-Goldens in eigener Testaufgabe
 
-Die Goldens des Vollbild-Viewers (ADR 0010) laufen in der Aufgabe `testViewerGoldens` des Moduls `feature:gallery`, mit einem Prozess je Testklasse (`forkEvery = 1`). Die übrigen Tests des Moduls laufen wie bisher in `testDebugUnitTest`, die Viewer-Goldens sind dort ausgeschlossen. `check` hängt an beiden Aufgaben.
+Die Goldens des Vollbild-Viewers (ADR 0010) laufen in der Aufgabe `testViewerGoldens` des Moduls `feature:gallery` in einem gemeinsamen Prozess (Standard von Gradle, `forkEvery` nicht gesetzt). Die übrigen Tests des Moduls laufen wie bisher in `testDebugUnitTest`, die Viewer-Goldens sind dort ausgeschlossen. `check` hängt an beiden Aufgaben.
 
-Grund: Im gemeinsamen Lauf mit den Galerie-Goldens wurden Viewer-Aufnahmen leer eingefangen (weiße Fläche), obwohl dieselben Tests allein korrekt sind und deterministisch aufnehmen. Die Ursache im gemeinsamen Robolectric-Zustand ist nicht geklärt. Die Isolation über den Prozess behebt das Symptom, ohne die Ursache zu kennen. Die Galerie-Goldens sind davon nicht betroffen und bleiben im Hauptlauf. Sollte eine Ursache gefunden werden, wird diese Aufgabe wieder zusammengeführt.
+### Befund: weiße Viewer-Aufnahmen im Hauptlauf (Stand 16.10.2026)
+
+- Symptom: Im Lauf von `testDebugUnitTest` mit eingeschlossenen Viewer-Goldens scheitern `ViewerGermanScreenshotTest`, `ViewerImmersiveScreenshotTest` und der Chrome-Test von `ViewerScreenshotTest`. Die Ist-Aufnahme ist fast weiß (`#FAFAFA`, Standardhintergrund), das Golden ist schwarz mit Inhalt.
+- Allein laufen alle vier Viewer-Klassen im selben Prozess grün, in vier Wiederholungen.
+- Gesamtlauf: In drei vollständigen Läufen scheiterten dieselben drei Klassen, `ViewerGermanScreenshotTest`, `ViewerImmersiveScreenshotTest` und der Chrome-Test von `ViewerScreenshotTest`.
+- Teilmengen, jeweils mit den Viewer-Goldens:
+  - Die fünf Galerie-Wurzelklassen einzeln, und die Hälfte mit Galerie- und Album-Tests (14 Klassen): Fehler.
+  - Die Hälfte mit `timeline`-Tests und den übrigen Viewer-Tests (21 Klassen): nur `ViewerImmersiveScreenshotTest` scheitert.
+  - Kleine Mengen mit zwei oder drei Klassen waren nicht stabil. `DurationFormatTest` mit den Viewer-Goldens scheiterte einmal dreimal identisch, danach lief dieselbe Menge grün. `ZoomMathTest`, `ViewerFormatsTest` und `DurationFormatTest` mit einzelnen Viewer-Klassen sind in anderen Läufen grün.
+- Geprüft und verworfen als alleinige Ursache: `TestThumbnails` setzt den globalen Coil-Singleton-Loader. Alle Klassen, die ihn setzen, rufen `reset()` auf. Die Viewer-Goldens bekommen ihre Bilder aus `solidImageSources` und nicht über Coil. Das Leeren des Looper per `flushMainLooper()` ist vorhanden, reicht aber nicht.
+- Nicht geprüft: Robolectric-Sandbox-Wiederverwendung und der Zustand von Choreographer und Looper über Klassen hinweg. Ob ein Test eine Sandbox übernimmt, hängt von der Konfiguration ab (Immersive und `ViewerScreenshotTest` teilen `en-w412dp-h915dp`). Vermutung, nicht belegt: Der Fehler hängt an der Zahl der vorher gelaufenen Compose-Tests im Prozess.
+- Ergebnis: Die Ursache ist nicht gefunden. Der Gesamtlauf reproduziert den Fehler zuverlässig, kleine Teilmengen nicht. Es handelt sich also um einen Zustand oder um Timing im gemeinsamen Robolectric-Prozess, der durch die Menge der vorher gelaufenen Tests beeinflusst wird.
+
+### Lösung: ein gemeinsamer Prozess für alle Viewer-Klassen
+
+- Vorher: vier Prozesse, eine je Klasse (`forkEvery = 1`). Gemessen mit `--rerun`: 26,3 s und 27,0 s.
+- Nachher: ein Prozess für alle vier Klassen, `forkEvery` entfällt. Gemessen: 7,4 s und 8,3 s. Alle fünf Viewer-Goldens sind gegen die committeten Bilder grün.
+- Der Hauptlauf bleibt ohne Viewer-Goldens. Eine Rückführung in `testDebugUnitTest` ist nicht möglich, solange die Ursache offen ist.
+
+### CI-Parallelität
+
+- Gradle-Eigenschaft `emberlight.testForks` (Standard 1, gültig 1 bis 4) setzt `maxParallelForks` für alle Test-Tasks. Lokal bleibt es bei 1.
+- `ci.yml` setzt `-Pemberlight.testForks=2` für den Build-Schritt, passend zu den 4 vCPU des Runners. Der Schritt „Toolchains anzeigen“ entfällt, er war nur eine Ausgabe.
+- Speicher, lokal gemessen mit `check koverXmlReport assembleDebug assembleRelease checkNoPlayServices --rerun-tasks -Pemberlight.testForks=2` auf einem 31-GB-Rechner: Die Summe der Working-Sets aller `java`-Prozesse lag höchstens bei 8,75 GB (fünf Prozesse), der freie RAM fiel minimal auf 4,3 GB. Die CI-Runner haben 16 GB. Die Spitze liegt darunter, mit Puffer für das Betriebssystem. Der Wert ist eine lokale Messung, keine CI-Messung.
+- Der Configuration Cache wird in der CI nicht wiederverwendet. Jeder Lauf meldet „Configuration cache entry stored“, aber keinen Treffer. Die Doku von setup-gradle v6.4.0 nennt für das Caching des Configuration Cache den Schlüssel `cache-encryption-key` (Secret). Ob es ohne ihn gar nicht gespeichert wird, ist dort nicht eindeutig belegt. Ein Secret ist nicht angelegt, die Entscheidung liegt beim Betreiber.
