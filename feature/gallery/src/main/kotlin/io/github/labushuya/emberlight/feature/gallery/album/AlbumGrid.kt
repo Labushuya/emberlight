@@ -40,6 +40,7 @@ import io.github.labushuya.emberlight.core.media.model.Album
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import io.github.labushuya.emberlight.feature.gallery.R
+import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaThumbnailImage
 import io.github.labushuya.emberlight.feature.gallery.timeline.SCRIM
 import io.github.labushuya.emberlight.feature.gallery.timeline.accessBannerItem
@@ -66,9 +67,8 @@ internal const val ALBUM_VIDEO_BADGE_TAG = "album-video-badge"
  */
 @Composable
 internal fun AlbumGrid(
-    albums: List<Album>,
-    access: MediaAccess,
-    missingTypes: Set<MediaType>,
+    albums: AlbumList,
+    grid: MediaGridState.Content,
     padding: PaddingValues,
     onRequest: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -76,7 +76,7 @@ internal fun AlbumGrid(
     modifier: Modifier = Modifier,
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
-    val hasBanner = needsAccessBanner(access, missingTypes)
+    val hasBanner = needsAccessBanner(grid.access, grid.missingTypes)
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = ALBUM_MIN_WIDTH),
         state = gridState,
@@ -95,14 +95,14 @@ internal fun AlbumGrid(
             accessBannerItem(
                 key = KEY_BANNER,
                 contentType = TYPE_BANNER,
-                access = access,
-                missingTypes = missingTypes,
+                access = grid.access,
+                missingTypes = grid.missingTypes,
                 onRequest = onRequest,
                 onOpenSettings = onOpenSettings,
             )
         }
         items(
-            items = albums,
+            items = albums.items,
             key = { album -> album.bucketId ?: KEY_OTHER },
             contentType = { TYPE_ALBUM },
         ) { album ->
@@ -139,7 +139,7 @@ internal fun AlbumCard(
                     .aspectRatio(1f)
                     .clip(MaterialTheme.shapes.medium),
         ) {
-            MediaThumbnailImage(uri = album.cover.uri, type = album.cover.type)
+            MediaThumbnailImage(uri = album.cover.uri, type = album.cover.type, modifier = Modifier.fillMaxSize())
             if (album.cover.type == MediaType.VIDEO) {
                 Box(
                     modifier =
@@ -176,15 +176,6 @@ internal fun AlbumCard(
         )
     }
 }
-
-/** Anzeigename: „Sonstige“ für Einträge ohne Ordner, „Album ohne Namen“ wenn der Ordner keinen Namen trägt. */
-@Composable
-private fun albumTitle(album: Album): String =
-    when {
-        album.bucketId == null -> stringResource(R.string.feature_gallery_album_other)
-        album.name.isBlank() -> stringResource(R.string.feature_gallery_album_unnamed)
-        else -> album.name
-    }
 
 /** Anzahl mit Plural und Tausendertrennzeichen der Sprache, etwa „1.234 Elemente“ oder „1,234 items“. */
 @Composable

@@ -17,6 +17,7 @@ internal enum class GroupingMode {
 }
 
 /** Überschrift einer Gruppe. Der Text entsteht erst in der UI, weil Sprache und Ressourcen dort liegen. */
+@Immutable
 internal sealed interface TimelineHeader {
     data object Today : TimelineHeader
 
@@ -62,6 +63,7 @@ internal data class TimelineSection(
  * Zustand eines Rasters für die UI, gemeinsam für Galerie und Album. Laden, Berechtigung und Leerzustand gelten für
  * alle Ansichten gleich. [Gone] meldet ein Album, das nicht mehr im Index steht (ADR 0009).
  */
+@Immutable
 internal sealed interface MediaGridState {
     /** Erste Abfrage läuft. */
     data object Loading : MediaGridState

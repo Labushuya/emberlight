@@ -51,7 +51,7 @@ internal fun MediaCell(
                 .clickable(onClick = onClick)
                 .semantics(mergeDescendants = true) { contentDescription = label },
     ) {
-        MediaThumbnailImage(uri = item.uri, type = item.type)
+        MediaThumbnailImage(uri = item.uri, type = item.type, modifier = Modifier.fillMaxSize())
         if (item.type == MediaType.VIDEO) {
             VideoBadge(durationText = formatDuration(item.durationMs ?: 0L))
         }

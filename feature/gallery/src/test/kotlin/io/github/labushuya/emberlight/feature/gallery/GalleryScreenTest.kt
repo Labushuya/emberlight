@@ -14,6 +14,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
+import io.github.labushuya.emberlight.feature.gallery.album.AlbumList
 import io.github.labushuya.emberlight.feature.gallery.timeline.GroupingMode
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 import io.github.labushuya.emberlight.feature.gallery.timeline.TestThumbnails
@@ -168,7 +169,7 @@ class GalleryScreenTest {
         composeRule.setContent {
             EmberlightTheme {
                 GalleryContent(
-                    state = GalleryUiState(grid = state, albums = emptyList()),
+                    state = GalleryUiState(grid = state, albums = AlbumList(emptyList())),
                     onZoomLevelChange = {},
                     onRequestPermission = onRequest,
                     onOpenSettings = onOpenSettings,

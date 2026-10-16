@@ -106,8 +106,7 @@ internal fun GalleryContent(
                 ) { content ->
                     AlbumGrid(
                         albums = state.albums,
-                        access = content.access,
-                        missingTypes = content.missingTypes,
+                        grid = content,
                         padding = padding,
                         onRequest = onRequestPermission,
                         onOpenSettings = onOpenSettings,

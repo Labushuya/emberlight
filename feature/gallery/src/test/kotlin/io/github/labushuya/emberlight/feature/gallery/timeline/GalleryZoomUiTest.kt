@@ -29,6 +29,7 @@ import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import io.github.labushuya.emberlight.feature.gallery.GalleryContent
 import io.github.labushuya.emberlight.feature.gallery.GalleryUiState
+import io.github.labushuya.emberlight.feature.gallery.album.AlbumList
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.TODAY
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
 import org.junit.After
@@ -218,30 +219,7 @@ class GalleryZoomUiTest {
         composeRule.waitForIdle()
     }
 
-    private fun grid() = composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription))
-
-    /** Finger auseinander, vom Mittelpunkt aus. Die Abstände richten sich nach der Breite, damit beide Finger im Raster liegen. */
-    private fun TouchInjectionScope.pinchApart() {
-        val near = width * 0.04f
-        val far = width * 0.2f
-        pinch(
-            start0 = center + Offset(-near, 0f),
-            end0 = center + Offset(-far, 0f),
-            start1 = center + Offset(near, 0f),
-            end1 = center + Offset(far, 0f),
-        )
-    }
-
-    private fun TouchInjectionScope.pinchTogether() {
-        val near = width * 0.04f
-        val far = width * 0.2f
-        pinch(
-            start0 = center + Offset(-far, 0f),
-            end0 = center + Offset(-near, 0f),
-            start1 = center + Offset(far, 0f),
-            end1 = center + Offset(near, 0f),
-        )
-    }
+    private fun grid() = composeRule.mediaGrid()
 
     /** Ruft eine Bedienungshilfe-Aktion des Rasters auf und liefert ihr Ergebnis. */
     private fun invokeAction(label: String): Boolean {
@@ -266,7 +244,7 @@ class GalleryZoomUiTest {
             rule.setContent {
                 EmberlightTheme {
                     GalleryContent(
-                        state = GalleryUiState(grid = content(), albums = emptyList()),
+                        state = GalleryUiState(grid = content(), albums = AlbumList(emptyList())),
                         onRequestPermission = {},
                         onOpenSettings = {},
                         onMediaClick = {},

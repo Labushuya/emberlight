@@ -23,6 +23,7 @@ import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import io.github.labushuya.emberlight.feature.gallery.album.ALBUM_CARD_TAG
+import io.github.labushuya.emberlight.feature.gallery.album.AlbumList
 import io.github.labushuya.emberlight.feature.gallery.album.albumsForDisplay
 import io.github.labushuya.emberlight.feature.gallery.timeline.GroupingMode
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
@@ -149,7 +150,8 @@ class GalleryTabsTest {
     @Test
     fun noAccessShowsTheSamePromptInBothTabs() {
         val title = context.getString(GalleryR.string.feature_gallery_permission_title)
-        show(GalleryUiState(grid = MediaGridState.PermissionRequired(canRequest = true), albums = emptyList()))
+        val grid = MediaGridState.PermissionRequired(canRequest = true)
+        show(GalleryUiState(grid = grid, albums = AlbumList(emptyList())))
 
         composeRule.onNodeWithText(title).assertIsDisplayed()
         tab(albums()).performClick()
@@ -198,13 +200,19 @@ class GalleryTabsTest {
         GalleryUiState(
             grid =
                 MediaGridState.Content(
-                    sections = TimelineGrouping.group(items, GroupingMode.DAY, TODAY, ZONE),
+                    sections =
+                        TimelineGrouping.group(
+                            items.sortedByDescending { it.timestamp },
+                            GroupingMode.DAY,
+                            TODAY,
+                            ZONE,
+                        ),
                     access = access,
                     missingTypes = missingTypes,
                     zoomLevel = ZoomLevels.DEFAULT_LEVEL,
                     today = TODAY,
                 ),
-            albums = albumsForDisplay(TimelineFixtures.albumsOf(items)),
+            albums = AlbumList(albumsForDisplay(TimelineFixtures.albumsOf(items))),
         )
 
     private fun photos() = context.getString(GalleryR.string.feature_gallery_tab_photos)

@@ -36,7 +36,7 @@ class AlbumOrderingTest {
 
     @Test
     fun albumsOfLoadingIsEmpty() {
-        assertEquals(emptyList<Album>(), albumsOf(MediaLibraryState.Loading))
+        assertEquals(emptyList<Album>(), albumsOf(MediaLibraryState.Loading).items)
     }
 
     @Test
@@ -44,7 +44,7 @@ class AlbumOrderingTest {
         val items = TimelineFixtures.sampleItems()
         val library = TimelineFixtures.library(items = items)
 
-        val result = albumsOf(MediaLibraryState.Ready(library))
+        val result = albumsOf(MediaLibraryState.Ready(library)).items
 
         assertEquals(listOf(1L, 2L, 3L, null), result.map { it.bucketId })
         assertEquals(4, result.first { it.bucketId == 1L }.itemCount)

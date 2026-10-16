@@ -1,7 +1,7 @@
 package io.github.labushuya.emberlight.feature.gallery
 
 import androidx.compose.runtime.Immutable
-import io.github.labushuya.emberlight.core.media.model.Album
+import io.github.labushuya.emberlight.feature.gallery.album.AlbumList
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 
 /**
@@ -11,9 +11,9 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 @Immutable
 internal data class GalleryUiState(
     val grid: MediaGridState,
-    val albums: List<Album>,
+    val albums: AlbumList,
 ) {
     companion object {
-        val Loading: GalleryUiState = GalleryUiState(grid = MediaGridState.Loading, albums = emptyList())
+        val Loading: GalleryUiState = GalleryUiState(grid = MediaGridState.Loading, albums = AlbumList(emptyList()))
     }
 }

@@ -47,7 +47,7 @@ class GalleryViewModelTest {
     @Test
     fun startsLoading() =
         runTest(dispatcher) {
-            val vm = viewModel(FakeRepository(MediaLibraryState.Loading), FakeStore(asked = false))
+            val vm = viewModel(FakeLibraryRepository(MediaLibraryState.Loading), FakePromptStore(asked = false))
 
             assertEquals(MediaGridState.Loading, vm.uiState.value.grid)
         }
@@ -55,7 +55,7 @@ class GalleryViewModelTest {
     @Test
     fun noAccessNeverAskedOffersTheDialog() =
         runTest(dispatcher) {
-            val vm = viewModel(readyNoAccessRepository(), FakeStore(asked = false))
+            val vm = viewModel(readyNoAccessRepository(), FakePromptStore(asked = false))
 
             collect(vm)
             advanceUntilIdle()
@@ -67,7 +67,7 @@ class GalleryViewModelTest {
     fun noAccessAfterDeniedForeverOffersOnlySettings() =
         runTest(dispatcher) {
             // Gefragt, und die Systemerklärung ist nicht mehr anzeigbar (rationale = false): nur noch Einstellungen.
-            val vm = viewModel(readyNoAccessRepository(), FakeStore(asked = true))
+            val vm = viewModel(readyNoAccessRepository(), FakePromptStore(asked = true))
 
             collect(vm)
             advanceUntilIdle()
@@ -78,7 +78,7 @@ class GalleryViewModelTest {
     @Test
     fun deniedOnceWithRationaleOffersTheDialogAgain() =
         runTest(dispatcher) {
-            val store = FakeStore(asked = true)
+            val store = FakePromptStore(asked = true)
             val repository = readyNoAccessRepository()
             val vm = viewModel(repository, store)
             collect(vm)
@@ -95,7 +95,7 @@ class GalleryViewModelTest {
     @Test
     fun permissionResultMarksTheRequestAsAskedOnlyAfterTheAnswer() =
         runTest(dispatcher) {
-            val store = FakeStore(asked = false)
+            val store = FakePromptStore(asked = false)
             val vm = viewModel(readyNoAccessRepository(), store)
             collect(vm)
             advanceUntilIdle()
@@ -114,7 +114,7 @@ class GalleryViewModelTest {
     fun firstResumeDoesNotRereadButLaterResumesDo() =
         runTest(dispatcher) {
             val repository = readyNoAccessRepository()
-            val vm = viewModel(repository, FakeStore(asked = false))
+            val vm = viewModel(repository, FakePromptStore(asked = false))
 
             vm.onResumed(showRationale = false)
             assertEquals(0, repository.refreshCount)
@@ -128,8 +128,8 @@ class GalleryViewModelTest {
         runTest(dispatcher) {
             val vm =
                 viewModel(
-                    FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library(items = emptyList()))),
-                    FakeStore(asked = true),
+                    FakeLibraryRepository(MediaLibraryState.Ready(TimelineFixtures.library(items = emptyList()))),
+                    FakePromptStore(asked = true),
                 )
 
             collect(vm)
@@ -142,7 +142,10 @@ class GalleryViewModelTest {
     fun contentGroupsByDayForDefaultColumns() =
         runTest(dispatcher) {
             val vm =
-                viewModel(FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())), FakeStore(asked = true))
+                viewModel(
+                    FakeLibraryRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
+                    FakePromptStore(asked = true),
+                )
 
             collect(vm)
             advanceUntilIdle()
@@ -156,7 +159,10 @@ class GalleryViewModelTest {
     fun changingZoomLevelRegroupsByMonth() =
         runTest(dispatcher) {
             val vm =
-                viewModel(FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())), FakeStore(asked = true))
+                viewModel(
+                    FakeLibraryRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
+                    FakePromptStore(asked = true),
+                )
             collect(vm)
             advanceUntilIdle()
 
@@ -174,8 +180,8 @@ class GalleryViewModelTest {
             val zoomStore = FakeZoomStore(saved = ZoomLevels.MAX_LEVEL)
             val vm =
                 viewModel(
-                    FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
-                    FakeStore(asked = true),
+                    FakeLibraryRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
+                    FakePromptStore(asked = true),
                     zoomStore,
                 )
             collect(vm)
@@ -191,8 +197,8 @@ class GalleryViewModelTest {
         runTest(dispatcher) {
             val vm =
                 viewModel(
-                    FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
-                    FakeStore(asked = true),
+                    FakeLibraryRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
+                    FakePromptStore(asked = true),
                     FakeZoomStore(saved = ZoomLevels.DEFAULT_LEVEL),
                 )
             collect(vm)
@@ -207,8 +213,8 @@ class GalleryViewModelTest {
             val zoomStore = FakeZoomStore(saved = ZoomLevels.DEFAULT_LEVEL)
             val vm =
                 viewModel(
-                    FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
-                    FakeStore(asked = true),
+                    FakeLibraryRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
+                    FakePromptStore(asked = true),
                     zoomStore,
                 )
             collect(vm)
@@ -225,7 +231,7 @@ class GalleryViewModelTest {
     fun missingTypeReachesTheContentState() =
         runTest(dispatcher) {
             val library = TimelineFixtures.library(missingTypes = setOf(MediaType.VIDEO))
-            val vm = viewModel(FakeRepository(MediaLibraryState.Ready(library)), FakeStore(asked = true))
+            val vm = viewModel(FakeLibraryRepository(MediaLibraryState.Ready(library)), FakePromptStore(asked = true))
 
             collect(vm)
             advanceUntilIdle()
@@ -251,46 +257,8 @@ class GalleryViewModelTest {
             zone = ZONE,
         )
 
-    private fun readyNoAccessRepository(): FakeRepository =
-        FakeRepository(
+    private fun readyNoAccessRepository(): FakeLibraryRepository =
+        FakeLibraryRepository(
             MediaLibraryState.Ready(TimelineFixtures.library(items = emptyList(), access = MediaAccess.NONE)),
         )
-
-    private class FakeRepository(
-        initial: MediaLibraryState,
-    ) : MediaRepository {
-        private val state = MutableStateFlow(initial)
-        var refreshCount = 0
-            private set
-
-        override val library: StateFlow<MediaLibraryState> = state
-
-        override fun refresh() {
-            refreshCount++
-        }
-    }
-
-    private class FakeZoomStore(
-        saved: Int,
-    ) : ZoomLevelStore {
-        private val flow = MutableStateFlow(saved)
-        val saved: Int get() = flow.value
-
-        override val level: Flow<Int> = flow
-
-        override suspend fun setLevel(level: Int) {
-            flow.value = ZoomLevels.clamp(level)
-        }
-    }
-
-    private class FakeStore(
-        asked: Boolean,
-    ) : PermissionPromptStore {
-        val askedFlag = MutableStateFlow(asked)
-        override val askedBefore: Flow<Boolean> = askedFlag
-
-        override suspend fun markAsked() {
-            askedFlag.value = true
-        }
-    }
 }
