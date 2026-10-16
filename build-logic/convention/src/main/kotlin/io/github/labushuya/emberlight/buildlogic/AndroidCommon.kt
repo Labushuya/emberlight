@@ -3,6 +3,7 @@ package io.github.labushuya.emberlight.buildlogic
 import com.android.build.api.dsl.CommonExtension
 import com.android.build.api.dsl.CompileOptions
 import com.android.build.api.dsl.Lint
+import io.github.takahirom.roborazzi.RoborazziExtension
 import org.gradle.api.JavaVersion
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalog
@@ -10,6 +11,7 @@ import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
+import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -81,6 +83,32 @@ internal fun Project.configureCompose(extension: CommonExtension) {
     // Compose synchronisiert unter Robolectric über Espresso. Die von ui-test gezogene Version 3.5 scheitert mit SDK 37
     // (InputManager.getInstance fehlt), daher 3.7.0.
     dependencies.add("testImplementation", catalog.library("androidx-test-espresso-core"))
+    configureScreenshotTests(extension)
+}
+
+/**
+ * Screenshot-Tests (Goldens) mit Roborazzi auf dem JVM, Robolectric mit nativer Grafik. Goldens liegen je Modul in
+ * `src/test/screenshots` und werden bei jedem Testlauf verifiziert, nicht still neu aufgenommen (siehe ADR 0006).
+ */
+private fun Project.configureScreenshotTests(extension: CommonExtension) {
+    pluginManager.apply(catalog.plugin("roborazzi").get().pluginId)
+    extension.testOptions.unitTests.isIncludeAndroidResources = true
+    dependencies.add("testImplementation", catalog.library("robolectric"))
+    dependencies.add("testImplementation", catalog.library("androidx-test-ext-junit"))
+    dependencies.add("testImplementation", catalog.library("roborazzi"))
+    dependencies.add("testImplementation", catalog.library("roborazzi-compose"))
+    dependencies.add("testImplementation", catalog.library("roborazzi-junit-rule"))
+    extensions.configure<RoborazziExtension> {
+        outputDir.set(layout.projectDirectory.dir("src/test/screenshots"))
+    }
+}
+
+/**
+ * Kover pro Android-Modul: misst die Debug-Unit-Tests. Aggregation, Ausschlüsse und die Untergrenze
+ * stehen im Root-Projekt (siehe ADR 0006).
+ */
+internal fun Project.configureKover() {
+    pluginManager.apply(catalog.plugin("kover").get().pluginId)
 }
 
 private val JDK_INTERNAL_OPENS = listOf("--add-opens", "java.base/jdk.internal.access=ALL-UNNAMED")

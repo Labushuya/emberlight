@@ -18,6 +18,8 @@ dependencies {
     implementation(libs.kotlin.serialization.gradle.plugin)
     implementation(libs.ksp.gradle.plugin)
     implementation(libs.hilt.gradle.plugin)
+    implementation(libs.kover.gradle.plugin)
+    implementation(libs.roborazzi.gradle.plugin)
 
     testImplementation(libs.kotlin.test.junit)
 }
