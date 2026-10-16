@@ -1,14 +1,12 @@
 package io.github.labushuya.emberlight
 
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasNoClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -17,6 +15,9 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import dagger.hilt.android.testing.HiltTestApplication
 import io.github.labushuya.emberlight.testing.FakeMediaRepository
 import io.github.labushuya.emberlight.testing.TestImageLoader
+import io.github.labushuya.emberlight.testing.awaitDisplayed
+import io.github.labushuya.emberlight.testing.awaitUi
+import io.github.labushuya.emberlight.testing.clickWhenDisplayed
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -33,7 +34,8 @@ import io.github.labushuya.emberlight.feature.space.R as SpaceR
  * setzt auf die Ressourcen der Module, nicht auf fest eingetragene Texte, damit er für Deutsch und Englisch gleich bleibt.
  *
  * Hilt liefert den Medienindex als Fake mit festen Daten (siehe TestSeams). Der Compose-Rule setzt keinen eigenen
- * Inhalt, weil MainActivity ihn selbst setzt. Die Navigation der Alben steht in [EmberlightAlbumNavigationTest].
+ * Inhalt, weil MainActivity ihn selbst setzt. Jeder Schritt wartet auf seine Bedingung (siehe UiWaits.kt). Die Navigation
+ * der Alben steht in [EmberlightAlbumNavigationTest].
  */
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -69,23 +71,23 @@ class EmberlightAppNavigationTest {
         launchApp()
 
         assertTimelineShown()
-        navItem(galleryLabel()).assertIsSelected()
+        composeRule.awaitUi { navItem(galleryLabel()).assertIsSelected() }
     }
 
     @Test
     fun tappingSpacesShowsSpacesPlaceholder() {
         launchApp()
 
-        navItem(spacesLabel()).performClick()
+        composeRule.clickWhenDisplayed(navMatcher(spacesLabel()))
 
         assertSpacesShown()
-        navItem(spacesLabel()).assertIsSelected()
+        composeRule.awaitUi { navItem(spacesLabel()).assertIsSelected() }
     }
 
     @Test
     fun systemBackFromSpacesReturnsToGallery() {
         launchApp()
-        navItem(spacesLabel()).performClick()
+        composeRule.clickWhenDisplayed(navMatcher(spacesLabel()))
         assertSpacesShown()
 
         scenario?.onActivity { it.onBackPressedDispatcher.onBackPressed() }
@@ -100,8 +102,8 @@ class EmberlightAppNavigationTest {
         launchApp()
 
         assertTimelineShown()
-        navItem("Galerie").assertIsSelected()
-        navItem(spacesLabel()).performClick()
+        composeRule.awaitUi { navItem("Galerie").assertIsSelected() }
+        composeRule.clickWhenDisplayed(navMatcher(spacesLabel()))
         assertSpacesShown()
     }
 
@@ -109,25 +111,23 @@ class EmberlightAppNavigationTest {
         scenario = ActivityScenario.launch(MainActivity::class.java)
     }
 
-    private fun navItem(label: String) = composeRule.onNode(isSelectable() and hasText(label))
+    private fun navMatcher(label: String): SemanticsMatcher = isSelectable() and hasText(label)
+
+    private fun navItem(label: String) = composeRule.onNode(navMatcher(label))
 
     private fun galleryLabel() = context.getString(R.string.app_nav_gallery)
 
     private fun spacesLabel() = context.getString(R.string.app_nav_spaces)
 
     private fun assertTimelineShown() {
-        composeRule
-            .onNode(hasText(context.getString(GalleryR.string.feature_gallery_title)) and hasNoClickAction())
-            .assertIsDisplayed()
-        composeRule
-            .onNodeWithText(context.getString(GalleryR.string.feature_gallery_header_today))
-            .assertIsDisplayed()
+        composeRule.awaitDisplayed(
+            hasText(context.getString(GalleryR.string.feature_gallery_title)) and hasNoClickAction(),
+        )
+        composeRule.awaitDisplayed(hasText(context.getString(GalleryR.string.feature_gallery_header_today)))
     }
 
     private fun assertSpacesShown() {
-        composeRule
-            .onNode(hasText(context.getString(SpaceR.string.feature_space_title)) and isHeading())
-            .assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(SpaceR.string.feature_space_text)).assertIsDisplayed()
+        composeRule.awaitDisplayed(hasText(context.getString(SpaceR.string.feature_space_title)) and isHeading())
+        composeRule.awaitDisplayed(hasText(context.getString(SpaceR.string.feature_space_text)))
     }
 }
