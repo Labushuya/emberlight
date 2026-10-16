@@ -3,6 +3,9 @@ package io.github.labushuya.emberlight.buildlogic
 import com.android.build.api.dsl.CommonExtension
 import com.android.build.api.dsl.CompileOptions
 import com.android.build.api.dsl.Lint
+import com.android.build.api.variant.AndroidComponentsExtension
+import com.android.build.api.variant.HasHostTestsBuilder
+import com.android.build.api.variant.HostTestBuilder
 import io.github.takahirom.roborazzi.RoborazziExtension
 import org.gradle.api.JavaVersion
 import org.gradle.api.Project
@@ -60,6 +63,15 @@ internal fun Project.configureUnitTestDependencies() {
     dependencies.add("testImplementation", catalog.library("junit"))
 }
 
+/**
+ * Robolectric lädt das Test-Manifest und die Android-Ressourcen des Moduls nur mit diesem Flag. Ohne Flag läuft der Test
+ * auf einem Fallback-SDK (gemessen: 23 statt 37, drei Tests der Galerie-Anbindung in core:media schlagen fehl).
+ * Deshalb gilt es zentral für alle Android-Module, nicht pro Modul.
+ */
+internal fun CommonExtension.configureUnitTestResources() {
+    testOptions.unitTests.isIncludeAndroidResources = true
+}
+
 /** Kotlin-Compiler: Warnungen sind Fehler, Target ist JVM 17. Funktioniert mit dem integrierten Kotlin von AGP 9. */
 internal fun Project.configureKotlinAndroid() {
     tasks.withType<KotlinCompile>().configureEach { task ->
@@ -83,16 +95,15 @@ internal fun Project.configureCompose(extension: CommonExtension) {
     // Compose synchronisiert unter Robolectric über Espresso. Die von ui-test gezogene Version 3.5 scheitert mit SDK 37
     // (InputManager.getInstance fehlt), daher 3.7.0.
     dependencies.add("testImplementation", catalog.library("androidx-test-espresso-core"))
-    configureScreenshotTests(extension)
+    configureScreenshotTests()
 }
 
 /**
  * Screenshot-Tests (Goldens) mit Roborazzi auf dem JVM, Robolectric mit nativer Grafik. Goldens liegen je Modul in
  * `src/test/screenshots` und werden bei jedem Testlauf verifiziert, nicht still neu aufgenommen (siehe ADR 0006).
  */
-private fun Project.configureScreenshotTests(extension: CommonExtension) {
+private fun Project.configureScreenshotTests() {
     pluginManager.apply(catalog.plugin("roborazzi").get().pluginId)
-    extension.testOptions.unitTests.isIncludeAndroidResources = true
     dependencies.add("testImplementation", catalog.library("robolectric"))
     dependencies.add("testImplementation", catalog.library("androidx-test-ext-junit"))
     dependencies.add("testImplementation", catalog.library("roborazzi"))
@@ -115,6 +126,7 @@ private val JDK_INTERNAL_OPENS = listOf("--add-opens", "java.base/jdk.internal.a
 
 /**
  * Unit-Tests: JDK 21 als Launcher für alle Test-Tasks. Der Build selbst (Compiler, Lint) bleibt auf JDK 17.
+ * Release-Unit-Tests sind abgeschaltet (siehe ADR 0006).
  */
 internal fun Project.configureUnitTests() {
     val toolchains = extensions.getByType<JavaToolchainService>()
@@ -127,4 +139,21 @@ internal fun Project.configureUnitTests() {
         // Robolectric greift unter JDK 17+ auf interne Klassen zu, die Module-System-Öffnung ist dafür nötig.
         task.jvmArgs(JDK_INTERNAL_OPENS)
     }
+    disableReleaseUnitTests()
+}
+
+/**
+ * Release-Unit-Tests werden nicht ausgeführt: R8 greift in Unit-Tests nicht, die Release-Variante
+ * würde nur die Laufzeit verdoppeln. Die Debug-Variante bleibt Maßstab für Tests und Coverage.
+ */
+private fun Project.disableReleaseUnitTests() {
+    // Registriert ist nur der konkrete Typ (App oder Library), daher über den Namen lesen.
+    (extensions.getByName("androidComponents") as AndroidComponentsExtension<*, *, *>)
+        .beforeVariants { variant ->
+            // App- und Library-Builder implementieren HasHostTestsBuilder. Der Callback-Typ ist nur VariantBuilder.
+            val unitTest = (variant as? HasHostTestsBuilder)?.hostTests?.get(HostTestBuilder.UNIT_TEST_TYPE)
+            if (variant.buildType == "release" && unitTest != null) {
+                unitTest.enable = false
+            }
+        }
 }

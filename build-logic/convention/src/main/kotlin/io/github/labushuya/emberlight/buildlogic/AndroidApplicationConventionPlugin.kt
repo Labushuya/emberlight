@@ -26,6 +26,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             configureSdkLevels()
             compileOptions { useJava17() }
             lint { applyEmberlightDefaults(checkDependencies = true) }
+            configureUnitTestResources()
 
             defaultConfig.applicationId = EmberlightConfig.APPLICATION_ID
             defaultConfig.targetSdk { version = release(EmberlightConfig.TARGET_SDK) }

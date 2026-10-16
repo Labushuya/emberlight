@@ -1,9 +1,7 @@
 package io.github.labushuya.emberlight.buildlogic
 
-import com.android.build.api.dsl.LibraryExtension
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.dependencies
 import org.gradle.kotlin.dsl.project
 
@@ -22,10 +20,6 @@ class AndroidFeatureConventionPlugin : Plugin<Project> {
                 .get()
                 .pluginId,
         )
-
-        target.extensions.configure<LibraryExtension> {
-            testOptions.unitTests.isIncludeAndroidResources = true
-        }
 
         val navigation = target.catalog.library("androidx-navigation-compose")
         val hiltNavigation = target.catalog.library("androidx-hilt-navigation-compose")
