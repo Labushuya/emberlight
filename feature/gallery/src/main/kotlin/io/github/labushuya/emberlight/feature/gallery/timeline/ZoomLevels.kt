@@ -11,8 +11,14 @@ import kotlin.math.floor
  * Spalten statt Monate.
  */
 internal object ZoomLevels {
-    /** Ziel-Kachelbreite je Stufe in dp. Die tatsächliche Kachel ist wegen des Rests etwas breiter. */
-    val TILE_WIDTHS_DP: List<Float> = listOf(180f, 120f, 90f, 72f, 52f)
+    /**
+     * Ziel-Kachelbreite je Stufe in dp. Die tatsächliche Kachel ist wegen des Rests etwas breiter.
+     *
+     * Die Werte sind so gewählt, dass die Spaltenzahl auf einem Handy (353 bis 412 dp) bei jeder Stufe aufsteigt, ohne zwei
+     * gleiche Werte. Stufe 0 hat mindestens zwei Spalten. Auf dem Standard (Stufe 2) gibt es 4 Spalten (ADR 0008).
+     * Bei 353 dp: 2, 3, 4, 5, 6 Spalten. Bei 412 dp: 2, 3, 4, 6, 7 Spalten.
+     */
+    val TILE_WIDTHS_DP: List<Float> = listOf(170f, 110f, 84f, 64f, 54f)
 
     const val MIN_LEVEL = 0
     const val MAX_LEVEL = 4

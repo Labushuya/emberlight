@@ -18,6 +18,7 @@ import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
@@ -164,10 +165,8 @@ class GalleryZoomUiTest {
     @Test
     fun dragOnTheFastScrollBarShowsTheMonthBubble() {
         Harness(level = ZoomLevels.DEFAULT_LEVEL).show(composeRule)
-        val rail =
-            composeRule.onNodeWithContentDescription(
-                context.getString(GalleryR.string.feature_gallery_fast_scroll),
-            )
+        showRail()
+        val rail = composeRule.onNodeWithTag(FAST_SCROLL_GRIP_TAG)
         rail.assertIsDisplayed()
 
         rail.performTouchInput {
@@ -175,6 +174,7 @@ class GalleryZoomUiTest {
             moveTo(Offset(center.x, 4f))
         }
         composeRule.waitForIdle()
+        composeRule.mainClock.advanceTimeBy(100)
         composeRule.onNodeWithText(monthLabel(TODAY)).assertIsDisplayed()
 
         rail.performTouchInput { up() }
@@ -184,16 +184,15 @@ class GalleryZoomUiTest {
     @Test
     fun dragToTheEndShowsTheOldestMonth() {
         Harness(level = ZoomLevels.DEFAULT_LEVEL).show(composeRule)
-        val rail =
-            composeRule.onNodeWithContentDescription(
-                context.getString(GalleryR.string.feature_gallery_fast_scroll),
-            )
+        showRail()
+        val rail = composeRule.onNodeWithTag(FAST_SCROLL_GRIP_TAG)
 
         rail.performTouchInput {
             down(center)
-            moveTo(Offset(center.x, height - 4f))
+            moveBy(Offset(0f, 1_000f))
         }
         composeRule.waitForIdle()
+        composeRule.mainClock.advanceTimeBy(100)
         composeRule.onNodeWithText(monthLabel(oldestDate())).assertIsDisplayed()
 
         rail.performTouchInput { up() }
@@ -203,16 +202,15 @@ class GalleryZoomUiTest {
     @Test
     fun monthStageShowsTheYearInTheBubble() {
         Harness(level = ZoomLevels.MAX_LEVEL).show(composeRule)
-        val rail =
-            composeRule.onNodeWithContentDescription(
-                context.getString(GalleryR.string.feature_gallery_fast_scroll),
-            )
+        showRail()
+        val rail = composeRule.onNodeWithTag(FAST_SCROLL_GRIP_TAG)
 
         rail.performTouchInput {
             down(center)
             moveTo(Offset(center.x, 4f))
         }
         composeRule.waitForIdle()
+        composeRule.mainClock.advanceTimeBy(100)
         composeRule.onNodeWithText("2026").assertIsDisplayed()
 
         rail.performTouchInput { up() }
@@ -220,6 +218,17 @@ class GalleryZoomUiTest {
     }
 
     private fun grid() = composeRule.mediaGrid()
+
+    /**
+     * Ein kurzer Wisch, damit die Leiste sichtbar wird. Die Zeit läuft danach von Hand, damit die Leiste offen bleibt,
+     * bis der Griff angefasst wird.
+     */
+    private fun showRail() {
+        composeRule.mainClock.autoAdvance = false
+        grid().performTouchInput { swipeUp(startY = height * 0.7f, endY = height * 0.6f, durationMillis = 150) }
+        composeRule.mainClock.advanceTimeBy(800)
+        composeRule.waitForIdle()
+    }
 
     /** Ruft eine Bedienungshilfe-Aktion des Rasters auf und liefert ihr Ergebnis. */
     private fun invokeAction(label: String): Boolean {

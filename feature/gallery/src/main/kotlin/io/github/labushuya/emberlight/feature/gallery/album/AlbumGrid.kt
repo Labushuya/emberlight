@@ -80,13 +80,14 @@ internal fun AlbumGrid(
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = ALBUM_MIN_WIDTH),
         state = gridState,
-        modifier = modifier.fillMaxSize(),
+        // Das Raster beginnt unter der Kopfzeile, nicht dahinter: Der Rand des Scaffolds liegt im Modifier (siehe MediaGrid).
+        modifier = modifier.fillMaxSize().padding(padding),
         contentPadding =
             PaddingValues(
                 start = ALBUM_PADDING,
                 end = ALBUM_PADDING,
-                top = padding.calculateTopPadding() + ALBUM_PADDING,
-                bottom = padding.calculateBottomPadding() + ALBUM_PADDING,
+                top = ALBUM_PADDING,
+                bottom = ALBUM_PADDING,
             ),
         horizontalArrangement = Arrangement.spacedBy(ALBUM_GAP),
         verticalArrangement = Arrangement.spacedBy(ALBUM_GAP),
