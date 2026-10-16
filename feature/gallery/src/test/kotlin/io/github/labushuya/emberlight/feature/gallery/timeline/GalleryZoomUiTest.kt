@@ -33,6 +33,7 @@ import io.github.labushuya.emberlight.feature.gallery.GalleryUiState
 import io.github.labushuya.emberlight.feature.gallery.album.AlbumList
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.TODAY
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
+import io.github.labushuya.emberlight.feature.gallery.viewer.testPlayback
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -256,7 +257,7 @@ class GalleryZoomUiTest {
                         state = GalleryUiState(grid = content(), albums = AlbumList(emptyList())),
                         onRequestPermission = {},
                         onOpenSettings = {},
-                        onMediaClick = {},
+                        playback = testPlayback(),
                         onAlbumClick = {},
                         onZoomLevelChange = { next ->
                             changes += next

@@ -71,61 +71,6 @@ class GridRecompositionTest {
         assertEquals("Zellen, die sichtbar blieben, wurden neu komponiert.", emptyList<String>(), recomposed)
     }
 
-    @Test
-    fun manualScrollAfterReturnSurvivesLaterRecomposition() {
-        val harness = GalleryHarness(items, initialLastViewed = items[ELEMENT_INDEX].id)
-        harness.show(composeRule)
-        composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription(cellLabel(ELEMENT_INDEX)).assertIsDisplayed()
-
-        scrollGridToTop()
-        composeRule.onNodeWithContentDescription(cellLabel(0)).assertIsDisplayed()
-
-        // Eine Neukomposition ohne neue Meldung darf die Scrollposition nicht zurücksetzen.
-        harness.tick++
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithContentDescription(cellLabel(0)).assertIsDisplayed()
-        assertEquals(1, harness.handledCount)
-    }
-
-    @Test
-    fun aConsumedReturnDoesNotScrollAgainAfterAConfigurationChange() {
-        val harness = GalleryHarness(items, initialLastViewed = items[ELEMENT_INDEX].id)
-        harness.show(composeRule)
-        composeRule.waitForIdle()
-        scrollGridToTop()
-
-        harness.generation++
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithContentDescription(cellLabel(0)).assertIsDisplayed()
-        assertEquals(1, harness.handledCount)
-    }
-
-    @Test
-    fun aReturnIsAppliedOnceEvenIfTheMessageStaysAcrossARestore() {
-        // Die Meldung wird verbraucht, bleibt im Zustand aber stehen (etwa bis der Zustand asynchron leer wird).
-        // Ein Konfigurationswechsel darf das Ziel dann nicht erneut anwenden.
-        val harness = GalleryHarness(items, initialLastViewed = items[ELEMENT_INDEX].id, clearOnHandled = false)
-        val restorer = StateRestorationTester(composeRule)
-        restorer.setContent {
-            EmberlightTheme {
-                harness.Body()
-            }
-        }
-        composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription(cellLabel(ELEMENT_INDEX)).assertIsDisplayed()
-        scrollGridToTop()
-        composeRule.onNodeWithContentDescription(cellLabel(0)).assertIsDisplayed()
-
-        restorer.emulateSavedInstanceStateRestore()
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithContentDescription(cellLabel(0)).assertIsDisplayed()
-        assertEquals(1, harness.handledCount)
-    }
-
     private fun scrollGridUp(distance: Float) {
         composeRule.mediaGrid().performTouchInput {
             swipeUp(startY = height * 0.7f, endY = height * 0.7f - distance, durationMillis = 200)

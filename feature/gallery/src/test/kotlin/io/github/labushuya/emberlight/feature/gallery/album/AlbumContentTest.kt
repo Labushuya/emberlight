@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -30,6 +31,8 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineGrouping
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
 import io.github.labushuya.emberlight.feature.gallery.timeline.mediaGrid
 import io.github.labushuya.emberlight.feature.gallery.timeline.pinchApart
+import io.github.labushuya.emberlight.feature.gallery.viewer.VIEWER_OVERLAY_TAG
+import io.github.labushuya.emberlight.feature.gallery.viewer.testPlayback
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -122,13 +125,15 @@ class AlbumContentTest {
     }
 
     @Test
-    fun tappingAMediaCellReportsTheItem() {
-        val tapped = mutableListOf<MediaItem>()
-        show(contentState(), album = camera(), onMediaClick = { tapped += it })
+    fun tappingAMediaCellOpensTheViewerOverTheGrid() {
+        show(contentState(), album = camera())
 
         composeRule.onAllNodes(hasContentDescription("Photo from", substring = true)).onFirst().performClick()
+        composeRule.waitForIdle()
 
-        assertEquals(1, tapped.size)
+        // Der Viewer liegt über dem Raster. Das Raster bleibt im Baum, der Viewer ist einmal offen.
+        composeRule.onAllNodesWithTag(VIEWER_OVERLAY_TAG).assertCountEquals(1)
+        composeRule.onAllNodes(hasContentDescription("Photo from", substring = true)).onFirst().assertExists()
     }
 
     @Test
@@ -170,7 +175,7 @@ class AlbumContentTest {
                         onBack = {},
                         onRequestPermission = {},
                         onOpenSettings = {},
-                        onMediaClick = {},
+                        playback = testPlayback(),
                         onZoomLevelChange = { next ->
                             changes += next
                             level = next
@@ -185,7 +190,6 @@ class AlbumContentTest {
         grid: MediaGridState,
         album: Album?,
         onBack: () -> Unit = {},
-        onMediaClick: (MediaItem) -> Unit = {},
     ) {
         composeRule.setContent {
             EmberlightTheme {
@@ -194,7 +198,7 @@ class AlbumContentTest {
                     onBack = onBack,
                     onRequestPermission = {},
                     onOpenSettings = {},
-                    onMediaClick = onMediaClick,
+                    playback = testPlayback(),
                     onZoomLevelChange = {},
                 )
             }

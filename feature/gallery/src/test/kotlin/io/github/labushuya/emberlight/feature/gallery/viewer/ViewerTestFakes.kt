@@ -1,7 +1,9 @@
 package io.github.labushuya.emberlight.feature.gallery.viewer
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -15,33 +17,33 @@ import org.robolectric.shadows.ShadowLooper
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
-/** Viewer mit festen Werten für Goldens: Zeitzone Berlin, keine Rückrufe, nur die Leisten sind wählbar. */
+/**
+ * Overlay mit festen Werten für Goldens: Zeitzone Berlin, geöffnet auf das erste Element (ohne Animation), nur die Leisten sind
+ * wählbar. Die Wiedergabe ist ein Halter ohne Player.
+ */
 @Composable
 internal fun ViewerGoldenContent(
     items: List<ViewerItem>,
     chromeVisible: Boolean,
 ) {
     EmberlightTheme {
-        ViewerContent(
+        val scope = rememberCoroutineScope()
+        // Geöffnet ohne Animation: Die Phase beginnt mit der gewählten ID im Zustand OPEN.
+        val overlay = remember(scope) { ViewerOverlayState(scope, mutableStateOf(items.first().id), { null }) }
+        ViewerOverlay(
+            overlay = overlay,
             items = items,
-            index = 0,
-            playback = VideoPlaybackState(),
-            muted = false,
-            player = null,
-            chromeVisible = chromeVisible,
-            onChromeToggle = {},
-            onBack = {},
-            onPageAtRest = {},
-            onPlay = {},
-            onPause = {},
-            onSeek = {},
-            onToggleMute = {},
-            onVideoEnd = {},
-            onVideoError = {},
+            playback = remember { ViewerPlaybackViewModel(NoPlayers) },
             imageSource = solidImageSources,
+            initialChromeVisible = chromeVisible,
             zone = ZoneId.of("Europe/Berlin"),
         )
     }
+}
+
+/** Fabrik ohne Player: Goldens spielen nichts ab. */
+internal object NoPlayers : VideoPlayerFactory {
+    override fun create(): Nothing = error("Goldens spielen kein Video ab.")
 }
 
 /** Einfarbiges Bild mit festem Seitenverhältnis. Telephoto braucht eine Größe, um zu zoomen. */
@@ -68,7 +70,7 @@ internal class SolidImageSource(
 }
 
 /** Bildquelle für alle Seiten der Tests: jede Seite bekommt eine warme Farbe aus einer festen Palette. */
-internal val solidImageSources: ViewerImageSource = { item, _ ->
+internal val solidImageSources: ViewerImageSource = { item, _, _ ->
     val color = warmPalette[(item.id % warmPalette.size).toInt()]
     remember(item.id) { SolidImageSource(solidPainter(color)) }
 }
@@ -141,3 +143,6 @@ internal fun flushMainLooper() {
 }
 
 private const val FLUSH_SECONDS = 5L
+
+/** Wiedergabe-Halter für Tests, die keinen Player brauchen. */
+internal fun testPlayback(): ViewerPlaybackViewModel = ViewerPlaybackViewModel(NoPlayers)

@@ -13,6 +13,7 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineGrouping
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
+import io.github.labushuya.emberlight.feature.gallery.viewer.testPlayback
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -76,7 +77,7 @@ class AlbumScreenshotTest {
                     onBack = {},
                     onRequestPermission = {},
                     onOpenSettings = {},
-                    onMediaClick = {},
+                    playback = testPlayback(),
                     onZoomLevelChange = {},
                 )
             }

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.center
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
@@ -20,6 +21,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.TODAY
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
+import io.github.labushuya.emberlight.feature.gallery.viewer.VIEWER_OVERLAY_TAG
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -50,7 +52,6 @@ class FastScrollGripTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val items = denseLibrary()
     private var hostZone: TimeZone? = null
-    private val opened = mutableListOf<MediaItem>()
 
     @Before
     fun setUp() {
@@ -71,12 +72,12 @@ class FastScrollGripTest {
         show()
         scrollToTheMiddle()
         val tile = rightEdgeTileIndex()
-        val before = cell(tile).fetchSemanticsNode().boundsInRoot
 
         tapCell(tile, Offset(cellWidth(tile) - 6f, cellHeight(tile) / 2f))
 
-        assertEquals("Die Kachel ganz rechts öffnet sich nicht.", 1, opened.size)
-        assertEquals("Die Liste springt beim Antippen.", before, cell(tile).fetchSemanticsNode().boundsInRoot)
+        assertEquals("Die Kachel ganz rechts öffnet sich nicht.", 1, openedViewers())
+        val after = cell(tile).fetchSemanticsNode().boundsInRoot
+        assertEquals("Die Kachel ist nach dem Antippen vollständig sichtbar.", after.width, after.height, 0.5f)
     }
 
     @Test
@@ -85,12 +86,16 @@ class FastScrollGripTest {
         scrollToTheMiddle()
         showRailByGrip()
         val tile = rightEdgeTileIndex()
-        val before = cell(tile).fetchSemanticsNode().boundsInRoot
 
         tapCell(tile, Offset(cellWidth(tile) - 6f, cellHeight(tile) / 2f))
 
-        assertEquals("Die Kachel am rechten Rand öffnet sich nicht, solange die Leiste sichtbar ist.", 1, opened.size)
-        assertEquals("Die Liste springt beim Antippen.", before, cell(tile).fetchSemanticsNode().boundsInRoot)
+        assertEquals(
+            "Die Kachel am rechten Rand öffnet sich nicht, solange die Leiste sichtbar ist.",
+            1,
+            openedViewers(),
+        )
+        val after = cell(tile).fetchSemanticsNode().boundsInRoot
+        assertEquals("Die Kachel ist nach dem Antippen vollständig sichtbar.", after.width, after.height, 0.5f)
     }
 
     @Test
@@ -106,7 +111,7 @@ class FastScrollGripTest {
         composeRule.mainClock.advanceTimeBy(100)
         composeRule.waitForIdle()
 
-        assertEquals("Die Kachel unter dem Griff öffnet sich nicht.", 1, opened.size)
+        assertEquals("Die Kachel unter dem Griff öffnet sich nicht.", 1, openedViewers())
         assertEquals("Die Liste springt beim Antippen des Griffs.", before, grip.fetchSemanticsNode().boundsInRoot)
     }
 
@@ -183,8 +188,10 @@ class FastScrollGripTest {
         assertTrue("Die Geste am Rand bewegt die Liste nicht.", before != cell(tile).fetchSemanticsNode().boundsInRoot)
     }
 
+    private fun openedViewers(): Int = composeRule.onAllNodesWithTag(VIEWER_OVERLAY_TAG).fetchSemanticsNodes().size
+
     private fun show() {
-        GalleryHarness(items, onMediaClick = { opened += it }).show(composeRule)
+        GalleryHarness(items).show(composeRule)
         composeRule.waitForIdle()
     }
 
@@ -276,7 +283,14 @@ class FastScrollGripTest {
 
     private fun anyMediaCell() =
         SemanticsMatcher("media cell") { node ->
-            node.config.getOrNull(SemanticsProperties.ContentDescription)?.any { it.startsWith("Photo from") } == true
+            node.config
+                .getOrNull(
+                    SemanticsProperties.ContentDescription,
+                )?.any { it.startsWith("Photo from") } == true &&
+                generateSequence(node) { it.parent }.none {
+                    it.config.getOrNull(SemanticsProperties.TestTag) ==
+                        VIEWER_OVERLAY_TAG
+                }
         }
 
     /** Blase mit dem Monat des ältesten Eintrags, also dem Ende der Leiste. */

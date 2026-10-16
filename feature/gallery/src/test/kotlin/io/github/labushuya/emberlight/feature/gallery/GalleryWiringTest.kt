@@ -27,6 +27,7 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFormats
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevelStore
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
+import io.github.labushuya.emberlight.feature.gallery.viewer.testPlayback
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,7 +86,7 @@ class GalleryWiringTest {
 
         composeRule.setContent {
             EmberlightTheme {
-                GalleryScreen(viewModel = viewModel)
+                GalleryScreen(viewModel = viewModel, playback = testPlayback())
             }
         }
 
