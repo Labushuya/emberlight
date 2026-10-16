@@ -54,6 +54,13 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             releaseType.isMinifyEnabled = true
             releaseType.isShrinkResources = true
             releaseType.proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+
+            // Debug- und Release-Builds sind unterschiedlich signiert und sollen nebeneinander
+            // installierbar sein. Deshalb bekommt der Debug-Build eine eigene App-Kennung.
+            // Der namespace bleibt unverändert, Paketnamen im Code ändern sich nicht.
+            val debugType = buildTypes.getByName("debug")
+            debugType.applicationIdSuffix = ".debug"
+            debugType.versionNameSuffix = "-debug"
         }
 
         if (!signingReady && missingSigning.size < ReleaseSigning.VARIABLES.size) {
