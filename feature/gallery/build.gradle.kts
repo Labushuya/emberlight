@@ -27,9 +27,9 @@ dependencies {
     testImplementation(libs.androidx.media3.test.utils.robolectric)
 }
 
-// Viewer-Goldens laufen je Klasse in einem eigenen Prozess (ADR 0010). Im gemeinsamen Lauf entstanden leere Aufnahmen,
-// sobald vorher Galerie-Goldens gelaufen waren. Allein aufgenommen und geprüft sind sie stabil. Die Ursache im
-// gemeinsamen Robolectric-Zustand ist nicht geklärt, deshalb die Isolation über den Prozess.
+// Viewer-Goldens laufen in einem eigenen Prozess, getrennt vom Hauptlauf (ADR 0010). Im Gesamtlauf der Galerie-Tests
+// entstanden leere Aufnahmen. Gemeinsam in einem Prozess sind alle vier Klassen stabil. Die Ursache ist nicht geklärt
+// (ADR 0006, Befund), deshalb die Isolation.
 val viewerGoldenClasses = "**/viewer/Viewer*ScreenshotTest.class"
 // Die Android-Unit-Test-Tasks entstehen erst nach der Auswertung des Moduls.
 afterEvaluate {
@@ -38,11 +38,10 @@ afterEvaluate {
     val viewerGoldenTest =
         tasks.register<Test>("testViewerGoldens") {
             group = "verification"
-            description = "Viewer-Goldens, je Klasse in einem eigenen Prozess (ADR 0010)."
+            description = "Viewer-Goldens, alle Klassen in einem gemeinsamen eigenen Prozess (ADR 0010)."
             testClassesDirs = unitTestTask.get().testClassesDirs
             classpath = unitTestTask.get().classpath
             include(viewerGoldenClasses)
-            forkEvery = 1
             systemProperties(unitTestTask.get().systemProperties)
         }
     tasks.named("check") { dependsOn(viewerGoldenTest) }
