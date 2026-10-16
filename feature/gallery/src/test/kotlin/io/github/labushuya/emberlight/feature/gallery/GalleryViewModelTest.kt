@@ -49,7 +49,7 @@ class GalleryViewModelTest {
         runTest(dispatcher) {
             val vm = viewModel(FakeRepository(MediaLibraryState.Loading), FakeStore(asked = false))
 
-            assertEquals(MediaGridState.Loading, vm.uiState.value)
+            assertEquals(MediaGridState.Loading, vm.uiState.value.grid)
         }
 
     @Test
@@ -60,7 +60,7 @@ class GalleryViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            assertEquals(MediaGridState.PermissionRequired(canRequest = true), vm.uiState.value)
+            assertEquals(MediaGridState.PermissionRequired(canRequest = true), vm.uiState.value.grid)
         }
 
     @Test
@@ -72,7 +72,7 @@ class GalleryViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            assertEquals(MediaGridState.PermissionRequired(canRequest = false), vm.uiState.value)
+            assertEquals(MediaGridState.PermissionRequired(canRequest = false), vm.uiState.value.grid)
         }
 
     @Test
@@ -87,7 +87,7 @@ class GalleryViewModelTest {
             vm.onPermissionResult(showRationale = true)
             advanceUntilIdle()
 
-            assertEquals(MediaGridState.PermissionRequired(canRequest = true), vm.uiState.value)
+            assertEquals(MediaGridState.PermissionRequired(canRequest = true), vm.uiState.value.grid)
             assertTrue(store.askedFlag.value)
             assertEquals(1, repository.refreshCount)
         }
@@ -100,14 +100,14 @@ class GalleryViewModelTest {
             collect(vm)
             advanceUntilIdle()
             // Während der Dialog offen ist, gilt die Anfrage noch nicht als gestellt. Der Dialog bleibt anbietbar.
-            assertEquals(MediaGridState.PermissionRequired(canRequest = true), vm.uiState.value)
+            assertEquals(MediaGridState.PermissionRequired(canRequest = true), vm.uiState.value.grid)
             assertEquals(false, store.askedFlag.value)
 
             vm.onPermissionResult(showRationale = false)
             advanceUntilIdle()
 
             assertTrue(store.askedFlag.value)
-            assertEquals(MediaGridState.PermissionRequired(canRequest = false), vm.uiState.value)
+            assertEquals(MediaGridState.PermissionRequired(canRequest = false), vm.uiState.value.grid)
         }
 
     @Test
@@ -135,7 +135,7 @@ class GalleryViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            assertEquals(MediaGridState.Empty(MediaAccess.FULL, emptySet()), vm.uiState.value)
+            assertEquals(MediaGridState.Empty(MediaAccess.FULL, emptySet()), vm.uiState.value.grid)
         }
 
     @Test
@@ -147,7 +147,7 @@ class GalleryViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            val content = vm.uiState.value as MediaGridState.Content
+            val content = vm.uiState.value.grid as MediaGridState.Content
             assertEquals(TimelineHeader.Today, content.sections.first().header)
             assertEquals(MediaAccess.FULL, content.access)
         }
@@ -163,7 +163,7 @@ class GalleryViewModelTest {
             vm.onZoomLevelChanged(ZoomLevels.LAST_DAY_LEVEL + 1)
             advanceUntilIdle()
 
-            val content = vm.uiState.value as MediaGridState.Content
+            val content = vm.uiState.value.grid as MediaGridState.Content
             assertEquals(TimelineHeader.Month(YearMonth.of(2026, 10)), content.sections.first().header)
             assertEquals(ZoomLevels.LAST_DAY_LEVEL + 1, content.zoomLevel)
         }
@@ -181,7 +181,7 @@ class GalleryViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            val content = vm.uiState.value as MediaGridState.Content
+            val content = vm.uiState.value.grid as MediaGridState.Content
             assertEquals(ZoomLevels.MAX_LEVEL, content.zoomLevel)
             assertEquals(TimelineHeader.Month(YearMonth.of(2026, 10)), content.sections.first().header)
         }
@@ -198,7 +198,7 @@ class GalleryViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            assertEquals(ZoomLevels.DEFAULT_LEVEL, (vm.uiState.value as MediaGridState.Content).zoomLevel)
+            assertEquals(ZoomLevels.DEFAULT_LEVEL, (vm.uiState.value.grid as MediaGridState.Content).zoomLevel)
         }
 
     @Test
@@ -218,7 +218,7 @@ class GalleryViewModelTest {
             advanceUntilIdle()
 
             assertEquals(ZoomLevels.MAX_LEVEL, zoomStore.saved)
-            assertEquals(ZoomLevels.MAX_LEVEL, (vm.uiState.value as MediaGridState.Content).zoomLevel)
+            assertEquals(ZoomLevels.MAX_LEVEL, (vm.uiState.value.grid as MediaGridState.Content).zoomLevel)
         }
 
     @Test
@@ -230,7 +230,7 @@ class GalleryViewModelTest {
             collect(vm)
             advanceUntilIdle()
 
-            assertEquals(setOf(MediaType.VIDEO), (vm.uiState.value as MediaGridState.Content).missingTypes)
+            assertEquals(setOf(MediaType.VIDEO), (vm.uiState.value.grid as MediaGridState.Content).missingTypes)
         }
 
     private fun TestScope.collect(vm: GalleryViewModel) {

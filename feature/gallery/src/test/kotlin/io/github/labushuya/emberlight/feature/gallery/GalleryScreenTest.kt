@@ -168,11 +168,12 @@ class GalleryScreenTest {
         composeRule.setContent {
             EmberlightTheme {
                 GalleryContent(
-                    state = state,
+                    state = GalleryUiState(grid = state, albums = emptyList()),
                     onZoomLevelChange = {},
                     onRequestPermission = onRequest,
                     onOpenSettings = onOpenSettings,
                     onMediaClick = {},
+                    onAlbumClick = {},
                 )
             }
         }

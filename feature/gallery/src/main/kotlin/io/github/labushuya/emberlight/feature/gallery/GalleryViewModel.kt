@@ -2,9 +2,9 @@ package io.github.labushuya.emberlight.feature.gallery
 
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.labushuya.emberlight.core.media.MediaRepository
+import io.github.labushuya.emberlight.feature.gallery.album.albumsOf
 import io.github.labushuya.emberlight.feature.gallery.di.DefaultDispatcher
 import io.github.labushuya.emberlight.feature.gallery.permission.PermissionPromptStore
-import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridViewModel
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaScope
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevelStore
@@ -14,7 +14,7 @@ import java.time.Clock
 import java.time.ZoneId
 import javax.inject.Inject
 
-/** Galerie mit allen Einträgen: Zustand des Fotos-Reiters. */
+/** Zustand der Galerie: alle Einträge für den Fotos-Reiter, die Alben für den Alben-Reiter. */
 @HiltViewModel
 internal class GalleryViewModel
     @Inject
@@ -34,5 +34,8 @@ internal class GalleryViewModel
             zone = zone,
             scope = MediaScope.All,
         ) {
-        val uiState: StateFlow<MediaGridState> = viewState(MediaGridState.Loading) { _, grid -> grid }
+        val uiState: StateFlow<GalleryUiState> =
+            viewState(GalleryUiState.Loading) { input, grid ->
+                GalleryUiState(grid = grid, albums = albumsOf(input.library))
+            }
     }
