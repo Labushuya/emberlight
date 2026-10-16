@@ -2,6 +2,7 @@ package io.github.labushuya.emberlight
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasNoClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
@@ -32,7 +33,7 @@ import io.github.labushuya.emberlight.feature.space.R as SpaceR
  * setzt auf die Ressourcen der Module, nicht auf fest eingetragene Texte, damit er für Deutsch und Englisch gleich bleibt.
  *
  * Hilt liefert den Medienindex als Fake mit festen Daten (siehe TestSeams). Der Compose-Rule setzt keinen eigenen
- * Inhalt, weil MainActivity ihn selbst setzt.
+ * Inhalt, weil MainActivity ihn selbst setzt. Die Navigation der Alben steht in [EmberlightAlbumNavigationTest].
  */
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -116,7 +117,7 @@ class EmberlightAppNavigationTest {
 
     private fun assertTimelineShown() {
         composeRule
-            .onNodeWithText(context.getString(GalleryR.string.feature_gallery_title))
+            .onNode(hasText(context.getString(GalleryR.string.feature_gallery_title)) and hasNoClickAction())
             .assertIsDisplayed()
         composeRule
             .onNodeWithText(context.getString(GalleryR.string.feature_gallery_header_today))

@@ -12,6 +12,7 @@ import dagger.hilt.testing.TestInstallIn
 import io.github.labushuya.emberlight.core.media.MediaLibraryState
 import io.github.labushuya.emberlight.core.media.MediaRepository
 import io.github.labushuya.emberlight.core.media.di.MediaRepositoryModule
+import io.github.labushuya.emberlight.core.media.model.Album
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.model.MediaLibrary
 import io.github.labushuya.emberlight.core.media.model.MediaType
@@ -55,31 +56,73 @@ class FakeMediaRepository
         }
 
         companion object {
+            /** Ordner der Beispieldaten: Kamera, Screenshots und Downloads. Der Eintrag ohne Ordner ist „Sonstige“. */
+            const val CAMERA_BUCKET = 1L
+            const val SCREENSHOT_BUCKET = 2L
+            const val DOWNLOAD_BUCKET = 3L
+
             fun sampleLibrary(
                 items: List<MediaItem> = sampleItems(),
                 access: MediaAccess = MediaAccess.FULL,
                 missingTypes: Set<MediaType> = emptySet(),
             ): MediaLibrary =
-                MediaLibrary(items = items, albums = emptyList(), mediaAccess = access, missingTypes = missingTypes)
+                MediaLibrary(items = items, albums = albumsOf(items), mediaAccess = access, missingTypes = missingTypes)
 
-            /** Absteigend sortiert: Heute, Gestern, Oktober, Juli (mit Stunden-Video), Juni 2025. */
+            /** Absteigend sortiert: Heute, Gestern, Oktober, Juli (mit Stunden-Video), Juni 2025. Mit Ordnern wie in den Feature-Tests. */
             fun sampleItems(): List<MediaItem> =
                 listOf(
                     item(9, "2026-10-16T09:30", MediaType.VIDEO, durationMs = 42_000L),
                     item(8, "2026-10-16T08:15"),
-                    item(7, "2026-10-15T19:40"),
+                    item(7, "2026-10-15T19:40", bucketId = SCREENSHOT_BUCKET, bucketName = "Screenshots"),
                     item(6, "2026-10-15T10:02"),
                     item(5, "2026-10-12T17:55"),
-                    item(4, "2026-07-02T21:10", MediaType.VIDEO, durationMs = 3_723_000L),
-                    item(3, "2025-06-03T11:00"),
-                    item(2, "2025-06-03T10:30"),
+                    item(
+                        4,
+                        "2026-07-02T21:10",
+                        MediaType.VIDEO,
+                        durationMs = 3_723_000L,
+                        bucketId = null,
+                        bucketName = null,
+                    ),
+                    item(3, "2025-06-03T11:00", bucketId = DOWNLOAD_BUCKET, bucketName = "Downloads"),
+                    item(2, "2025-06-03T10:30", bucketId = DOWNLOAD_BUCKET, bucketName = "Downloads"),
                 )
+
+            /**
+             * Alben wie der Index sie bildet: je Ordner das neueste Element als Cover, die Anzahl, der jüngste Zeitpunkt.
+             * Sortiert neueste zuerst, bei Gleichstand der Ordner ohne Namen zuletzt.
+             */
+            fun albumsOf(items: List<MediaItem>): List<Album> {
+                val byBucket = LinkedHashMap<Long?, MutableList<MediaItem>>()
+                items.sortedByDescending { it.timestamp }.forEach {
+                    byBucket
+                        .getOrPut(
+                            it.bucketId,
+                        ) { mutableListOf() }
+                        .add(it)
+                }
+                return byBucket
+                    .map { (bucketId, list) ->
+                        Album(
+                            bucketId = bucketId,
+                            name = list.first().bucketName.orEmpty(),
+                            cover = list.first(),
+                            itemCount = list.size,
+                            latestTimestamp = list.first().timestamp,
+                        )
+                    }.sortedWith(
+                        compareByDescending<Album> { it.latestTimestamp }
+                            .thenBy(nullsLast()) { it.bucketId },
+                    )
+            }
 
             private fun item(
                 id: Long,
                 localDateTime: String,
                 type: MediaType = MediaType.IMAGE,
                 durationMs: Long? = null,
+                bucketId: Long? = CAMERA_BUCKET,
+                bucketName: String? = "Camera",
             ): MediaItem =
                 MediaItem(
                     id = id,
@@ -99,8 +142,8 @@ class FakeMediaRepository
                     orientation = 0,
                     durationMs = durationMs,
                     sizeBytes = 1_000_000L,
-                    bucketId = 1L,
-                    bucketName = "Camera",
+                    bucketId = bucketId,
+                    bucketName = bucketName,
                     relativePath = "DCIM/Camera/",
                     volumeName = "external_primary",
                 )
