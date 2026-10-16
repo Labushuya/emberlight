@@ -14,7 +14,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
-import io.github.labushuya.emberlight.feature.gallery.timeline.DEFAULT_COLUMNS
 import io.github.labushuya.emberlight.feature.gallery.timeline.GalleryContent
 import io.github.labushuya.emberlight.feature.gallery.timeline.GroupingMode
 import io.github.labushuya.emberlight.feature.gallery.timeline.TestThumbnails
@@ -22,7 +21,9 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.TODAY
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineGrouping
+import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineSection
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineUiState
+import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -130,7 +131,7 @@ class GalleryScreenTest {
                 durationMs = 3_723_000L,
             )
         val sections = TimelineGrouping.group(listOf(hourLong), GroupingMode.DAY, TODAY, ZONE)
-        setContent(TimelineUiState.Content(sections, MediaAccess.FULL, emptySet()))
+        setContent(contentOf(sections, MediaAccess.FULL, emptySet()))
 
         composeRule.onNodeWithText("1:02:03", useUnmergedTree = true).assertIsDisplayed()
     }
@@ -146,7 +147,7 @@ class GalleryScreenTest {
     fun missingVideosGiveAHintWithARequestAction() {
         var requests = 0
         setContent(
-            TimelineUiState.Content(
+            contentOf(
                 sections = sections(),
                 access = MediaAccess.FULL,
                 missingTypes = setOf(MediaType.VIDEO),
@@ -169,7 +170,7 @@ class GalleryScreenTest {
             EmberlightTheme {
                 GalleryContent(
                     state = state,
-                    columns = DEFAULT_COLUMNS,
+                    onZoomLevelChange = {},
                     onRequestPermission = onRequest,
                     onOpenSettings = onOpenSettings,
                     onMediaClick = {},
@@ -178,11 +179,18 @@ class GalleryScreenTest {
         }
     }
 
+    private fun contentOf(
+        sections: List<TimelineSection>,
+        access: MediaAccess,
+        missingTypes: Set<MediaType>,
+        zoomLevel: Int = ZoomLevels.DEFAULT_LEVEL,
+    ): TimelineUiState.Content = TimelineUiState.Content(sections, access, missingTypes, zoomLevel, TODAY)
+
     private fun sections() = TimelineGrouping.group(TimelineFixtures.sampleItems(), GroupingMode.DAY, TODAY, ZONE)
 
-    private fun contentState() = TimelineUiState.Content(sections(), MediaAccess.FULL, emptySet())
+    private fun contentState() = contentOf(sections(), MediaAccess.FULL, emptySet())
 
-    private fun partialContent() = TimelineUiState.Content(sections(), MediaAccess.PARTIAL, emptySet())
+    private fun partialContent() = contentOf(sections(), MediaAccess.PARTIAL, emptySet())
 
     private fun string(id: Int): String = context.getString(id)
 }
