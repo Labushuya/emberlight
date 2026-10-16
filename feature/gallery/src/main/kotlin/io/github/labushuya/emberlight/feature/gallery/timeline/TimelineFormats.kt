@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.feature.gallery.timeline
 
 import android.text.format.DateFormat
+import androidx.compose.runtime.Stable
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -9,10 +10,11 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Datumstexte für Überschriften und Bildbeschreibungen in der Sprache der App. Die Muster kommen aus
- * `DateFormat.getBestDateTimePattern`, damit die Reihenfolge von Tag, Monat und Jahr je Sprache stimmt.
+ * Datumstexte für Überschriften, Bildbeschreibungen und die Schnell-Scrollblase in der Sprache der App. Die Muster kommen
+ * aus `DateFormat.getBestDateTimePattern`, damit die Reihenfolge von Tag, Monat und Jahr je Sprache stimmt.
  * Ein Objekt pro Sprache, nicht pro Zelle, das ist die Kostenstelle der Zeitleiste.
  */
+@Stable
 internal class TimelineFormats(
     locale: Locale,
     private val zone: ZoneId,
@@ -20,6 +22,7 @@ internal class TimelineFormats(
     private val dayWithWeekday = formatter(locale, "EEEEdMMMM")
     private val dayWithYear = formatter(locale, "EEEEdMMMMy")
     private val month = formatter(locale, "MMMMy")
+    private val year = formatter(locale, "y")
     private val longDate = formatter(locale, "dMMMMy")
 
     fun dayHeader(
@@ -28,6 +31,16 @@ internal class TimelineFormats(
     ): String = (if (withYear) dayWithYear else dayWithWeekday).format(date)
 
     fun monthHeader(yearMonth: YearMonth): String = month.format(yearMonth)
+
+    /** Text der Schnell-Scrollblase: „Oktober 2026“ bei Tagesgruppen, „2026“ bei Monatsgruppen. */
+    fun scrollLabel(
+        mode: GroupingMode,
+        date: LocalDate,
+    ): String =
+        when (mode) {
+            GroupingMode.DAY -> monthHeader(YearMonth.from(date))
+            GroupingMode.MONTH -> year.format(date)
+        }
 
     /** Datum eines Eintrags in der Zone der Galerie, etwa „16. Oktober 2026“. */
     fun longDate(timestampMillis: Long): String = longDate.format(Instant.ofEpochMilli(timestampMillis).atZone(zone))

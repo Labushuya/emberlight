@@ -19,4 +19,11 @@
     <string name="feature_gallery_missing_videos">Videos sind noch nicht freigegeben.</string>
     <string name="feature_gallery_empty_title">Noch keine Fotos oder Videos</string>
     <string name="feature_gallery_empty_text">Fotos und Videos auf diesem Gerät erscheinen hier.</string>
+    <string name="feature_gallery_zoom_in">Ansicht vergrößern</string>
+    <string name="feature_gallery_zoom_out">Ansicht verkleinern</string>
+    <string name="feature_gallery_fast_scroll">Schnell-Scrollleiste</string>
+    <plurals name="feature_gallery_zoom_columns">
+        <item quantity="one">%d Spalte</item>
+        <item quantity="other">%d Spalten</item>
+    </plurals>
 </resources>

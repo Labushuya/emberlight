@@ -4,7 +4,6 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -18,7 +17,6 @@ import io.github.labushuya.emberlight.core.media.permission.requiredPermissions
 import io.github.labushuya.emberlight.feature.gallery.permission.anyPermissionRationale
 import io.github.labushuya.emberlight.feature.gallery.permission.appSettingsIntent
 import io.github.labushuya.emberlight.feature.gallery.permission.findActivity
-import io.github.labushuya.emberlight.feature.gallery.timeline.DEFAULT_COLUMNS
 import io.github.labushuya.emberlight.feature.gallery.timeline.GalleryContent
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineViewModel
 
@@ -46,16 +44,13 @@ internal fun GalleryScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.onResumed(showRationale = activity.anyPermissionRationale(permissions))
     }
-    LaunchedEffect(DEFAULT_COLUMNS) {
-        viewModel.onColumnsChanged(DEFAULT_COLUMNS)
-    }
 
     GalleryContent(
         state = state,
-        columns = DEFAULT_COLUMNS,
         onRequestPermission = { permissionLauncher.launch(permissions.toTypedArray()) },
         onOpenSettings = { context.startActivity(appSettingsIntent(context)) },
         onMediaClick = onMediaClick,
+        onZoomLevelChange = viewModel::onZoomLevelChanged,
         modifier = modifier,
     )
 }
