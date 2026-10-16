@@ -145,3 +145,9 @@ Kover 0.9.11 läuft mit AGP 9.4.1 und dem eingebauten Kotlin. Es gab keinen Fehl
 - Kover-Gradle-Plugin 0.9.11 auf Maven Central: https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kover-gradle-plugin/0.9.11/kover-gradle-plugin-0.9.11.pom
 - Kover-Doku (Gradle-Plugin): https://kotlin.github.io/kotlinx-kover/gradle-plugin/
 - Messläufe: [PR #5](https://github.com/Labushuya/emberlight/pull/5), Run 38877425442 (grün) und Run 38878763624 (Gegenprobe, rot).
+
+## Nachtrag Paket 5a: Viewer-Goldens in eigener Testaufgabe
+
+Die Goldens des Vollbild-Viewers (ADR 0010) laufen in der Aufgabe `testViewerGoldens` des Moduls `feature:gallery`, mit einem Prozess je Testklasse (`forkEvery = 1`). Die übrigen Tests des Moduls laufen wie bisher in `testDebugUnitTest`, die Viewer-Goldens sind dort ausgeschlossen. `check` hängt an beiden Aufgaben.
+
+Grund: Im gemeinsamen Lauf mit den Galerie-Goldens wurden Viewer-Aufnahmen leer eingefangen (weiße Fläche), obwohl dieselben Tests allein korrekt sind und deterministisch aufnehmen. Die Ursache im gemeinsamen Robolectric-Zustand ist nicht geklärt. Die Isolation über den Prozess behebt das Symptom, ohne die Ursache zu kennen. Die Galerie-Goldens sind davon nicht betroffen und bleiben im Hauptlauf. Sollte eine Ursache gefunden werden, wird diese Aufgabe wieder zusammengeführt.
