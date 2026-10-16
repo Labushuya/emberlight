@@ -1,5 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="feature_gallery_title">Galerie</string>
-    <string name="feature_gallery_text">Hier entsteht deine Galerie.</string>
+    <string name="feature_gallery_title">Fotos</string>
+    <string name="feature_gallery_header_today">Heute</string>
+    <string name="feature_gallery_header_yesterday">Gestern</string>
+    <string name="feature_gallery_cell_photo">Foto vom %1$s</string>
+    <string name="feature_gallery_cell_video">Video, %1$s, vom %2$s</string>
+    <string name="feature_gallery_permission_title">Deine Fotos und Videos anzeigen</string>
+    <string name="feature_gallery_permission_text">emberlight zeigt deine Fotos und Videos als Zeitleiste. Erlaube den Zugriff, damit die Zeitleiste entstehen kann.</string>
+    <string name="feature_gallery_permission_privacy">Nichts verlässt die App. Deine Mediathek wird nur auf diesem Gerät gelesen.</string>
+    <string name="feature_gallery_permission_allow">Zugriff erlauben</string>
+    <string name="feature_gallery_permission_settings_title">Zugriff ist ausgeschaltet</string>
+    <string name="feature_gallery_permission_settings_text">Du hast den Zugriff auf deine Fotos und Videos verweigert. Erlauben kannst du ihn in den Systemeinstellungen.</string>
+    <string name="feature_gallery_permission_open_settings">In Einstellungen öffnen</string>
+    <string name="feature_gallery_partial_text">Du hast Zugriff auf ausgewählte Fotos gegeben.</string>
+    <string name="feature_gallery_partial_more">Mehr auswählen</string>
+    <string name="feature_gallery_partial_all">Alle erlauben</string>
+    <string name="feature_gallery_missing_images">Fotos sind noch nicht freigegeben.</string>
+    <string name="feature_gallery_missing_videos">Videos sind noch nicht freigegeben.</string>
+    <string name="feature_gallery_empty_title">Noch keine Fotos oder Videos</string>
+    <string name="feature_gallery_empty_text">Fotos und Videos auf diesem Gerät erscheinen hier.</string>
 </resources>

@@ -1,5 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="feature_gallery_title">Gallery</string>
-    <string name="feature_gallery_text">Your gallery is coming soon.</string>
+    <string name="feature_gallery_title">Photos</string>
+    <string name="feature_gallery_header_today">Today</string>
+    <string name="feature_gallery_header_yesterday">Yesterday</string>
+    <string name="feature_gallery_cell_photo">Photo from %1$s</string>
+    <string name="feature_gallery_cell_video">Video, %1$s, from %2$s</string>
+    <string name="feature_gallery_permission_title">See your photos and videos</string>
+    <string name="feature_gallery_permission_text">emberlight shows your photos and videos as a timeline. Allow access so the timeline can be built.</string>
+    <string name="feature_gallery_permission_privacy">Nothing leaves the app. Your library is read on this device only.</string>
+    <string name="feature_gallery_permission_allow">Allow access</string>
+    <string name="feature_gallery_permission_settings_title">Access is turned off</string>
+    <string name="feature_gallery_permission_settings_text">You declined access to your photos and videos. You can allow it in the system settings.</string>
+    <string name="feature_gallery_permission_open_settings">Open settings</string>
+    <string name="feature_gallery_partial_text">You have given access to selected photos.</string>
+    <string name="feature_gallery_partial_more">Select more</string>
+    <string name="feature_gallery_partial_all">Allow all</string>
+    <string name="feature_gallery_missing_images">Photos are not shared yet.</string>
+    <string name="feature_gallery_missing_videos">Videos are not shared yet.</string>
+    <string name="feature_gallery_empty_title">No photos or videos yet</string>
+    <string name="feature_gallery_empty_text">Photos and videos on this device will appear here.</string>
 </resources>
