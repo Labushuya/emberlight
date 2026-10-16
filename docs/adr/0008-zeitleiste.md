@@ -170,6 +170,75 @@ Die Album-Ansicht nutzt jetzt dieselben Teile wie die Zeitleiste. Die Entscheidu
 - Der Zustand der Zeitleiste ist im Paket `timeline` auf `MediaGridViewModel` ausgelagert. `GalleryViewModel` (vorher `TimelineViewModel`) liefert zusätzlich die Alben für den Alben-Reiter.
 - Die Gruppierung bleibt unverändert: Stufen 0 bis 2 nach Tagen, 3 und 4 nach Monaten. Sie gilt für das Album wie für die Galerie.
 
+## Nachtrag Korrektur 1: Gerätebefunde (Scroll-Ziel, Schnell-Scrollleiste, Kopfbereich, Zoomstufen)
+
+Auf dem Gerät (Honor Magic V2) fielen drei Dinge auf. Dieser Nachtrag ersetzt die Aussagen zur Schnell-Scrollleiste, zum Kopfbereich
+und zu den Zoomstufen. Die Begründung steht in den Commits und in den Tests.
+
+### Scroll-Ziel genau einmal
+
+- Die Rückkehr-Meldung aus dem Viewer wird einmal angewendet. `MediaGrid` merkt sich die Meldung in einem gespeicherten Zustand
+  (`rememberSaveable`, Schlüssel: die Meldung). Danach ist sie verbraucht, auch nach einem Konfigurationswechsel. Der Eintrag im
+  Navigations-Stapel wird geleert.
+- Befund: Die Vermutung, ein `SideEffect` mit einem Merkmal im Speicher setze die Position bei jeder Komposition zurück, ließ sich
+  mit den Tests nicht als Fehler belegen. Der Test „manuelles Scrollen nach dem Rücksprung“ war schon vor der Änderung grün. Der Test
+  „Ziel wird nach einem Wechsel mit erhaltener Meldung nicht erneut angewendet“ war rot und ist mit dem gespeicherten Merkmal grün.
+
+### Zellen und Recomposition
+
+- Ein Test-Zähler (`GridProbeHolder`, `GridProbe`) zählt Kompositionen des Rasters und der Zellen. Im Betrieb ist kein Zähler gesetzt.
+- Der Test „Einklappen beim Scrollen komponiert sichtbare Zellen nicht neu“ war vor und nach der Änderung grün. Die Lambda-Parameter der
+  Zellen sind jetzt gemerkt (`remember(item, onMediaClick)`), das bleibt als Schutz gegen Rückschritte.
+- Eine Messung auf dem Gerät gibt es nicht. Ob das Ruckeln allein aus dem Raster kommt, ist offen (siehe unten).
+
+### Schnell-Scrollleiste: nur der Griff
+
+- Die Geste liegt am gemeinsamen Vorfahren von Raster und Leiste (`Modifier.fastScrollGrip`), in der Initial-Phase. Der Griff selbst hat
+  keinen Eingabe-Knoten. Sonst würde er die Kachel darunter verdecken, weil Compose eine Berührung nur an das oberste Geschwister mit
+  Eingabe verteilt.
+- Die Leiste reagiert nur auf ein Ziehen, das auf dem Griff beginnt und den Touch-Slop überschreitet. Ein Antippen geht an die Kachel.
+- Trefferfläche des Griffs: 32 dp breit am Ende-Rand, 48 dp hoch, am Griff selbst. Ist die Leiste ausgeblendet, endet die Geste ohne
+  Treffer.
+- Ein Ziehen auf der Schiene außerhalb des Griffs bleibt beim Raster (normales Scrollen, keine Blase, kein Sprung).
+- Die Bedienungshilfen wirken über die Semantik des Griffs unabhängig von der Sichtbarkeit (`setProgress`).
+
+### Kopfbereich
+
+- Das Raster liegt unter dem Scaffold-Padding (Kopfzeile, Reiter, Navigation). Es zeichnet nicht mehr hinter der Kopfzeile, die
+  Schnell-Scrollleiste beginnt deshalb unter der Kopfzeile, auch im eingeklappten Zustand.
+- Am Listenanfang steht die erste Überschrift direkt unter der Kopfzeile, ohne Innenabstand und ohne Scrollweg nach oben. Das gilt für
+  die Zeitleiste und die Alben-Übersicht (dort mit dem üblichen Rand der Karten).
+
+### Zoomstufen für schmale Geräte
+
+Kachelbreiten je Stufe in dp: `[170, 110, 84, 64, 54]` (vorher `[180, 120, 90, 72, 52]`). Die Spalten je Breite:
+
+| Stufe | 353 dp (Außendisplay) | 412 dp (Handy) | 673 dp (Innendisplay) | 700 dp | 900 dp (Tablet) |
+|---|---|---|---|---|---|
+| 0 | 2 | 2 | 3 | 4 | 5 |
+| 1 | 3 | 3 | 6 | 6 | 8 |
+| 2 (Standard) | 4 | 4 | 8 | 8 | 10 |
+| 3 | 5 | 6 | 10 | 10 | 14 |
+| 4 | 6 | 7 | 12 | 12 | 16 |
+
+- Auf dem Handy steigt die Spaltenzahl je Stufe streng, auf dem Außendisplay ebenfalls. Der Standard liegt bei 4 Spalten (Handy und
+  Außendisplay).
+- Geänderte Goldens: Die Zeitleiste und die Alben-Übersicht zeigen den Kopfbereich ohne Innenabstand. Das Innendisplay (673 dp) hat auf
+  der Standardstufe 8 statt 7 Spalten, daher ist sein Golden neu. Handy- und Tablet-Goldens behalten ihre Spaltenzahl.
+
+### Tests
+
+- Compose-Tests: `GridRecompositionTest` (Zähler und Rücksprung), `GridTopEdgeTest` (Kopfbereich), `FastScrollGripTest` (Griff,
+  Antippen, Ziehen, ausgeblendete Leiste). `ZoomLevelsTest` mit den Breiten 353, 412, 673, 700 und 900 dp.
+- Auf der Leiste hängen Zeitfaktoren: Die Testuhr läuft von Hand. Vor jeder Prüfung ist die Einblendung abgeschlossen, und ein Wischen
+  hinterlässt einen Fling, der einen Tipp verschluckt. Die Tests arbeiten deshalb mit einem kurzen Griffzug.
+
+### Offen für die Gerätemessung
+
+- Ob das Ruckeln beim Scrollen aus dem Raster kommt oder aus Vorschaubildern und dem Speicher-Cache: Messung mit dem Mess-Build
+  (`benchmark`, ADR 0011) und Frame-Zeiten.
+- Gefühl des Griffs (Touch-Slop, Trefferfläche 32 × 48 dp) auf echter Hardware.
+
 ## Quellen
 
 - Coil 3 (Fetcher, Mapper, `diskCachePolicy`, coil-test): https://coil-kt.github.io/coil/
