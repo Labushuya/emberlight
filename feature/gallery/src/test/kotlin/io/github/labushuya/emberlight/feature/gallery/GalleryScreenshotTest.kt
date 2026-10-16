@@ -1,13 +1,18 @@
 package io.github.labushuya.emberlight.feature.gallery
 
+import android.content.Context
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.center
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
-import io.github.labushuya.emberlight.feature.gallery.timeline.DEFAULT_COLUMNS
 import io.github.labushuya.emberlight.feature.gallery.timeline.GalleryContent
 import io.github.labushuya.emberlight.feature.gallery.timeline.GroupingMode
 import io.github.labushuya.emberlight.feature.gallery.timeline.TestThumbnails
@@ -15,7 +20,9 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.TODAY
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineGrouping
+import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineSection
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineUiState
+import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -23,6 +30,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import io.github.labushuya.emberlight.feature.gallery.R as GalleryR
 
 /**
  * Goldens der Zeitleiste und ihrer Zustände. Goldens liegen in `src/test/screenshots` (ADR 0006). Die Daten sind fest:
@@ -34,9 +42,12 @@ class GalleryScreenshotTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    private val context: Context = ApplicationProvider.getApplicationContext()
+
     @Before
     fun setUp() {
-        TestThumbnails.install(TimelineFixtures.sampleItems())
+        // Die langen Testdaten hängen hinten an, damit die Farben der kurzen Einträge gleich bleiben.
+        TestThumbnails.install(TimelineFixtures.sampleItems() + TimelineFixtures.longLibrary())
     }
 
     @After
@@ -63,6 +74,52 @@ class GalleryScreenshotTest {
     }
 
     @Test
+    @Config(qualifiers = "en-w673dp-h841dp")
+    fun timelineFoldableInnerDisplayEnglish() {
+        capture(contentState(), "src/test/screenshots/GalleryTimeline_foldInner_en.png")
+    }
+
+    @Test
+    @Config(qualifiers = "en-w412dp-h915dp")
+    fun timelinePhoneStageZeroEnglish() {
+        // Größte Kacheln: zwei Spalten, Tagesgruppen.
+        capture(levelContent(0), "src/test/screenshots/GalleryTimeline_phone_level0_en.png")
+    }
+
+    @Test
+    @Config(qualifiers = "en-w412dp-h915dp")
+    fun timelinePhoneStageFourEnglish() {
+        // Kleinste Kacheln: sieben Spalten, Monatsgruppen.
+        capture(levelContent(ZoomLevels.MAX_LEVEL), "src/test/screenshots/GalleryTimeline_phone_level4_en.png")
+    }
+
+    @Test
+    @Config(qualifiers = "en-w412dp-h915dp")
+    fun fastScrollBubblePhoneEnglish() {
+        setContent(
+            contentOf(
+                TimelineGrouping.group(TimelineFixtures.longLibrary(), GroupingMode.DAY, TODAY, ZONE),
+                MediaAccess.FULL,
+                emptySet(),
+            ),
+        )
+        composeRule.waitForIdle()
+        // Der Griff wird gehalten, die Blase bleibt sichtbar. Erst danach wird losgelassen.
+        val rail =
+            composeRule.onNodeWithContentDescription(
+                context.getString(GalleryR.string.feature_gallery_fast_scroll),
+            )
+        rail.performTouchInput {
+            down(center)
+            moveTo(Offset(center.x, height * 0.3f))
+        }
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage("src/test/screenshots/GalleryFastScroll_phone_en.png")
+        rail.performTouchInput { up() }
+        composeRule.waitForIdle()
+    }
+
+    @Test
     @Config(qualifiers = "en-w412dp-h915dp")
     fun permissionPhoneEnglish() {
         capture(
@@ -75,7 +132,7 @@ class GalleryScreenshotTest {
     @Config(qualifiers = "en-w412dp-h915dp")
     fun partialBannerPhoneEnglish() {
         capture(
-            TimelineUiState.Content(sections(), MediaAccess.PARTIAL, emptySet()),
+            contentOf(sections(), MediaAccess.PARTIAL, emptySet()),
             "src/test/screenshots/GalleryPartialBanner_phone_en.png",
         )
     }
@@ -91,7 +148,7 @@ class GalleryScreenshotTest {
     fun missingVideosPhoneEnglish() {
         capture(
             // Ohne Videos, wie der Index sie liefert, wenn die Berechtigung dafür fehlt.
-            TimelineUiState.Content(
+            contentOf(
                 sections =
                     TimelineGrouping.group(
                         TimelineFixtures.sampleItems().filter { it.type == MediaType.IMAGE },
@@ -110,22 +167,41 @@ class GalleryScreenshotTest {
         state: TimelineUiState,
         path: String,
     ) {
+        setContent(state)
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(path)
+    }
+
+    private fun setContent(state: TimelineUiState) {
         composeRule.setContent {
             EmberlightTheme {
                 GalleryContent(
                     state = state,
-                    columns = DEFAULT_COLUMNS,
+                    onZoomLevelChange = {},
                     onRequestPermission = {},
                     onOpenSettings = {},
                     onMediaClick = {},
                 )
             }
         }
-        composeRule.waitForIdle()
-        composeRule.onRoot().captureRoboImage(path)
     }
+
+    private fun contentOf(
+        sections: List<TimelineSection>,
+        access: MediaAccess,
+        missingTypes: Set<MediaType>,
+        zoomLevel: Int = ZoomLevels.DEFAULT_LEVEL,
+    ): TimelineUiState.Content = TimelineUiState.Content(sections, access, missingTypes, zoomLevel, TODAY)
+
+    private fun levelContent(level: Int): TimelineUiState.Content =
+        contentOf(
+            TimelineGrouping.group(TimelineFixtures.sampleItems(), ZoomLevels.groupingFor(level), TODAY, ZONE),
+            MediaAccess.FULL,
+            emptySet(),
+            level,
+        )
 
     private fun sections() = TimelineGrouping.group(TimelineFixtures.sampleItems(), GroupingMode.DAY, TODAY, ZONE)
 
-    private fun contentState() = TimelineUiState.Content(sections(), MediaAccess.FULL, emptySet())
+    private fun contentState() = contentOf(sections(), MediaAccess.FULL, emptySet())
 }

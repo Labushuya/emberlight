@@ -147,18 +147,86 @@ class TimelineViewModelTest {
         }
 
     @Test
-    fun changingColumnsRegroupsByMonth() =
+    fun changingZoomLevelRegroupsByMonth() =
         runTest(dispatcher) {
             val vm =
                 viewModel(FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())), FakeStore(asked = true))
             collect(vm)
             advanceUntilIdle()
 
-            vm.onColumnsChanged(5)
+            vm.onZoomLevelChanged(ZoomLevels.LAST_DAY_LEVEL + 1)
             advanceUntilIdle()
 
             val content = vm.uiState.value as TimelineUiState.Content
             assertEquals(TimelineHeader.Month(java.time.YearMonth.of(2026, 10)), content.sections.first().header)
+            assertEquals(ZoomLevels.LAST_DAY_LEVEL + 1, content.zoomLevel)
+        }
+
+    @Test
+    fun savedZoomLevelIsRestoredAtStart() =
+        runTest(dispatcher) {
+            val zoomStore = FakeZoomStore(saved = ZoomLevels.MAX_LEVEL)
+            val vm =
+                viewModel(
+                    FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
+                    FakeStore(asked = true),
+                    zoomStore,
+                )
+            collect(vm)
+            advanceUntilIdle()
+
+            val content = vm.uiState.value as TimelineUiState.Content
+            assertEquals(ZoomLevels.MAX_LEVEL, content.zoomLevel)
+            assertEquals(TimelineHeader.Month(java.time.YearMonth.of(2026, 10)), content.sections.first().header)
+        }
+
+    @Test
+    fun defaultLevelIsUsedWithoutSavedValue() =
+        runTest(dispatcher) {
+            val vm =
+                viewModel(FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())), FakeStore(asked = true))
+            collect(vm)
+            advanceUntilIdle()
+
+            assertEquals(ZoomLevels.DEFAULT_LEVEL, (vm.uiState.value as TimelineUiState.Content).zoomLevel)
+        }
+
+    @Test
+    fun userChoiceIsPersistedAndClamped() =
+        runTest(dispatcher) {
+            val zoomStore = FakeZoomStore(saved = ZoomLevels.DEFAULT_LEVEL)
+            val vm =
+                viewModel(
+                    FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
+                    FakeStore(asked = true),
+                    zoomStore,
+                )
+            collect(vm)
+            advanceUntilIdle()
+
+            vm.onZoomLevelChanged(99)
+            advanceUntilIdle()
+
+            assertEquals(ZoomLevels.MAX_LEVEL, zoomStore.saved)
+            assertEquals(ZoomLevels.MAX_LEVEL, (vm.uiState.value as TimelineUiState.Content).zoomLevel)
+        }
+
+    @Test
+    fun storedValueDoesNotOverrideAUserChoiceMadeBeforeItArrives() =
+        runTest(dispatcher) {
+            val zoomStore = FakeZoomStore(saved = 0)
+            val vm =
+                viewModel(
+                    FakeRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
+                    FakeStore(asked = true),
+                    zoomStore,
+                )
+            collect(vm)
+            vm.onZoomLevelChanged(3)
+            advanceUntilIdle()
+
+            assertEquals(3, zoomStore.saved)
+            assertEquals(3, zoomLevelOf(vm))
         }
 
     @Test
@@ -177,13 +245,17 @@ class TimelineViewModelTest {
         backgroundScope.launch { vm.uiState.collect { } }
     }
 
+    private fun zoomLevelOf(vm: TimelineViewModel): Int = (vm.uiState.value as TimelineUiState.Content).zoomLevel
+
     private fun viewModel(
         repository: FakeRepository,
         store: FakeStore,
+        zoomStore: FakeZoomStore = FakeZoomStore(saved = ZoomLevels.DEFAULT_LEVEL),
     ): TimelineViewModel =
         TimelineViewModel(
             repository = repository,
             permissionPrompts = store,
+            zoomLevels = zoomStore,
             defaultDispatcher = dispatcher,
             clock = TimelineFixtures.clock(),
             zone = ZONE,
@@ -207,6 +279,19 @@ class TimelineViewModelTest {
 
         override fun refresh() {
             refreshCount++
+        }
+    }
+
+    private class FakeZoomStore(
+        saved: Int,
+    ) : ZoomLevelStore {
+        private val flow = MutableStateFlow(saved)
+        val saved: Int get() = flow.value
+
+        override val level: Flow<Int> = flow
+
+        override suspend fun setLevel(level: Int) {
+            flow.value = level
         }
     }
 

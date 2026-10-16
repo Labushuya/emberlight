@@ -67,6 +67,19 @@ internal object TimelineFixtures {
             item(2, millis("2025-06-03T10:30")),
         )
 
+    /** Mehrere hundert Einträge, je zwei Tage auseinander, rückwärts ab heute: genug für eine Schnell-Scrollleiste. */
+    fun longLibrary(count: Int = 400): List<MediaItem> =
+        (0 until count).map { i ->
+            val millis =
+                TODAY
+                    .minusDays(i * 2L)
+                    .atTime(10, 0)
+                    .atZone(ZONE)
+                    .toInstant()
+                    .toEpochMilli()
+            item(id = 1_000L + i, millis = millis)
+        }
+
     fun library(
         items: List<MediaItem> = sampleItems(),
         access: MediaAccess = MediaAccess.FULL,

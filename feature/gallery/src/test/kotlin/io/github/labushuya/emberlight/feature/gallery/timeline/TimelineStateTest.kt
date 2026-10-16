@@ -86,12 +86,14 @@ class TimelineStateTest {
     }
 
     @Test
-    fun columnStageSelectsGroupingMode() {
-        val fourColumns = state(ready(), columns = 4) as TimelineUiState.Content
-        val fiveColumns = state(ready(), columns = 5) as TimelineUiState.Content
+    fun zoomStageSelectsGroupingModeNotColumns() {
+        val dayStage = state(ready(), zoomLevel = ZoomLevels.LAST_DAY_LEVEL) as TimelineUiState.Content
+        val monthStage = state(ready(), zoomLevel = ZoomLevels.LAST_DAY_LEVEL + 1) as TimelineUiState.Content
 
-        assertEquals(TimelineHeader.Today, fourColumns.sections.first().header)
-        assertEquals(TimelineHeader.Month(java.time.YearMonth.of(2026, 10)), fiveColumns.sections.first().header)
+        assertEquals(TimelineHeader.Today, dayStage.sections.first().header)
+        assertEquals(TimelineHeader.Month(java.time.YearMonth.of(2026, 10)), monthStage.sections.first().header)
+        assertEquals(ZoomLevels.LAST_DAY_LEVEL + 1, monthStage.zoomLevel)
+        assertEquals(TODAY, monthStage.today)
     }
 
     private fun ready(
@@ -104,13 +106,13 @@ class TimelineStateTest {
         library: MediaLibraryState,
         askedBefore: Boolean = true,
         showRationale: Boolean = false,
-        columns: Int = DEFAULT_COLUMNS,
+        zoomLevel: Int = ZoomLevels.DEFAULT_LEVEL,
     ): TimelineUiState =
         timelineUiState(
             library = library,
             askedBefore = askedBefore,
             showRationale = showRationale,
-            columns = columns,
+            zoomLevel = zoomLevel,
             today = TODAY,
             zone = ZONE,
         )

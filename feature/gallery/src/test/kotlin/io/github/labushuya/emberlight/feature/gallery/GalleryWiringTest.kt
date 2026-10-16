@@ -19,11 +19,16 @@ import io.github.labushuya.emberlight.feature.gallery.permission.DataStorePermis
 import io.github.labushuya.emberlight.feature.gallery.permission.anyPermissionRationale
 import io.github.labushuya.emberlight.feature.gallery.permission.appSettingsIntent
 import io.github.labushuya.emberlight.feature.gallery.permission.findActivity
+import io.github.labushuya.emberlight.feature.gallery.timeline.DataStoreZoomLevelStore
+import io.github.labushuya.emberlight.feature.gallery.timeline.GroupingMode
 import io.github.labushuya.emberlight.feature.gallery.timeline.TestThumbnails
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFormats
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineViewModel
+import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevelStore
+import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -71,6 +76,7 @@ class GalleryWiringTest {
             TimelineViewModel(
                 repository = FixedRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
                 permissionPrompts = DataStorePermissionPromptStore(context),
+                zoomLevels = MemoryZoomLevelStore(),
                 defaultDispatcher = Dispatchers.Default,
                 clock = TimelineFixtures.clock(),
                 zone = TimelineFixtures.ZONE,
@@ -123,6 +129,25 @@ class GalleryWiringTest {
         }
 
     @Test
+    fun zoomLevelIsRememberedAcrossInstances() =
+        runBlocking {
+            assertEquals(ZoomLevels.DEFAULT_LEVEL, DataStoreZoomLevelStore(context).level.first())
+
+            DataStoreZoomLevelStore(context).setLevel(ZoomLevels.MAX_LEVEL)
+
+            assertEquals(ZoomLevels.MAX_LEVEL, DataStoreZoomLevelStore(context).level.first())
+        }
+
+    @Test
+    fun scrollLabelsNameMonthOrYear() {
+        val formats = TimelineFormats(Locale.GERMAN, TimelineFixtures.ZONE)
+        val date = LocalDate.of(2026, 10, 16)
+
+        assertEquals("Oktober 2026", formats.scrollLabel(GroupingMode.DAY, date))
+        assertEquals("2026", formats.scrollLabel(GroupingMode.MONTH, date))
+    }
+
+    @Test
     fun englishDatesUseTheLocalePattern() {
         val formats = TimelineFormats(Locale.ENGLISH, TimelineFixtures.ZONE)
 
@@ -139,6 +164,17 @@ class GalleryWiringTest {
         assertEquals("Donnerstag, 2. Juli", formats.dayHeader(LocalDate.of(2026, 7, 2), withYear = false))
         assertEquals("Oktober 2026", formats.monthHeader(YearMonth.of(2026, 10)))
         assertEquals("16. Oktober 2026", formats.longDate(TimelineFixtures.millis("2026-10-16T09:30")))
+    }
+
+    /** Stufe im Speicher. Der Verdrahtungstest prüft den Screen, nicht den Datenträger, daher ohne DataStore. */
+    private class MemoryZoomLevelStore : ZoomLevelStore {
+        private val levelFlow = MutableStateFlow(ZoomLevels.DEFAULT_LEVEL)
+
+        override val level: Flow<Int> = levelFlow
+
+        override suspend fun setLevel(level: Int) {
+            levelFlow.value = level
+        }
     }
 
     private class FixedRepository(

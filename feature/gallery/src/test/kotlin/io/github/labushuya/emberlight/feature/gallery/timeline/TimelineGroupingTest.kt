@@ -139,14 +139,6 @@ class TimelineGroupingTest {
     }
 
     @Test
-    fun groupingModeFollowsColumnStage() {
-        assertEquals(GroupingMode.DAY, GroupingMode.forColumns(1))
-        assertEquals(GroupingMode.DAY, GroupingMode.forColumns(DEFAULT_COLUMNS))
-        assertEquals(GroupingMode.DAY, GroupingMode.forColumns(GroupingMode.MAX_DAY_COLUMNS))
-        assertEquals(GroupingMode.MONTH, GroupingMode.forColumns(GroupingMode.MAX_DAY_COLUMNS + 1))
-    }
-
-    @Test
     fun everyItemAppearsExactlyOnceInOrder() {
         val items = sorted(count = 5_000, seed = SEED)
 
