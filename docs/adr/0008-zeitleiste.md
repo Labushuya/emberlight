@@ -1,6 +1,6 @@
 # ADR 0008: Zeitleiste der Galerie
 
-Status: angenommen, 16.10.2026. Nachtrag Paket 3b (Pinch-Zoom, Anker, adaptive Spalten, Schnell-Scrollleiste), siehe unten.
+Status: angenommen, 16.10.2026. Nachtrag Paket 3b (Pinch-Zoom, Anker, adaptive Spalten, Schnell-Scrollleiste) und Paket 4 (gemeinsamer Baustein mit den Alben), siehe unten.
 
 ## Kontext
 
@@ -159,6 +159,16 @@ Dieser Nachtrag ersetzt die Aussagen zur festen Spaltenzahl im Abschnitt „Grid
 - Zielbreiten 180/120/90/72/52 dp: ob die Stufen auf dem Gerät als sinnvoll abgestuft wirken.
 - Start mit gespeicherter Stufe: Der Zustand wartet auf die erste Antwort des Speichers, wie bei der Berechtigungs-Abfrage. Ob die Wartezeit auf dem Gerät spürbar ist, ist zu messen.
 - Stufenwechsel per Pinch bei sehr großen Bibliotheken: Dauer der Gruppierung im Default-Dispatcher beim ersten Wechsel auf die andere Art.
+
+## Nachtrag Paket 4: gemeinsamer Baustein mit den Alben
+
+Die Album-Ansicht nutzt jetzt dieselben Teile wie die Zeitleiste. Die Entscheidung und ihre Begründung stehen in [ADR 0009](0009-alben-und-galerie-reiter.md). Hier die Änderungen am Stand dieses ADR:
+
+- Das Raster liegt in `MediaGrid` (Paket `timeline`). Der Zustand heißt `MediaGridState` (vorher `TimelineUiState`) und kennt den Zustand `Gone` für ein Album, das nicht mehr vorhanden ist. Er wird über `MediaScope` gefiltert.
+- Die Zellen und Albumkarten teilen sich `MediaThumbnailImage`. Die Zelle `MediaCell` bleibt wie beschrieben. Der Banner, der Ladezustand und die Berechtigung kommen aus `MediaStateBody`, `accessBannerItem` und `rememberMediaPermissionRequest`.
+- Die Zoomstufe liegt im Singleton `ZoomLevelStore`. Galerie und Album teilen sie, ein Wechsel wirkt in beiden Ansichten.
+- Der Zustand der Zeitleiste ist im Paket `timeline` auf `MediaGridViewModel` ausgelagert. `GalleryViewModel` (vorher `TimelineViewModel`) liefert zusätzlich die Alben für den Alben-Reiter.
+- Die Gruppierung bleibt unverändert: Stufen 0 bis 2 nach Tagen, 3 und 4 nach Monaten. Sie gilt für das Album wie für die Galerie.
 
 ## Quellen
 
