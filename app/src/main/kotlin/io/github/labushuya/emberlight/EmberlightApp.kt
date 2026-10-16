@@ -1,12 +1,15 @@
 package io.github.labushuya.emberlight
 
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -23,6 +26,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
 import io.github.labushuya.emberlight.core.design.motion.LocalSharedTransitionScope
+import io.github.labushuya.emberlight.extensions.AppOverlay
 import io.github.labushuya.emberlight.feature.gallery.GalleryRoute
 import io.github.labushuya.emberlight.feature.gallery.album.albumScreen
 import io.github.labushuya.emberlight.feature.gallery.album.navigateToAlbum
@@ -43,6 +47,19 @@ import io.github.labushuya.emberlight.feature.space.spacesScreen
 fun EmberlightApp(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
+    overlays: List<AppOverlay> = emptyList(),
+) {
+    Box(modifier = modifier.fillMaxSize()) {
+        EmberlightScaffold(navController = navController, modifier = Modifier.fillMaxSize())
+        // Zusätzliche Anzeigen (etwa DEMO in Debug-Builds). Ohne Beiträge ist das leer und das Layout unverändert.
+        overlays.forEach { overlay -> overlay.Overlay(Modifier.align(Alignment.TopEnd)) }
+    }
+}
+
+@Composable
+private fun EmberlightScaffold(
+    navController: NavHostController,
+    modifier: Modifier = Modifier,
 ) {
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
     // Im Viewer verschwindet die Leiste (Handy) bzw. die Rail (großes Display), der Inhalt nutzt den ganzen Bildschirm.

@@ -1,0 +1,108 @@
+package io.github.labushuya.emberlight.demo
+
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import androidx.core.graphics.createBitmap
+import coil3.ComponentRegistry
+import coil3.ImageLoader
+import coil3.asImage
+import coil3.decode.DataSource
+import coil3.fetch.FetchResult
+import coil3.fetch.Fetcher
+import coil3.fetch.ImageFetchResult
+import coil3.request.Options
+import io.github.labushuya.emberlight.core.media.model.MediaItem
+import io.github.labushuya.emberlight.core.media.thumbnail.MediaThumbnail
+import io.github.labushuya.emberlight.extensions.CoilComponents
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/** Registriert den Demo-Fetcher vor den Medien-Thumbnails. Nur synthetische URIs bedient er. */
+@Singleton
+internal class DemoThumbnailComponents
+    @Inject
+    constructor() : CoilComponents {
+        override fun contribute(builder: ComponentRegistry.Builder) {
+            builder.add(DemoThumbnailFactory())
+        }
+    }
+
+internal class DemoThumbnailFactory : Fetcher.Factory<MediaThumbnail> {
+    override fun create(
+        data: MediaThumbnail,
+        options: Options,
+        imageLoader: ImageLoader,
+    ): Fetcher? {
+        val index = SyntheticLibrary.indexOf(data.uri) ?: return null
+        return DemoThumbnailFetcher(SyntheticLibrary.itemAt(index))
+    }
+}
+
+/**
+ * Erzeugt das Vorschaubild eines synthetischen Eintrags: ein Farbverlauf je Eintrag, darauf Nummer und Datum in großer Schrift.
+ * Die Pixel entstehen im Speicher, auf dem Gerät liegt nichts.
+ */
+internal class DemoThumbnailFetcher(
+    private val item: MediaItem,
+) : Fetcher {
+    override suspend fun fetch(): FetchResult? =
+        ImageFetchResult(
+            image = render(item).asImage(),
+            isSampled = false,
+            dataSource = DataSource.MEMORY,
+        )
+
+    private fun render(item: MediaItem): Bitmap {
+        val (width, height) = bitmapSize(item)
+        val bitmap = createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val hue = ((item.id * GOLDEN_ANGLE) % 360.0).toFloat()
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val background =
+            GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(hsv(hue, 0.55f, 0.85f), hsv((hue + 60f) % 360f, 0.75f, 0.35f)),
+            )
+        background.setBounds(0, 0, width, height)
+        background.draw(canvas)
+
+        paint.color = Color.WHITE
+        paint.textAlign = Paint.Align.CENTER
+        val numberSize = minOf(width, height) / 3f
+        paint.textSize = numberSize
+        paint.typeface = Typeface.DEFAULT_BOLD
+        canvas.drawText(item.id.toString(), width / 2f, height / 2f, paint)
+        paint.textSize = numberSize / 3.2f
+        paint.typeface = Typeface.DEFAULT
+        val date = DATE.format(Instant.ofEpochMilli(item.timestamp).atZone(ZONE))
+        canvas.drawText(date, width / 2f, height / 2f + numberSize * 0.6f, paint)
+        return bitmap
+    }
+
+    private fun bitmapSize(item: MediaItem): Pair<Int, Int> {
+        val longEdge = 320
+        val w = item.width ?: longEdge
+        val h = item.height ?: longEdge
+        val scale = longEdge.toFloat() / maxOf(w, h)
+        return (w * scale).toInt().coerceAtLeast(1) to (h * scale).toInt().coerceAtLeast(1)
+    }
+
+    private fun hsv(
+        hue: Float,
+        saturation: Float,
+        value: Float,
+    ): Int = Color.HSVToColor(floatArrayOf(hue, saturation, value))
+
+    private companion object {
+        const val GOLDEN_ANGLE = 137.508
+        val ZONE: ZoneId = ZoneId.of("Europe/Berlin")
+        val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    }
+}
