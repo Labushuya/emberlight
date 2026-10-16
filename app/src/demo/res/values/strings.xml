@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Hinweis im Demo-Modus (nur Debug- und Benchmark-Builds). Kein Nutzertext, der Begriff ist international gleich. -->
+    <string name="demo_badge">DEMO</string>
+</resources>
