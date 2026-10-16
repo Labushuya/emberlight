@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import java.time.ZoneId
 import javax.inject.Inject
 import androidx.media3.common.MediaItem as PlayerMediaItem
 
@@ -52,6 +53,8 @@ internal class ViewerViewModel
         repository: MediaRepository,
         private val playerFactory: VideoPlayerFactory,
         private val savedStateHandle: SavedStateHandle,
+        /** Zone wie beim Raster (TimelineModule): Titel und Gruppierung rechnen mit derselben Uhr. */
+        val zone: ZoneId,
     ) : ViewModel() {
         private val route: ViewerRoute = savedStateHandle.toRoute()
         private val scopedItems = ScopedItems(route.scope())

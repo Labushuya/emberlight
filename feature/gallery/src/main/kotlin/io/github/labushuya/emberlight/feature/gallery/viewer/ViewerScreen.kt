@@ -72,6 +72,7 @@ internal fun ViewerScreen(
                 playback = playback,
                 muted = muted,
                 player = viewModel.player,
+                zone = viewModel.zone,
                 chromeVisible = chromeVisible,
                 onChromeToggle = { chromeVisible = !chromeVisible },
                 onBack = { onBack(currentId) },

@@ -318,6 +318,7 @@ class ViewerViewModelTest {
         ViewerViewModel(
             repository = repository,
             playerFactory = players,
+            zone = ZONE,
             savedStateHandle =
                 SavedStateHandle(
                     mapOf("mediaId" to mediaId, "bucketId" to bucketId, "scopeAll" to scopeAll),
