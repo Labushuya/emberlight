@@ -80,7 +80,7 @@ Der Rechner läuft mit UTC+2 (Sommerzeit), der Runner in UTC. Die Zeitzone wurde
 - Eine Abwesenheit (Navigationsleiste im Viewer) wird ebenfalls bedingt geprüft, nicht sofort.
 - Die Obergrenze (5 s) bricht nur einen Zustand ab, der nie eintritt. Sie ist kein Puffer für langsame Läufe. Bei Ablauf meldet der Test die letzte Compose-Fehlermeldung mit dem Zustand des Baums.
 - Keine Retry-Annotationen, keine pauschal längeren Timeouts ohne Bedingung.
-- Die Galerie-Compose-Tests in `feature:gallery` prüfen feste Zustände ohne ViewModel. Sie haben das Muster nicht und sind unverändert.
+- Die Galerie-Compose-Tests in `feature:gallery` prüfen überwiegend feste Zustände. `GalleryWiringTest` nutzt ein echtes ViewModel und wartet bereits mit `waitUntilAtLeastOneExists`. Sie haben das Muster nicht und sind unverändert. Unter Last (4 Kerne, 14 Last-Prozesse) liefen 3 von 3 Läufen mit je 228 Tests grün.
 
 ### Konsequenzen
 
