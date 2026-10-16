@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +38,7 @@ import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import io.github.labushuya.emberlight.feature.gallery.R
+import io.github.labushuya.emberlight.feature.gallery.viewer.LastViewedMediaId
 import java.time.ZoneId
 
 /** Abstand zwischen Zellen und an den Rändern des Rasters. */
@@ -62,6 +64,7 @@ internal fun MediaGrid(
     onMediaClick: (MediaItem) -> Unit,
     onZoomLevelChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    lastViewed: LastViewedMediaId = LastViewedMediaId.None,
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
     val density = LocalDensity.current
@@ -73,6 +76,19 @@ internal fun MediaGrid(
     val hasBanner = needsAccessBanner(state.access, state.missingTypes)
     val index =
         remember(state.sections, hasBanner) { TimelineIndex(state.sections, if (hasBanner) 1 else 0, state.today) }
+
+    // Das zuletzt im Viewer angesehene Element. Liegt es außerhalb des sichtbaren Bereichs, scrollt das Raster dorthin.
+    // Die Meldung wird danach gelöscht, damit ein späteres Wiederkommen nicht erneut springt.
+    val lastViewedId = lastViewed.mediaId
+    LaunchedEffect(lastViewedId, index) {
+        if (lastViewedId != null) {
+            val target = gridScrollTarget(state.sections, index, lastViewedId)
+            if (target != null && gridState.layoutInfo.visibleItemsInfo.none { it.index == target }) {
+                gridState.scrollToItem(target)
+            }
+            lastViewed.onHandled()
+        }
+    }
     val mode = ZoomLevels.groupingFor(state.zoomLevel)
     val gapPx = with(density) { GRID_GAP.toPx() }
     val paddingTopPx = with(density) { (padding.calculateTopPadding() + GRID_GAP).toPx() }
