@@ -39,6 +39,14 @@ Galerie und Sharing sollen unabhängig wachsen (siehe [CLAUDE.md](../../CLAUDE.m
 - Diagnose-Rezept: `LINT_PRINT_STACKTRACE=true` setzen. Ein Absturz zeigt dann den vollständigen Stacktrace. Die Variable ist in `ci.yml` und `release.yml` gesetzt, damit ein Wiederauftreten im CI-Log sichtbar ist.
 - Maßnahme erst bei belegter Ursache. Ohne Stacktrace wird nichts geändert.
 
+### Stand 16.10.2026: Maßnahme umgesetzt
+
+- Reproduktion: Im ersten vollständigen Profil-Lauf dieses Tages (Baseline, `check koverXmlReport assembleDebug assembleRelease checkNoPlayServices --rerun-tasks`) brach `:app:lintAnalyzeDebugUnitTest` mit demselben Befund ab: `KotlinIllegalArgumentExceptionWithAttachments` in `LLFirModuleLazyDeclarationResolver`, Datei `EmberlightAlbumNavigationTest.kt`. Der zweite Lauf mit identischen Eingaben lief durch. Das bestätigt den sporadischen Charakter.
+- Maßnahme: Die Lint-Analyse der Unit-Test-Quellen ist ausgenommen (`ignoreTestSources = true` im zentralen Lint-Block `applyEmberlightDefaults`, alle Module). Die Task `lintAnalyzeDebugUnitTest` entsteht seither gar nicht mehr (Gradle: „not found“ in `:app` und `:feature:gallery`).
+- Main-Quellen bleiben vollständig mit `warningsAsErrors` geprüft. Gegenprobe: `ObsoleteSdkInt`-Befund (`Build.VERSION.SDK_INT >= O` bei minSdk 26) in `feature/gallery` Main-Code lässt `:feature:gallery:lintDebug` mit Error und Exit 1 abbrechen. Die Probe ist zurückgenommen.
+- Grenze der Gegenprobe: Ein fest codierter String in einem Composable meldet Lint nicht. Lints `HardcodedText` prüft nur XML. Ein solcher Befund in Kotlin-Code wird von Lint also nicht gemeldet. Eine eigene Prüfung dafür gibt es im Projekt nicht. Das bleibt offen.
+- Rücknahme prüfen, sobald eine stabile Lint-Version Kotlin 2.4 offiziell unterstützt. Dann die Ausnahme entfernen und die Unit-Test-Quellen wieder analysieren lassen.
+
 ## Alternativen
 
 - Groovy-DSL: verworfen, die Kotlin-DSL ist typsicher und passt zum Projekt.
