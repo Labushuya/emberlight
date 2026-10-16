@@ -1,14 +1,30 @@
 package io.github.labushuya.emberlight
 
-import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -25,23 +41,24 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
-import io.github.labushuya.emberlight.core.design.motion.LocalSharedTransitionScope
+import io.github.labushuya.emberlight.core.design.motion.EmberlightMotion
+import io.github.labushuya.emberlight.core.design.motion.LocalNavigationChrome
+import io.github.labushuya.emberlight.core.design.motion.NavigationChrome
 import io.github.labushuya.emberlight.extensions.AppOverlay
 import io.github.labushuya.emberlight.feature.gallery.GalleryRoute
 import io.github.labushuya.emberlight.feature.gallery.album.albumScreen
 import io.github.labushuya.emberlight.feature.gallery.album.navigateToAlbum
 import io.github.labushuya.emberlight.feature.gallery.galleryScreen
 import io.github.labushuya.emberlight.feature.gallery.navigateToGallery
-import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerRoute
-import io.github.labushuya.emberlight.feature.gallery.viewer.navigateToViewer
-import io.github.labushuya.emberlight.feature.gallery.viewer.popViewer
-import io.github.labushuya.emberlight.feature.gallery.viewer.viewerScreen
 import io.github.labushuya.emberlight.feature.space.navigateToSpaces
 import io.github.labushuya.emberlight.feature.space.spacesScreen
 
 /**
- * Wurzel der Oberfläche: Navigationsleiste (unten am Handy, Rail auf großen Displays) und der NavHost
- * mit den Top-Level-Zielen.
+ * Wurzel der Oberfläche: Navigation (unten am Handy, Rail auf großen Displays) und der NavHost mit den Top-Level-Zielen.
+ *
+ * Die Leiste ist eine eigene Komponente und nicht die Navigation-Suite-Bibliothek, weil sie sich animiert ausblenden muss,
+ * wenn ein Vollbild-Viewer offen ist (ADR 0010). Ihr Zustand kommt über [LocalNavigationChrome]. Der Inhalt liegt im
+ * verbleibenden Platz. Die Rasterzeilen bleiben oben verankert, Spalten brechen dabei nicht neu um.
  */
 @Composable
 fun EmberlightApp(
@@ -62,69 +79,92 @@ private fun EmberlightScaffold(
     modifier: Modifier = Modifier,
 ) {
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
-    // Im Viewer verschwindet die Leiste (Handy) bzw. die Rail (großes Display), der Inhalt nutzt den ganzen Bildschirm.
-    val inViewer = currentDestination?.hasRoute<ViewerRoute>() == true
-    // Außerhalb des Viewers: Leiste unten auf kompakten Breiten, sonst Rail. Der Standard der Bibliothek ergab, als Parameter
-    // übergeben, ein anderes Leistenlayout im Golden. Deshalb ist die Breitenzuordnung hier ausgeschrieben.
+    val chrome = remember { NavigationChrome() }
     val density = LocalDensity.current
     val windowWidth =
         with(density) {
             LocalWindowInfo.current.containerSize.width
                 .toDp()
         }
-    val compactWidth = windowWidth < COMPACT_WIDTH
-    val defaultLayout = if (compactWidth) NavigationSuiteType.NavigationBar else NavigationSuiteType.NavigationRail
+    val compact = windowWidth < COMPACT_WIDTH
+    val shown = !chrome.hidden
 
-    NavigationSuiteScaffold(
-        modifier = modifier,
-        layoutType = if (inViewer) NavigationSuiteType.None else defaultLayout,
-        navigationSuiteItems = {
-            TopLevelDestination.entries.forEach { destination ->
-                val selected = currentDestination.isTopLevel(destination)
-                item(
-                    selected = selected,
-                    onClick = { navController.navigateToTopLevel(destination) },
-                    icon = {
-                        Icon(
-                            painter =
-                                painterResource(
-                                    if (selected) destination.selectedIcon else destination.unselectedIcon,
-                                ),
-                            // Das Label beschreibt das Ziel bereits, das Icon ist dekorativ.
-                            contentDescription = null,
-                        )
-                    },
-                    label = { Text(stringResource(destination.labelRes)) },
-                )
-            }
-        },
-    ) {
-        // Der Übergangs-Scope umschließt den NavHost. Raster und Viewer holen ihn sich über CompositionLocals (ADR 0010).
-        SharedTransitionLayout {
-            CompositionLocalProvider(LocalSharedTransitionScope provides this) {
-                NavHost(navController = navController, startDestination = GalleryRoute) {
-                    galleryScreen(
-                        onAlbumClick = { bucketId -> navController.navigateToAlbum(bucketId) },
-                        onMediaClick = { item ->
-                            navController.navigateToViewer(mediaId = item.id, bucketId = null, scopeAll = true)
-                        },
-                    )
-                    albumScreen(
-                        onBack = { navController.popBackStack() },
-                        // Im Album ist jedes Element aus diesem Ordner, bucketId kommt also von dort.
-                        onMediaClick = { item ->
-                            navController.navigateToViewer(
-                                mediaId = item.id,
-                                bucketId = item.bucketId,
-                                scopeAll = false,
+    CompositionLocalProvider(LocalNavigationChrome provides chrome) {
+        if (compact) {
+            Column(modifier = modifier) {
+                Box(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            // Solange die Leiste da ist, trägt sie die Insets unten. Der Inhalt darüber übernimmt sie nicht noch einmal.
+                            .then(if (shown) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier),
+                ) {
+                    AppNavHost(navController)
+                }
+                AnimatedVisibility(
+                    visible = shown,
+                    enter = expandVertically(EmberlightMotion.chromeSpec()) + fadeIn(EmberlightMotion.chromeSpec()),
+                    exit = shrinkVertically(EmberlightMotion.chromeSpec()) + fadeOut(EmberlightMotion.chromeSpec()),
+                ) {
+                    NavigationBar {
+                        TopLevelDestination.entries.forEach { destination ->
+                            val selected = currentDestination.isTopLevel(destination)
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = { navController.navigateToTopLevel(destination) },
+                                icon = { DestinationIcon(destination, selected) },
+                                label = { Text(stringResource(destination.labelRes)) },
                             )
-                        },
-                    )
-                    viewerScreen(onBack = { lastViewedMediaId -> navController.popViewer(lastViewedMediaId) })
-                    spacesScreen()
+                        }
+                    }
+                }
+            }
+        } else {
+            Row(modifier = modifier) {
+                AnimatedVisibility(
+                    visible = shown,
+                    enter = expandHorizontally(EmberlightMotion.chromeSpec()) + fadeIn(EmberlightMotion.chromeSpec()),
+                    exit = shrinkHorizontally(EmberlightMotion.chromeSpec()) + fadeOut(EmberlightMotion.chromeSpec()),
+                ) {
+                    NavigationRail {
+                        TopLevelDestination.entries.forEach { destination ->
+                            val selected = currentDestination.isTopLevel(destination)
+                            NavigationRailItem(
+                                selected = selected,
+                                onClick = { navController.navigateToTopLevel(destination) },
+                                icon = { DestinationIcon(destination, selected) },
+                                label = { Text(stringResource(destination.labelRes)) },
+                            )
+                        }
+                    }
+                }
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    AppNavHost(navController)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DestinationIcon(
+    destination: TopLevelDestination,
+    selected: Boolean,
+) {
+    Icon(
+        painter = painterResource(if (selected) destination.selectedIcon else destination.unselectedIcon),
+        // Das Label beschreibt das Ziel bereits, das Icon ist dekorativ.
+        contentDescription = null,
+    )
+}
+
+@Composable
+private fun AppNavHost(navController: NavHostController) {
+    NavHost(navController = navController, startDestination = GalleryRoute) {
+        galleryScreen(onAlbumClick = { bucketId -> navController.navigateToAlbum(bucketId) })
+        albumScreen(onBack = { navController.popBackStack() })
+        spacesScreen()
     }
 }
 

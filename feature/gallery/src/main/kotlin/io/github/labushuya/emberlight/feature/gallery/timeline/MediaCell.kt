@@ -23,16 +23,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import io.github.labushuya.emberlight.core.design.motion.sharedMediaBounds
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.feature.gallery.R
-import io.github.labushuya.emberlight.feature.gallery.viewer.viewerSharedKey
 
 /**
  * Eine quadratische Zelle des Rasters. Das Vorschaubild füllt die Zelle mit Zuschnitt. Videos zeigen unten ein
@@ -47,6 +47,9 @@ internal fun MediaCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Die Kachel meldet ihre Grenzen für die Hero-Animation des Overlays (ADR 0010). Ohne Raster ist die Tabelle wegwerfbar.
+    val cells = LocalCellBounds.current
+    DisposableEffect(item.id) { onDispose { cells.remove(item.id) } }
     // Test-Seam (siehe GridProbe): ohne Probe keine Effekte.
     GridProbeHolder.current?.let { probe ->
         SideEffect { probe.cellComposed(item.uri) }
@@ -59,8 +62,7 @@ internal fun MediaCell(
         modifier =
             modifier
                 .aspectRatio(1f)
-                // Gemeinsames Element mit dem Vollbild desselben Mediums (ADR 0010). Ohne Übergangs-Scope bleibt es aus.
-                .sharedMediaBounds(key = viewerSharedKey(item.id))
+                .onGloballyPositioned { coords -> cells.put(item.id, coords.boundsInRoot()) }
                 .clip(MaterialTheme.shapes.extraSmall)
                 .clickable(onClick = onClick)
                 .semantics(mergeDescendants = true) { contentDescription = label },

@@ -17,18 +17,3 @@ internal fun gridScrollTarget(
             ?.uri ?: return null
     return index.indexOfMedia(uri)
 }
-
-/**
- * Liegt die Position [target] im Bereich, den das Raster von der gespeicherten ersten Position [firstVisible] aus zeigt? Die
- * Schätzung nutzt die Spalten und die Zeilen des Bildschirms, die schon vor dem Layout feststehen. Eine Überschrift zählt als
- * Position, daher bleibt die Schätzung eine Näherung. Sie entscheidet nur, ob vor dem ersten Layout gescrollt wird.
- */
-internal fun inVisibleWindow(
-    firstVisible: Int,
-    target: Int,
-    columns: Int,
-    rows: Int,
-): Boolean {
-    if (columns <= 0 || rows <= 0) return false
-    return target >= firstVisible && target < firstVisible + columns * rows
-}

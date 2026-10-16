@@ -5,23 +5,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.feature.gallery.permission.rememberAppSettingsOpener
 import io.github.labushuya.emberlight.feature.gallery.permission.rememberMediaPermissionRequest
-import io.github.labushuya.emberlight.feature.gallery.viewer.LastViewedMediaId
+import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerPlaybackViewModel
 
 /**
  * Galerie mit Zustand. Verbindet das ViewModel mit den Systemdialogen und den Einstellungen. [onAlbumClick] meldet ein
- * Antippen auf ein Album, [onMediaClick] ein Antippen auf ein Medium. [lastViewed] ist das zuletzt im Viewer angesehene
- * Medium, das Raster scrollt dorthin.
+ * Antippen auf ein Album. Der Viewer öffnet sich über dem Raster, seine Wiedergabe gehört zu diesem Ziel.
  */
 @Composable
+// Der Wiedergabe-Halter gehört dem Ziel und wird nur bis zum Overlay weitergereicht (ADR 0010).
+@Suppress("ktlint:compose:vm-forwarding-check")
 internal fun GalleryScreen(
     modifier: Modifier = Modifier,
     onAlbumClick: (Long?) -> Unit = {},
-    onMediaClick: (MediaItem) -> Unit = {},
-    lastViewed: LastViewedMediaId = LastViewedMediaId.None,
     viewModel: GalleryViewModel = hiltViewModel(),
+    playback: ViewerPlaybackViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val requestPermission =
@@ -33,10 +32,10 @@ internal fun GalleryScreen(
         state = state,
         onRequestPermission = requestPermission,
         onOpenSettings = rememberAppSettingsOpener(),
-        onMediaClick = onMediaClick,
         onAlbumClick = onAlbumClick,
         onZoomLevelChange = viewModel::onZoomLevelChanged,
-        lastViewed = lastViewed,
+        playback = playback,
+        zone = viewModel.zone,
         modifier = modifier,
     )
 }

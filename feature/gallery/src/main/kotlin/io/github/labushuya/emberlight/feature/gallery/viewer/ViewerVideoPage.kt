@@ -27,11 +27,9 @@ import io.github.labushuya.emberlight.feature.gallery.R
  * Eine Video-Seite. Ohne angehängten Player zeigt sie das Standbild (Vorschaubild des Systems) mit einem Abspiel-Knopf.
  * Ist die Seite angehängt, zeigt sie den einen Player (ADR 0010). Kein Autoplay: Die Wiedergabe beginnt nur über [onPlay].
  *
- * Das Standbild ist das gemeinsame Element des Übergangs. Der Player erscheint erst nach dem Übergang, die Oberfläche
- * zeigt bis dahin das Standbild. Wischen nach unten schließt den Viewer ([dismiss]), ohne Zoom.
- *
- * [label] ist die Beschreibung für Screenreader. [onTap] meldet ein einfaches Antippen, das die Leisten umschaltet.
- * Scheitert das Standbild, zeigt die Seite die Fehlermeldung.
+ * Der Player erscheint erst, wenn das Overlay offen steht ([settled]). Bis dahin bleibt das Standbild. Wischen nach unten
+ * schließt den Viewer ([overlay]), ohne Zoom. [label] ist die Beschreibung für Screenreader. [onTap] meldet ein einfaches
+ * Antippen, das die Leisten umschaltet. Scheitert das Standbild, zeigt die Seite die Fehlermeldung.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -41,25 +39,25 @@ internal fun ViewerVideoPage(
     attached: Boolean,
     player: Player?,
     video: VideoPlaybackUi,
+    overlay: ViewerOverlayState,
+    settled: Boolean,
     onPlay: () -> Unit,
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
-    dismiss: DismissState = rememberDismissState(),
-    onDismiss: () -> Unit = {},
 ) {
     val stillFailed = remember(item.id) { mutableStateOf(false) }
-    val settled by rememberPageSettled()
+    val isSettled = settled
     Box(
         modifier =
             modifier
                 .fillMaxSize()
                 .semantics { contentDescription = label }
-                .swipeDownToDismiss(dismiss = dismiss, canStart = { true }, onClose = onDismiss)
+                .swipeDownToDismiss(overlay = overlay, canStart = { true })
                 .clickable(onClick = onTap),
         contentAlignment = Alignment.Center,
     ) {
         when {
-            attached && player != null && settled -> {
+            attached && player != null && isSettled -> {
                 val ratio = video.aspectRatio
                 PlayerSurface(
                     player = player,

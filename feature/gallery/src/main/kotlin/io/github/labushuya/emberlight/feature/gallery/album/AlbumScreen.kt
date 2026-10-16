@@ -32,24 +32,28 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.feature.gallery.R
 import io.github.labushuya.emberlight.feature.gallery.permission.rememberAppSettingsOpener
 import io.github.labushuya.emberlight.feature.gallery.permission.rememberMediaPermissionRequest
+import io.github.labushuya.emberlight.feature.gallery.timeline.MediaBrowser
+import io.github.labushuya.emberlight.feature.gallery.timeline.MediaBrowserState
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGrid
+import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaStateBody
-import io.github.labushuya.emberlight.feature.gallery.viewer.LastViewedMediaId
+import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerPlaybackViewModel
+import java.time.ZoneId
 
 /**
  * Album-Ansicht mit Zustand. Verbindet das ViewModel mit den Systemdialogen und den Einstellungen. [onBack] führt zurück in
- * die Alben-Übersicht. [onMediaClick] meldet ein Antippen auf ein Medium.
+ * die Alben-Übersicht. Der Viewer öffnet sich als Overlay über dem Album-Raster.
  */
 @Composable
+// Der Wiedergabe-Halter gehört dem Ziel und wird nur bis zum Overlay weitergereicht (ADR 0010).
+@Suppress("ktlint:compose:vm-forwarding-check")
 internal fun AlbumScreen(
     onBack: () -> Unit,
-    onMediaClick: (MediaItem) -> Unit = {},
-    lastViewed: LastViewedMediaId = LastViewedMediaId.None,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
+    playback: ViewerPlaybackViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val requestPermission =
@@ -62,33 +66,67 @@ internal fun AlbumScreen(
         onBack = onBack,
         onRequestPermission = requestPermission,
         onOpenSettings = rememberAppSettingsOpener(),
-        onMediaClick = onMediaClick,
         onZoomLevelChange = viewModel::onZoomLevelChanged,
-        lastViewed = lastViewed,
+        playback = playback,
+        zone = viewModel.zone,
     )
 }
 
 /**
- * Zustandslose Album-Ansicht: Top-App-Bar mit Zurück-Pfeil und Albumname, darunter das gemeinsame Raster der Galerie.
- * Ist das Album verschwunden, steht eine kurze Meldung mit Zurück-Knopf.
+ * Zustandslose Album-Ansicht: Top-App-Bar mit Zurück-Pfeil und Albumname, darunter das gemeinsame Raster der Galerie. Der
+ * Vollbild-Viewer liegt darüber (ADR 0010). Ist das Album verschwunden, steht eine kurze Meldung mit Zurück-Knopf.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("ktlint:compose:vm-forwarding-check")
 internal fun AlbumContent(
     state: AlbumDetailUiState,
     onBack: () -> Unit,
     onRequestPermission: () -> Unit,
     onOpenSettings: () -> Unit,
-    onMediaClick: (MediaItem) -> Unit,
     onZoomLevelChange: (Int) -> Unit,
+    playback: ViewerPlaybackViewModel,
     modifier: Modifier = Modifier,
-    lastViewed: LastViewedMediaId = LastViewedMediaId.None,
+    zone: ZoneId = ZoneId.systemDefault(),
     gridState: LazyGridState = rememberLazyGridState(),
+) {
+    val content = state.grid as? MediaGridState.Content
+    MediaBrowser(
+        content = content,
+        gridState = gridState,
+        playback = playback,
+        zone = zone,
+        modifier = modifier.fillMaxSize(),
+    ) { browser, gridModifier ->
+        AlbumScaffold(
+            state = state,
+            onBack = onBack,
+            onRequestPermission = onRequestPermission,
+            onOpenSettings = onOpenSettings,
+            onZoomLevelChange = onZoomLevelChange,
+            browser = browser,
+            gridState = gridState,
+            modifier = gridModifier,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AlbumScaffold(
+    state: AlbumDetailUiState,
+    onBack: () -> Unit,
+    onRequestPermission: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onZoomLevelChange: (Int) -> Unit,
+    browser: MediaBrowserState,
+    gridState: LazyGridState,
+    modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val title = albumTitle(state.album)
     Scaffold(
-        modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 title = {
@@ -118,10 +156,9 @@ internal fun AlbumContent(
                 padding = padding,
                 onRequest = onRequestPermission,
                 onOpenSettings = onOpenSettings,
-                onMediaClick = onMediaClick,
+                onMediaClick = { item -> browser.open(item) },
                 onZoomLevelChange = onZoomLevelChange,
                 gridState = gridState,
-                lastViewed = lastViewed,
             )
         }
     }
