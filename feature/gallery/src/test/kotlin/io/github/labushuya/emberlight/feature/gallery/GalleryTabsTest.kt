@@ -33,6 +33,7 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineGrouping
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
+import io.github.labushuya.emberlight.feature.gallery.viewer.testPlayback
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -175,7 +176,7 @@ class GalleryTabsTest {
                     state = state,
                     onRequestPermission = {},
                     onOpenSettings = {},
-                    onMediaClick = {},
+                    playback = testPlayback(),
                     onAlbumClick = onAlbumClick,
                     onZoomLevelChange = {},
                 )

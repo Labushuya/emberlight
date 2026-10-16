@@ -15,7 +15,7 @@ import io.github.labushuya.emberlight.feature.gallery.GalleryUiState
 import io.github.labushuya.emberlight.feature.gallery.album.AlbumList
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.TODAY
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
-import io.github.labushuya.emberlight.feature.gallery.viewer.LastViewedMediaId
+import io.github.labushuya.emberlight.feature.gallery.viewer.testPlayback
 
 /** Zählt Kompositionen und welche Zellen gerade im Raster stehen. Ersetzt im Test den Betrieb ohne Zähler. */
 internal class GridProbeRecorder : GridProbe {
@@ -44,24 +44,16 @@ internal class GridProbeRecorder : GridProbe {
 /**
  * Galerie für Compose-Tests mit veränderlichem Zustand.
  *
- * - [lastViewedId] ist die Meldung des Viewers im Navigations-Stapel. Verbraucht das Raster sie, wird sie leer (wie der
- *   gespeicherte Zustand in der App). Mit [clearOnHandled] `false` bleibt sie stehen, um einen Verbrauch zu prüfen, der
- *   die Meldung nicht löscht.
  * - [tick] erzwingt eine Neukomposition ohne Zustandsänderung.
  * - [generation] baut die ganze Ansicht neu, wie ein Prozess-Neustart ohne gespeicherten Zustand.
  * - [Body] ist die Ansicht selbst, damit ein StateRestorationTester sie über einen Konfigurationswechsel neu aufbauen kann.
  */
 internal class GalleryHarness(
     private val items: List<MediaItem>,
-    initialLastViewed: Long? = null,
-    private val clearOnHandled: Boolean = true,
     val probe: GridProbeRecorder? = null,
-    private val onMediaClick: (MediaItem) -> Unit = {},
 ) {
-    var lastViewedId by mutableStateOf(initialLastViewed)
     var generation by mutableIntStateOf(0)
     var tick by mutableIntStateOf(0)
-    var handledCount = 0
     var zoomLevel by mutableIntStateOf(ZoomLevels.DEFAULT_LEVEL)
 
     fun show(rule: ComposeContentTestRule) {
@@ -76,26 +68,16 @@ internal class GalleryHarness(
     @Composable
     fun Body() {
         key(generation) {
-            val target = lastViewedId
-            val lastViewed =
-                LastViewedMediaId(mediaId = target, onHandled = {
-                    handledCount++
-                    if (clearOnHandled) lastViewedId = null
-                })
-            val body: @Composable () -> Unit = {
-                // Liest den Zähler, damit eine Änderung nur die Ansicht neu zusammensetzt.
-                check(tick >= 0)
-                GalleryContent(
-                    state = GalleryUiState(grid = content(), albums = AlbumList(emptyList())),
-                    onRequestPermission = {},
-                    onOpenSettings = {},
-                    onMediaClick = onMediaClick,
-                    onAlbumClick = {},
-                    onZoomLevelChange = { zoomLevel = it },
-                    lastViewed = lastViewed,
-                )
-            }
-            body()
+            // Liest den Zähler, damit eine Änderung nur die Ansicht neu zusammensetzt.
+            check(tick >= 0)
+            GalleryContent(
+                state = GalleryUiState(grid = content(), albums = AlbumList(emptyList())),
+                onRequestPermission = {},
+                onOpenSettings = {},
+                onAlbumClick = {},
+                onZoomLevelChange = { zoomLevel = it },
+                playback = testPlayback(),
+            )
         }
     }
 

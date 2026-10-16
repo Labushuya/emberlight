@@ -24,6 +24,7 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineGrouping
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineSection
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
+import io.github.labushuya.emberlight.feature.gallery.viewer.testPlayback
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -173,7 +174,7 @@ class GalleryScreenTest {
                     onZoomLevelChange = {},
                     onRequestPermission = onRequest,
                     onOpenSettings = onOpenSettings,
-                    onMediaClick = {},
+                    playback = testPlayback(),
                     onAlbumClick = {},
                 )
             }
