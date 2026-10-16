@@ -27,9 +27,12 @@ internal fun MediaThumbnailImage(
     // Ohne feste Größe misst Coil die Fläche selbst. Die Anfrage ist pro Eintrag gleich, daher einmal gebaut.
     val request =
         remember(context, uri, type) {
+            val thumbnail = MediaThumbnail(uri = uri, type = type)
             ImageRequest
                 .Builder(context)
-                .data(MediaThumbnail(uri = uri, type = type))
+                .data(thumbnail)
+                // Fester Schlüssel: Der Vollbild-Viewer findet dieses Vorschaubild im Speicher-Cache wieder (ADR 0010).
+                .memoryCacheKey(thumbnail.memoryCacheKey)
                 .crossfade(false)
                 .build()
         }
