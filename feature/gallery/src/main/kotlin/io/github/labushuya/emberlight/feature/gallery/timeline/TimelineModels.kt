@@ -7,23 +7,13 @@ import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import java.time.LocalDate
 import java.time.YearMonth
 
-/** Spaltenzahl der Standardstufe. Die Zeitleiste hat in Paket 3a nur diese Stufe (siehe ADR 0008). */
-internal const val DEFAULT_COLUMNS = 4
+/** Typ der Zelle im Raster. Dient auch dem Anker: Nur Medien-Zellen sind Anker, Überschriften nicht. */
+internal const val CONTENT_TYPE_MEDIA = "media"
 
-/**
- * Gruppierung der Zeitleiste. Tagesgruppen bis [MAX_DAY_COLUMNS] Spalten, Monatsgruppen ab der nächsten Stufe.
- * Die Monatsgruppen sind in 3a vorbereitet und getestet. Die UI nutzt sie erst mit der Spaltenstufe ab 5.
- */
+/** Gruppierung der Zeitleiste. Die Stufe bestimmt sie, siehe [ZoomLevels.groupingFor]. */
 internal enum class GroupingMode {
     DAY,
     MONTH,
-    ;
-
-    companion object {
-        const val MAX_DAY_COLUMNS = 4
-
-        fun forColumns(columns: Int): GroupingMode = if (columns <= MAX_DAY_COLUMNS) DAY else MONTH
-    }
 }
 
 /** Überschrift einer Gruppe. Der Text entsteht erst in der UI, weil Sprache und Ressourcen dort liegen. */
@@ -44,6 +34,18 @@ internal sealed interface TimelineHeader {
         val yearMonth: YearMonth,
     ) : TimelineHeader
 }
+
+/**
+ * Ein Datum, das für eine Überschrift steht. Heute und Gestern brauchen den heutigen Tag, deshalb kommt er als
+ * Parameter. Für die Schnell-Scrollleiste gilt: Der Monat der Überschrift bestimmt die Anzeige.
+ */
+internal fun TimelineHeader.representativeDate(today: LocalDate): LocalDate =
+    when (this) {
+        TimelineHeader.Today -> today
+        TimelineHeader.Yesterday -> today.minusDays(1)
+        is TimelineHeader.Day -> date
+        is TimelineHeader.Month -> yearMonth.atDay(1)
+    }
 
 /**
  * Eine Gruppe der Zeitleiste. [key] ist eindeutig und stabil über Aktualisierungen hinweg, z. B. `day:2026-10-16`.
@@ -77,10 +79,16 @@ internal sealed interface TimelineUiState {
         val missingTypes: Set<MediaType>,
     ) : TimelineUiState
 
+    /**
+     * Gruppierte Zeitleiste für [zoomLevel]. [today] ist der Tag, für den die Gruppen gebildet wurden. Die UI braucht
+     * ihn für die Schnell-Scrollleiste, damit Heute und Gestern dasselbe Datum meinen wie die Überschriften.
+     */
     @Immutable
     data class Content(
         val sections: List<TimelineSection>,
         val access: MediaAccess,
         val missingTypes: Set<MediaType>,
+        val zoomLevel: Int,
+        val today: LocalDate,
     ) : TimelineUiState
 }

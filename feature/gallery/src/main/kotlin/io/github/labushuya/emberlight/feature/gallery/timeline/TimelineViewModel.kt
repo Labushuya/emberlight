@@ -9,6 +9,7 @@ import io.github.labushuya.emberlight.feature.gallery.di.DefaultDispatcher
 import io.github.labushuya.emberlight.feature.gallery.permission.PermissionPromptStore
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,8 +24,9 @@ import java.time.ZoneId
 import javax.inject.Inject
 
 /**
- * Bildet den Medienindex auf den [TimelineUiState] ab. Die Gruppierung läuft auf [DefaultDispatcher], das Ergebnis
- * ist unveränderlich. Der Flow stoppt, wenn niemand mehr zuschaut.
+ * Bildet den Medienindex und die Zoomstufe auf den [TimelineUiState] ab. Die Gruppierung läuft auf [DefaultDispatcher]
+ * und wird je Art einmal berechnet ([TimelineGroupingCache]), damit das Umschalten der Stufe flott bleibt. Der Flow stoppt,
+ * wenn niemand mehr zuschaut.
  */
 @HiltViewModel
 internal class TimelineViewModel
@@ -32,12 +34,23 @@ internal class TimelineViewModel
     constructor(
         private val repository: MediaRepository,
         private val permissionPrompts: PermissionPromptStore,
+        private val zoomLevels: ZoomLevelStore,
         @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
         private val clock: Clock,
         private val zone: ZoneId,
     ) : ViewModel() {
-        private val columns = MutableStateFlow(DEFAULT_COLUMNS)
+        /** Stufe, die der Nutzer gewählt hat. `null`, solange nichts gewählt wurde: dann gilt die gespeicherte. */
+        private val userLevel = MutableStateFlow<Int?>(null)
+
+        /**
+         * Gewählte oder gespeicherte Stufe, begrenzt. Eine späte Antwort des Speichers überschreibt keine Nutzerwahl. Der
+         * Speicher wird nur gelesen, nicht über eine eigene Coroutine: so startet die Zeitleiste ohne Zusatzarbeit.
+         */
+        private val zoomLevel: Flow<Int> =
+            combine(userLevel, zoomLevels.level) { chosen, saved -> ZoomLevels.clamp(chosen ?: saved) }
+
         private val rationaleShown = MutableStateFlow(false)
+        private val grouper = TimelineGroupingCache()
 
         /** Beim ersten Vordergrund hat der Index gerade erst begonnen zu laden, dann ist kein Neulesen nötig. */
         private var resumedBefore = false
@@ -48,25 +61,31 @@ internal class TimelineViewModel
                 repository.library,
                 permissionPrompts.askedBefore,
                 rationaleShown,
-                columns,
-            ) { library, asked, rationale, count ->
-                Snapshot(library, asked, rationale, count)
+                zoomLevel,
+            ) { library, asked, rationale, level ->
+                Snapshot(library, asked, rationale, level)
             }.mapLatest { snapshot ->
                 withContext(defaultDispatcher) {
                     timelineUiState(
                         library = snapshot.library,
                         askedBefore = snapshot.askedBefore,
                         showRationale = snapshot.showRationale,
-                        columns = snapshot.columns,
+                        zoomLevel = snapshot.zoomLevel,
                         today = LocalDate.now(clock.withZone(zone)),
                         zone = zone,
+                        grouper = grouper,
                     )
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), TimelineUiState.Loading)
 
-        /** Aktuelle Spaltenzahl. Nur die Standardstufe ist in 3a erreichbar. */
-        fun onColumnsChanged(count: Int) {
-            columns.value = count
+        /**
+         * Neue Zoomstufe, etwa durch Pinch oder Bedienungshilfe. Wird sofort gespeichert. Ungültige Werte werden begrenzt.
+         */
+        fun onZoomLevelChanged(level: Int) {
+            val clamped = ZoomLevels.clamp(level)
+            if (userLevel.value == clamped) return
+            userLevel.value = clamped
+            viewModelScope.launch { zoomLevels.setLevel(clamped) }
         }
 
         /**
@@ -93,7 +112,7 @@ internal class TimelineViewModel
             val library: MediaLibraryState,
             val askedBefore: Boolean,
             val showRationale: Boolean,
-            val columns: Int,
+            val zoomLevel: Int,
         )
 
         private companion object {

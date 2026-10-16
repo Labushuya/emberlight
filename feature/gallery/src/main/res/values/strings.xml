@@ -19,4 +19,11 @@
     <string name="feature_gallery_missing_videos">Videos are not shared yet.</string>
     <string name="feature_gallery_empty_title">No photos or videos yet</string>
     <string name="feature_gallery_empty_text">Photos and videos on this device will appear here.</string>
+    <string name="feature_gallery_zoom_in">Enlarge view</string>
+    <string name="feature_gallery_zoom_out">Shrink view</string>
+    <string name="feature_gallery_fast_scroll">Fast scroll bar</string>
+    <plurals name="feature_gallery_zoom_columns">
+        <item quantity="one">%d column</item>
+        <item quantity="other">%d columns</item>
+    </plurals>
 </resources>
