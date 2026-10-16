@@ -139,6 +139,30 @@ jobs:
         with:
           # Release-Läufe schreiben keinen Cache, damit ein Lauf nichts in den gemeinsamen Cache legt.
           cache-read-only: true
+          # Gleicher Schlüssel wie in ci.yml. Er wird zum Lesen des verschlüsselten Configuration Cache gebraucht.
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      # Robolectric-Systemabbilder nur lesen, aus demselben Schlüssel wie in ci.yml (siehe dort und docs/adr/0006).
+      - name: Robolectric-Version und SDK bestimmen
+        id: robolectric
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^robolectric = "\(.*\)"/\1/p' gradle/libs.versions.toml)
+          sdk=$(sed -n 's/.*const val TARGET_SDK = \([0-9]*\).*/\1/p' build-logic/convention/src/main/kotlin/io/github/labushuya/emberlight/buildlogic/EmberlightConfig.kt)
+          if [[ -z "$version" || -z "$sdk" ]]; then
+            echo "::error title=Robolectric-Cache::Robolectric-Version oder Test-SDK ist nicht lesbar."
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "sdk=${sdk}" >> "$GITHUB_OUTPUT"
+
+      # Nur Restore. Der Release-Lauf speichert nichts, wie die Gradle-Einrichtung oben.
+      - name: Robolectric-Systemabbilder aus dem Cache holen
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository/org/robolectric/android-all-instrumented
+          key: robolectric-${{ steps.robolectric.outputs.version }}-sdk${{ steps.robolectric.outputs.sdk }}-${{ runner.os }}
 
       # Keystore nur mit Rechten für den aktuellen Benutzer. Die Datei wird am Ende wieder gelöscht.
       - name: Keystore dekodieren
