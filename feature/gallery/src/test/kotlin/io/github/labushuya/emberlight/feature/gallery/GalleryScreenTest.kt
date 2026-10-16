@@ -14,15 +14,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
-import io.github.labushuya.emberlight.feature.gallery.timeline.GalleryContent
 import io.github.labushuya.emberlight.feature.gallery.timeline.GroupingMode
+import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 import io.github.labushuya.emberlight.feature.gallery.timeline.TestThumbnails
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.TODAY
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineGrouping
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineSection
-import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineUiState
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -56,7 +55,7 @@ class GalleryScreenTest {
     @Test
     fun permissionDialogIsRequestedByItsButton() {
         var requests = 0
-        setContent(TimelineUiState.PermissionRequired(canRequest = true), onRequest = { requests++ })
+        setContent(MediaGridState.PermissionRequired(canRequest = true), onRequest = { requests++ })
 
         composeRule.onNodeWithText(string(GalleryR.string.feature_gallery_permission_allow)).performClick()
 
@@ -68,7 +67,7 @@ class GalleryScreenTest {
         var requests = 0
         var settings = 0
         setContent(
-            TimelineUiState.PermissionRequired(canRequest = false),
+            MediaGridState.PermissionRequired(canRequest = false),
             onRequest = { requests++ },
             onOpenSettings = { settings++ },
         )
@@ -138,7 +137,7 @@ class GalleryScreenTest {
 
     @Test
     fun emptyStateExplainsItself() {
-        setContent(TimelineUiState.Empty(MediaAccess.FULL, emptySet()))
+        setContent(MediaGridState.Empty(MediaAccess.FULL, emptySet()))
 
         composeRule.onNodeWithText(string(GalleryR.string.feature_gallery_empty_title)).assertIsDisplayed()
     }
@@ -162,7 +161,7 @@ class GalleryScreenTest {
     }
 
     private fun setContent(
-        state: TimelineUiState,
+        state: MediaGridState,
         onRequest: () -> Unit = {},
         onOpenSettings: () -> Unit = {},
     ) {
@@ -184,7 +183,7 @@ class GalleryScreenTest {
         access: MediaAccess,
         missingTypes: Set<MediaType>,
         zoomLevel: Int = ZoomLevels.DEFAULT_LEVEL,
-    ): TimelineUiState.Content = TimelineUiState.Content(sections, access, missingTypes, zoomLevel, TODAY)
+    ): MediaGridState.Content = MediaGridState.Content(sections, access, missingTypes, zoomLevel, TODAY)
 
     private fun sections() = TimelineGrouping.group(TimelineFixtures.sampleItems(), GroupingMode.DAY, TODAY, ZONE)
 

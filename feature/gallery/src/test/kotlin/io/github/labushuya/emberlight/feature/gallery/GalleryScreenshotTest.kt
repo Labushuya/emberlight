@@ -13,15 +13,14 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
-import io.github.labushuya.emberlight.feature.gallery.timeline.GalleryContent
 import io.github.labushuya.emberlight.feature.gallery.timeline.GroupingMode
+import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 import io.github.labushuya.emberlight.feature.gallery.timeline.TestThumbnails
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.TODAY
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineGrouping
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineSection
-import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineUiState
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
 import org.junit.After
 import org.junit.Before
@@ -123,7 +122,7 @@ class GalleryScreenshotTest {
     @Config(qualifiers = "en-w412dp-h915dp")
     fun permissionPhoneEnglish() {
         capture(
-            TimelineUiState.PermissionRequired(canRequest = true),
+            MediaGridState.PermissionRequired(canRequest = true),
             "src/test/screenshots/GalleryPermission_phone_en.png",
         )
     }
@@ -140,7 +139,7 @@ class GalleryScreenshotTest {
     @Test
     @Config(qualifiers = "en-w412dp-h915dp")
     fun emptyPhoneEnglish() {
-        capture(TimelineUiState.Empty(MediaAccess.FULL, emptySet()), "src/test/screenshots/GalleryEmpty_phone_en.png")
+        capture(MediaGridState.Empty(MediaAccess.FULL, emptySet()), "src/test/screenshots/GalleryEmpty_phone_en.png")
     }
 
     @Test
@@ -164,7 +163,7 @@ class GalleryScreenshotTest {
     }
 
     private fun capture(
-        state: TimelineUiState,
+        state: MediaGridState,
         path: String,
     ) {
         setContent(state)
@@ -172,7 +171,7 @@ class GalleryScreenshotTest {
         composeRule.onRoot().captureRoboImage(path)
     }
 
-    private fun setContent(state: TimelineUiState) {
+    private fun setContent(state: MediaGridState) {
         composeRule.setContent {
             EmberlightTheme {
                 GalleryContent(
@@ -191,9 +190,9 @@ class GalleryScreenshotTest {
         access: MediaAccess,
         missingTypes: Set<MediaType>,
         zoomLevel: Int = ZoomLevels.DEFAULT_LEVEL,
-    ): TimelineUiState.Content = TimelineUiState.Content(sections, access, missingTypes, zoomLevel, TODAY)
+    ): MediaGridState.Content = MediaGridState.Content(sections, access, missingTypes, zoomLevel, TODAY)
 
-    private fun levelContent(level: Int): TimelineUiState.Content =
+    private fun levelContent(level: Int): MediaGridState.Content =
         contentOf(
             TimelineGrouping.group(TimelineFixtures.sampleItems(), ZoomLevels.groupingFor(level), TODAY, ZONE),
             MediaAccess.FULL,

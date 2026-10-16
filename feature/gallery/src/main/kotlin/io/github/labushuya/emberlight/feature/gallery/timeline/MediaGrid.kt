@@ -1,9 +1,7 @@
 package io.github.labushuya.emberlight.feature.gallery.timeline
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,23 +12,16 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
@@ -56,91 +47,30 @@ private const val TYPE_BANNER = "banner"
 private const val KEY_BANNER = "access-banner"
 
 /**
- * Zeitleiste ohne eigene Zustandslogik: zeichnet [state] und meldet Aktionen nach außen. Dadurch sind alle Zustände
- * mit festen Daten testbar und in Goldens festhaltbar. Der Zustand kommt aus [GalleryScreen].
+ * Das gemeinsame Raster von Galerie und Album: Überschriften, Medien, Zoom mit Anker, Schnell-Scrollleiste und Hinweis-
+ * Banner. Zeichnet den Zustand [state] und meldet Aktionen nach außen. Die Spaltenzahl folgt aus der Breite und der
+ * Zoomstufe des Zustands. Eine Stufenänderung (Pinch oder Bedienungshilfe) geht über [onZoomLevelChange].
  *
- * Die Spaltenzahl folgt aus der Breite und der Zoomstufe des Zustands. Eine Stufenänderung (Pinch oder Bedienungshilfe)
- * geht über [onZoomLevelChange]. Die Antwort kommt als neuer Zustand zurück.
+ * [gridState] gehört dem Aufrufer, damit die Scrollposition den Reiter- oder Ansichtswechsel übersteht.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun GalleryContent(
-    state: TimelineUiState,
-    onRequestPermission: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onMediaClick: (MediaItem) -> Unit,
-    onZoomLevelChange: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val locale = LocalConfiguration.current.locales[0]
-    val formats = remember(locale) { TimelineFormats(locale, ZoneId.systemDefault()) }
-    Scaffold(
-        modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            TopAppBar(
-                title = { Text(text = stringResource(R.string.feature_gallery_title)) },
-                scrollBehavior = scrollBehavior,
-            )
-        },
-    ) { padding ->
-        when (state) {
-            TimelineUiState.Loading -> {
-                Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
-            }
-
-            is TimelineUiState.PermissionRequired -> {
-                PermissionPrompt(
-                    canRequest = state.canRequest,
-                    onRequest = onRequestPermission,
-                    onOpenSettings = onOpenSettings,
-                    modifier = Modifier.padding(padding),
-                )
-            }
-
-            is TimelineUiState.Empty -> {
-                EmptyTimeline(
-                    access = state.access,
-                    missingTypes = state.missingTypes,
-                    onRequest = onRequestPermission,
-                    onOpenSettings = onOpenSettings,
-                    padding = padding,
-                )
-            }
-
-            is TimelineUiState.Content -> {
-                TimelineGrid(
-                    state = state,
-                    formats = formats,
-                    onRequest = onRequestPermission,
-                    onOpenSettings = onOpenSettings,
-                    onMediaClick = onMediaClick,
-                    onZoomLevelChange = onZoomLevelChange,
-                    padding = padding,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TimelineGrid(
-    state: TimelineUiState.Content,
-    formats: TimelineFormats,
+internal fun MediaGrid(
+    state: MediaGridState.Content,
+    padding: PaddingValues,
     onRequest: () -> Unit,
     onOpenSettings: () -> Unit,
     onMediaClick: (MediaItem) -> Unit,
     onZoomLevelChange: (Int) -> Unit,
-    padding: PaddingValues,
+    modifier: Modifier = Modifier,
+    gridState: LazyGridState = rememberLazyGridState(),
 ) {
     val density = LocalDensity.current
-    val gridState = rememberLazyGridState()
     val zoom = remember { PinchZoomState() }
     val scope = rememberCoroutineScope()
     val currentLevel = rememberUpdatedState(state.zoomLevel)
-    val hasBanner = state.access == MediaAccess.PARTIAL || state.missingTypes.isNotEmpty()
+    val locale = LocalConfiguration.current.locales[0]
+    val formats = remember(locale) { TimelineFormats(locale, ZoneId.systemDefault()) }
+    val hasBanner = needsAccessBanner(state.access, state.missingTypes)
     val index =
         remember(state.sections, hasBanner) { TimelineIndex(state.sections, if (hasBanner) 1 else 0, state.today) }
     val mode = ZoomLevels.groupingFor(state.zoomLevel)
@@ -149,7 +79,7 @@ private fun TimelineGrid(
     val enlarge = stringResource(R.string.feature_gallery_zoom_in)
     val shrink = stringResource(R.string.feature_gallery_zoom_out)
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = with(density) { maxWidth.toPx() }
         val columns = ZoomLevels.columnsFor(state.zoomLevel, maxWidth.value)
         val tilePx = ZoomLevels.tileWidth(widthPx, gapPx, columns)
@@ -239,14 +169,14 @@ private fun TimelineGrid(
             verticalArrangement = Arrangement.spacedBy(GRID_GAP),
         ) {
             if (hasBanner) {
-                item(key = KEY_BANNER, span = { GridItemSpan(maxLineSpan) }, contentType = TYPE_BANNER) {
-                    AccessBanner(
-                        access = state.access,
-                        missingTypes = state.missingTypes,
-                        onRequest = onRequest,
-                        onOpenSettings = onOpenSettings,
-                    )
-                }
+                accessBannerItem(
+                    key = KEY_BANNER,
+                    contentType = TYPE_BANNER,
+                    access = state.access,
+                    missingTypes = state.missingTypes,
+                    onRequest = onRequest,
+                    onOpenSettings = onOpenSettings,
+                )
             }
             state.sections.forEach { section ->
                 item(key = section.key, span = { GridItemSpan(maxLineSpan) }, contentType = TYPE_HEADER) {
@@ -353,26 +283,5 @@ private fun mediaLabel(
         stringResource(R.string.feature_gallery_cell_video, formatDuration(item.durationMs ?: 0L), date)
     } else {
         stringResource(R.string.feature_gallery_cell_photo, date)
-    }
-}
-
-@Composable
-private fun EmptyTimeline(
-    access: MediaAccess,
-    missingTypes: Set<MediaType>,
-    onRequest: () -> Unit,
-    onOpenSettings: () -> Unit,
-    padding: PaddingValues,
-) {
-    Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-        if (access == MediaAccess.PARTIAL || missingTypes.isNotEmpty()) {
-            AccessBanner(
-                access = access,
-                missingTypes = missingTypes,
-                onRequest = onRequest,
-                onOpenSettings = onOpenSettings,
-            )
-        }
-        EmptyMessage(modifier = Modifier.weight(1f))
     }
 }

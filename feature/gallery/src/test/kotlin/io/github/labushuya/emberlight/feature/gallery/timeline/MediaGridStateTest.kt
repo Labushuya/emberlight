@@ -9,10 +9,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class TimelineStateTest {
+class MediaGridStateTest {
     @Test
     fun loadingStaysLoading() {
-        assertEquals(TimelineUiState.Loading, state(MediaLibraryState.Loading))
+        assertEquals(MediaGridState.Loading, state(MediaLibraryState.Loading))
     }
 
     @Test
@@ -20,7 +20,7 @@ class TimelineStateTest {
         val result =
             state(ready(items = emptyList(), access = MediaAccess.NONE), askedBefore = false, showRationale = false)
 
-        assertEquals(TimelineUiState.PermissionRequired(canRequest = true), result)
+        assertEquals(MediaGridState.PermissionRequired(canRequest = true), result)
     }
 
     @Test
@@ -28,7 +28,7 @@ class TimelineStateTest {
         val result =
             state(ready(items = emptyList(), access = MediaAccess.NONE), askedBefore = true, showRationale = true)
 
-        assertEquals(TimelineUiState.PermissionRequired(canRequest = true), result)
+        assertEquals(MediaGridState.PermissionRequired(canRequest = true), result)
     }
 
     @Test
@@ -37,29 +37,29 @@ class TimelineStateTest {
         val result =
             state(ready(items = emptyList(), access = MediaAccess.NONE), askedBefore = true, showRationale = false)
 
-        assertEquals(TimelineUiState.PermissionRequired(canRequest = false), result)
+        assertEquals(MediaGridState.PermissionRequired(canRequest = false), result)
     }
 
     @Test
     fun fullAccessWithoutItemsIsEmpty() {
         val result = state(ready(items = emptyList()))
 
-        assertEquals(TimelineUiState.Empty(MediaAccess.FULL, emptySet()), result)
+        assertEquals(MediaGridState.Empty(MediaAccess.FULL, emptySet()), result)
     }
 
     @Test
     fun partialAccessWithoutSelectionIsEmptyAndKeepsPartialAccess() {
         val result = state(ready(items = emptyList(), access = MediaAccess.PARTIAL))
 
-        assertEquals(TimelineUiState.Empty(MediaAccess.PARTIAL, emptySet()), result)
+        assertEquals(MediaGridState.Empty(MediaAccess.PARTIAL, emptySet()), result)
     }
 
     @Test
     fun itemsGiveContentWithSectionsAndAccess() {
         val result = state(ready())
 
-        assertTrue(result is TimelineUiState.Content)
-        val content = result as TimelineUiState.Content
+        assertTrue(result is MediaGridState.Content)
+        val content = result as MediaGridState.Content
         assertEquals(MediaAccess.FULL, content.access)
         assertEquals(emptySet<MediaType>(), content.missingTypes)
         assertEquals(TimelineHeader.Today, content.sections.first().header)
@@ -71,7 +71,7 @@ class TimelineStateTest {
         // Nur Fotos freigegeben: die Videos fehlen, die Fotos bleiben sichtbar.
         val library = ready(access = MediaAccess.FULL, missingTypes = setOf(MediaType.VIDEO))
 
-        val content = state(library) as TimelineUiState.Content
+        val content = state(library) as MediaGridState.Content
 
         assertEquals(setOf(MediaType.VIDEO), content.missingTypes)
     }
@@ -82,13 +82,13 @@ class TimelineStateTest {
 
         val result = state(library)
 
-        assertEquals(TimelineUiState.Empty(MediaAccess.FULL, setOf(MediaType.IMAGE)), result)
+        assertEquals(MediaGridState.Empty(MediaAccess.FULL, setOf(MediaType.IMAGE)), result)
     }
 
     @Test
     fun zoomStageSelectsGroupingModeNotColumns() {
-        val dayStage = state(ready(), zoomLevel = ZoomLevels.LAST_DAY_LEVEL) as TimelineUiState.Content
-        val monthStage = state(ready(), zoomLevel = ZoomLevels.LAST_DAY_LEVEL + 1) as TimelineUiState.Content
+        val dayStage = state(ready(), zoomLevel = ZoomLevels.LAST_DAY_LEVEL) as MediaGridState.Content
+        val monthStage = state(ready(), zoomLevel = ZoomLevels.LAST_DAY_LEVEL + 1) as MediaGridState.Content
 
         assertEquals(TimelineHeader.Today, dayStage.sections.first().header)
         assertEquals(TimelineHeader.Month(java.time.YearMonth.of(2026, 10)), monthStage.sections.first().header)
@@ -107,9 +107,10 @@ class TimelineStateTest {
         askedBefore: Boolean = true,
         showRationale: Boolean = false,
         zoomLevel: Int = ZoomLevels.DEFAULT_LEVEL,
-    ): TimelineUiState =
-        timelineUiState(
+    ): MediaGridState =
+        mediaGridState(
             library = library,
+            scope = MediaScope.All,
             askedBefore = askedBefore,
             showRationale = showRationale,
             zoomLevel = zoomLevel,

@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.core.media.MediaLibraryState
 import io.github.labushuya.emberlight.core.media.MediaRepository
+import io.github.labushuya.emberlight.feature.gallery.GalleryViewModel
 import io.github.labushuya.emberlight.feature.gallery.permission.DataStorePermissionPromptStore
 import io.github.labushuya.emberlight.feature.gallery.permission.anyPermissionRationale
 import io.github.labushuya.emberlight.feature.gallery.permission.appSettingsIntent
@@ -24,7 +25,6 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.GroupingMode
 import io.github.labushuya.emberlight.feature.gallery.timeline.TestThumbnails
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFormats
-import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineViewModel
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevelStore
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
 import kotlinx.coroutines.Dispatchers
@@ -73,7 +73,7 @@ class GalleryWiringTest {
     @Test
     fun screenShowsTheTimelineFromTheViewModel() {
         val viewModel =
-            TimelineViewModel(
+            GalleryViewModel(
                 repository = FixedRepository(MediaLibraryState.Ready(TimelineFixtures.library())),
                 permissionPrompts = DataStorePermissionPromptStore(context),
                 zoomLevels = MemoryZoomLevelStore(),

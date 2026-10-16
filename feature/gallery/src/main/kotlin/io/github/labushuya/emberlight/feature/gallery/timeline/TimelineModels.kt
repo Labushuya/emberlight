@@ -58,10 +58,13 @@ internal data class TimelineSection(
     val items: List<MediaItem>,
 )
 
-/** Zustand der Zeitleiste für die UI. */
-internal sealed interface TimelineUiState {
+/**
+ * Zustand eines Rasters für die UI, gemeinsam für Galerie und Album. Laden, Berechtigung und Leerzustand gelten für
+ * alle Ansichten gleich. [Gone] meldet ein Album, das nicht mehr im Index steht (ADR 0009).
+ */
+internal sealed interface MediaGridState {
     /** Erste Abfrage läuft. */
-    data object Loading : TimelineUiState
+    data object Loading : MediaGridState
 
     /**
      * Kein Zugriff. [canRequest] `true`: der Dialog kann erneut erscheinen. `false`: nur noch die Systemeinstellungen
@@ -70,17 +73,27 @@ internal sealed interface TimelineUiState {
     @Immutable
     data class PermissionRequired(
         val canRequest: Boolean,
-    ) : TimelineUiState
+    ) : MediaGridState
 
-    /** Zugriff vorhanden, aber keine Einträge (bei [MediaAccess.PARTIAL] keine Auswahl). */
+    /** Zugriff vorhanden, aber keine Einträge im Geltungsbereich (bei [MediaAccess.PARTIAL] keine Auswahl). */
     @Immutable
     data class Empty(
         val access: MediaAccess,
         val missingTypes: Set<MediaType>,
-    ) : TimelineUiState
+    ) : MediaGridState
 
     /**
-     * Gruppierte Zeitleiste für [zoomLevel]. [today] ist der Tag, für den die Gruppen gebildet wurden. Die UI braucht
+     * Das Album hat keine Einträge mehr, etwa weil alle gelöscht wurden. Entsteht nur im Geltungsbereich
+     * [MediaScope.Bucket]. Die Galerie meldet stattdessen [Empty].
+     */
+    @Immutable
+    data class Gone(
+        val access: MediaAccess,
+        val missingTypes: Set<MediaType>,
+    ) : MediaGridState
+
+    /**
+     * Gruppiertes Raster für [zoomLevel]. [today] ist der Tag, für den die Gruppen gebildet wurden. Die UI braucht
      * ihn für die Schnell-Scrollleiste, damit Heute und Gestern dasselbe Datum meinen wie die Überschriften.
      */
     @Immutable
@@ -90,5 +103,5 @@ internal sealed interface TimelineUiState {
         val missingTypes: Set<MediaType>,
         val zoomLevel: Int,
         val today: LocalDate,
-    ) : TimelineUiState
+    ) : MediaGridState
 }
