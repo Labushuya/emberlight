@@ -34,6 +34,7 @@ Galerie und Sharing sollen unabhängig wachsen (siehe [CLAUDE.md](../../CLAUDE.m
 
 - Symptom: ein interner Lint-Fehler „Error while resolving FirRegularClassImpl“ im Task `:app:lintAnalyzeDebugUnitTest`.
 - Häufigkeit: 3 Vorkommen lokal. Danach wurde er in 10 weiteren Läufen nicht mehr reproduziert (0 von 10).
+- Weiteres Vorkommen bei Paket 5a (Meilenstein 2): `:app:lintAnalyzeDebugUnitTest`, Datei `EmberlightAlbumNavigationTest.kt`. Mit `LINT_PRINT_STACKTRACE=true` zeigt der Stacktrace eine `KotlinIllegalArgumentExceptionWithAttachments` in `LLFirModuleLazyDeclarationResolver`. Zwei Wiederholungen mit `--rerun-tasks` liefen ohne Fehler. Ein Vorkommen trat also mit Stacktrace auf und verschwand von selbst, die Ursache bleibt offen.
 - Hypothese, nicht belegt: Lint 32.4.1 bettet einen Kotlin-Compiler mit stdlib 2.2.10 ein. Das Projekt nutzt Kotlin 2.4.21. Die Versionen passen nicht zusammen, das könnte den Fehler auslösen.
 - Diagnose-Rezept: `LINT_PRINT_STACKTRACE=true` setzen. Ein Absturz zeigt dann den vollständigen Stacktrace. Die Variable ist in `ci.yml` und `release.yml` gesetzt, damit ein Wiederauftreten im CI-Log sichtbar ist.
 - Maßnahme erst bei belegter Ursache. Ohne Stacktrace wird nichts geändert.
