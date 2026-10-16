@@ -45,64 +45,79 @@ internal class DemoThumbnailFactory : Fetcher.Factory<MediaThumbnail> {
     }
 }
 
-/**
- * Erzeugt das Vorschaubild eines synthetischen Eintrags: ein Farbverlauf je Eintrag, darauf Nummer und Datum in großer Schrift.
- * Die Pixel entstehen im Speicher, auf dem Gerät liegt nichts.
- */
+/** Vorschaubild eines synthetischen Eintrags in der Auflösung des Thumbnails. Die Pixel entstehen im Speicher. */
 internal class DemoThumbnailFetcher(
     private val item: MediaItem,
 ) : Fetcher {
     override suspend fun fetch(): FetchResult? =
         ImageFetchResult(
-            image = render(item).asImage(),
+            image = renderDemoBitmap(item.id, item.timestamp, item.width, item.height, THUMBNAIL_LONG_EDGE).asImage(),
             isSampled = false,
             dataSource = DataSource.MEMORY,
         )
-
-    private fun render(item: MediaItem): Bitmap {
-        val (width, height) = bitmapSize(item)
-        val bitmap = createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val hue = ((item.id * GOLDEN_ANGLE) % 360.0).toFloat()
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        val background =
-            GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(hsv(hue, 0.55f, 0.85f), hsv((hue + 60f) % 360f, 0.75f, 0.35f)),
-            )
-        background.setBounds(0, 0, width, height)
-        background.draw(canvas)
-
-        paint.color = Color.WHITE
-        paint.textAlign = Paint.Align.CENTER
-        val numberSize = minOf(width, height) / 3f
-        paint.textSize = numberSize
-        paint.typeface = Typeface.DEFAULT_BOLD
-        canvas.drawText(item.id.toString(), width / 2f, height / 2f, paint)
-        paint.textSize = numberSize / 3.2f
-        paint.typeface = Typeface.DEFAULT
-        val date = DATE.format(Instant.ofEpochMilli(item.timestamp).atZone(ZONE))
-        canvas.drawText(date, width / 2f, height / 2f + numberSize * 0.6f, paint)
-        return bitmap
-    }
-
-    private fun bitmapSize(item: MediaItem): Pair<Int, Int> {
-        val longEdge = 320
-        val w = item.width ?: longEdge
-        val h = item.height ?: longEdge
-        val scale = longEdge.toFloat() / maxOf(w, h)
-        return (w * scale).toInt().coerceAtLeast(1) to (h * scale).toInt().coerceAtLeast(1)
-    }
-
-    private fun hsv(
-        hue: Float,
-        saturation: Float,
-        value: Float,
-    ): Int = Color.HSVToColor(floatArrayOf(hue, saturation, value))
-
-    private companion object {
-        const val GOLDEN_ANGLE = 137.508
-        val ZONE: ZoneId = ZoneId.of("Europe/Berlin")
-        val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-    }
 }
+
+/**
+ * Das Motiv eines synthetischen Eintrags: ein Farbverlauf je Eintrag, darauf Nummer und Datum in großer Schrift. Vorschaubild
+ * und Vollbild zeigen dasselbe Motiv, nur in anderer Auflösung. Das Seitenverhältnis folgt den Maßen des Eintrags, die lange
+ * Kante hat [longEdge] Pixel.
+ */
+internal fun renderDemoBitmap(
+    id: Long,
+    timestamp: Long,
+    width: Int?,
+    height: Int?,
+    longEdge: Int,
+): Bitmap {
+    val (bitmapWidth, bitmapHeight) = bitmapSize(width, height, longEdge)
+    val bitmap = createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val hue = ((id * GOLDEN_ANGLE) % 360.0).toFloat()
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    val background =
+        GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(hsv(hue, 0.55f, 0.85f), hsv((hue + 60f) % 360f, 0.75f, 0.35f)),
+        )
+    background.setBounds(0, 0, bitmapWidth, bitmapHeight)
+    background.draw(canvas)
+
+    paint.color = Color.WHITE
+    paint.textAlign = Paint.Align.CENTER
+    val numberSize = minOf(bitmapWidth, bitmapHeight) / 3f
+    paint.textSize = numberSize
+    paint.typeface = Typeface.DEFAULT_BOLD
+    canvas.drawText(id.toString(), bitmapWidth / 2f, bitmapHeight / 2f, paint)
+    paint.textSize = numberSize / 3.2f
+    paint.typeface = Typeface.DEFAULT
+    val date = DATE.format(Instant.ofEpochMilli(timestamp).atZone(ZONE))
+    canvas.drawText(date, bitmapWidth / 2f, bitmapHeight / 2f + numberSize * 0.6f, paint)
+    return bitmap
+}
+
+private fun bitmapSize(
+    width: Int?,
+    height: Int?,
+    longEdge: Int,
+): Pair<Int, Int> {
+    val w = width ?: longEdge
+    val h = height ?: longEdge
+    val scale = longEdge.toFloat() / maxOf(w, h)
+    return (w * scale).toInt().coerceAtLeast(1) to (h * scale).toInt().coerceAtLeast(1)
+}
+
+private fun hsv(
+    hue: Float,
+    saturation: Float,
+    value: Float,
+): Int = Color.HSVToColor(floatArrayOf(hue, saturation, value))
+
+/** Lange Kante des Vorschaubilds, wie bisher. */
+internal const val THUMBNAIL_LONG_EDGE = 320
+
+/** Lange Kante des Vollbilds: groß genug zum Zoomen und Lesen der Nummer, klein genug für den Speicher (ein Bild etwa 5 MB). */
+internal const val FULL_LONG_EDGE = 1280
+
+private const val GOLDEN_ANGLE = 137.508
+private val ZONE: ZoneId = ZoneId.of("Europe/Berlin")
+private val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")

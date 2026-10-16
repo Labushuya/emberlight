@@ -47,6 +47,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.coil.core)
+    implementation(libs.telephoto.zoomable.image)
     implementation(libs.coil.video)
     implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
     // Nur für den Demo-Schalter (src/demo). Ohne Demo-Source-Set wird die Bibliothek nicht gebraucht, sie ist aber klein.

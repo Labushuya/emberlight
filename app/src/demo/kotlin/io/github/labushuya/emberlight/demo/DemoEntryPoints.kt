@@ -27,6 +27,7 @@ import io.github.labushuya.emberlight.core.media.di.AlternativeMediaSource
 import io.github.labushuya.emberlight.extensions.AppOverlay
 import io.github.labushuya.emberlight.extensions.CoilComponents
 import io.github.labushuya.emberlight.extensions.LaunchIntentHandler
+import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerImageSourceContribution
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -102,4 +103,8 @@ internal abstract class DemoModule {
     @Binds
     @IntoSet
     abstract fun overlay(impl: DemoBadge): AppOverlay
+
+    @Binds
+    @IntoSet
+    abstract fun viewerImageSource(impl: DemoViewerImageContribution): ViewerImageSourceContribution
 }
