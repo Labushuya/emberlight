@@ -9,7 +9,6 @@ android {
         // Per-App-Sprache (Android 13+): erzeugt die Locale-Konfiguration aus den values-Ordnern.
         generateLocaleConfig = true
     }
-    testOptions.unitTests.isIncludeAndroidResources = true
 }
 
 dependencies {
