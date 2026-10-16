@@ -32,6 +32,9 @@ jobs:
     permissions:
       contents: write
     env:
+      # Ein früher sporadischer Lint-Absturz soll beim Wiederauftreten mit vollständigem Stacktrace im Log stehen
+      # (Wiedervorlage in ADR 0001).
+      LINT_PRINT_STACKTRACE: "true"
       # Build-Tools fest gepinnt statt "neueste installierte": Die Prüfung soll reproduzierbar sein, und
       # Ausgabeformate der apksigner-Versionen unterscheiden sich (37.0.0 schreibt "V2 Signer: certificate ...").
       # 37.0.0 ist laut actions/runner-images (Ubuntu 24.04) vorinstalliert und lokal gegen den Fingerprint geprüft.
