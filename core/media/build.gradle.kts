@@ -9,6 +9,8 @@ dependencies {
     implementation(libs.androidx.compose.runtime)
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.core)
+    // Thumbnails: Fetcher und Mapper für MediaStore-URIs (ADR 0008). Nur die Coil-Kernbibliothek, keine Netzwerk-Module.
+    implementation(libs.coil.core)
 
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)

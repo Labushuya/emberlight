@@ -21,7 +21,8 @@ import kotlinx.coroutines.Dispatchers
 @InstallIn(SingletonComponent::class)
 internal abstract class MediaModule {
     @Binds
-    abstract fun bindMediaRepository(impl: MediaStoreMediaRepository): MediaRepository
+    @MediaStoreSource
+    abstract fun bindMediaStoreRepository(impl: MediaStoreMediaRepository): MediaRepository
 
     @Binds
     abstract fun bindMediaStoreGateway(impl: ContentResolverMediaStoreGateway): MediaStoreGateway

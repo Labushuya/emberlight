@@ -1,5 +1,7 @@
 package io.github.labushuya.emberlight.core.media.permission
 
+import io.github.labushuya.emberlight.core.media.model.MediaType
+
 /**
  * Berechtigungsnamen als Strings. Die Konstanten in `android.Manifest` sind erst ab API 33/34 deklariert und
  * würden bei minSdk 26 die Lint-Prüfung NewApi auslösen.
@@ -80,3 +82,21 @@ fun mediaAccess(
             MediaAccess.NONE
         }
     }
+
+/**
+ * Medientypen, deren Berechtigung fehlt, obwohl der Zugriff insgesamt [MediaAccess.FULL] ist (ADR 0007).
+ *
+ * Ab API 33 fordert die App `READ_MEDIA_IMAGES` und `READ_MEDIA_VIDEO` getrennt an. Gewährt der Nutzer nur einen
+ * der beiden, ist der andere Typ leer, ohne dass ein Fehler auftritt. Leer ist die Menge in allen anderen Fällen:
+ * vor API 33, bei [MediaAccess.PARTIAL] (dort sind beide Typen über die Auswahl abgedeckt) und bei [MediaAccess.NONE].
+ */
+fun missingMediaTypes(
+    sdkInt: Int,
+    granted: Set<String>,
+): Set<MediaType> {
+    if (sdkInt < API_MEDIA_PERMISSIONS || mediaAccess(sdkInt, granted) != MediaAccess.FULL) return emptySet()
+    return buildSet {
+        if (MediaPermissionNames.READ_MEDIA_IMAGES !in granted) add(MediaType.IMAGE)
+        if (MediaPermissionNames.READ_MEDIA_VIDEO !in granted) add(MediaType.VIDEO)
+    }
+}
