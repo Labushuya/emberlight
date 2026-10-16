@@ -10,6 +10,7 @@ import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import io.github.labushuya.emberlight.core.media.permission.MediaPermissionChecker
 import io.github.labushuya.emberlight.core.media.permission.mediaAccess
+import io.github.labushuya.emberlight.core.media.permission.missingMediaTypes
 import io.github.labushuya.emberlight.core.media.permission.requiredPermissions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -86,10 +87,11 @@ internal class MediaStoreMediaRepository
                     val sdk = gateway.sdkInt
                     val granted = requiredPermissions(sdk).filterTo(HashSet()) { permissions.isGranted(it) }
                     val access = mediaAccess(sdk, granted)
+                    val missing = missingMediaTypes(sdk, granted)
                     // Generation vor der Abfrage lesen. Ändert sich während der Abfrage etwas, folgt eine weitere Runde.
                     val generation = gateway.generation()
                     if (!force && generation != null && generation == lastGeneration) return@withContext
-                    state.value = load(access, generation)
+                    state.value = load(access, missing, generation)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -102,6 +104,7 @@ internal class MediaStoreMediaRepository
 
         private fun load(
             access: MediaAccess,
+            missing: Set<MediaType>,
             generation: Long?,
         ): MediaLibraryState {
             if (access == MediaAccess.NONE) {
@@ -109,11 +112,14 @@ internal class MediaStoreMediaRepository
                 return MediaLibraryState.Ready(emptyLibrary(MediaAccess.NONE))
             }
             return try {
+                // Fehlt die Berechtigung für einen Typ, wird er nicht abgefragt. Sonst würde MediaStore die ganze Abfrage
+                // mit einer SecurityException abbrechen, und die Bibliothek fiele auf NONE zurück.
                 val library =
                     MediaIndex.build(
-                        images = gateway.query(MediaType.IMAGE),
-                        videos = gateway.query(MediaType.VIDEO),
+                        images = if (MediaType.IMAGE in missing) emptyList() else gateway.query(MediaType.IMAGE),
+                        videos = if (MediaType.VIDEO in missing) emptyList() else gateway.query(MediaType.VIDEO),
                         access = access,
+                        missingTypes = missing,
                     )
                 lastGeneration = generation
                 MediaLibraryState.Ready(library)

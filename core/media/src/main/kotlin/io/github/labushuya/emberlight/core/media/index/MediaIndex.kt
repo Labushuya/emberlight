@@ -3,6 +3,7 @@ package io.github.labushuya.emberlight.core.media.index
 import io.github.labushuya.emberlight.core.media.model.Album
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.model.MediaLibrary
+import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.model.TimestampSource
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 
@@ -49,9 +50,10 @@ internal object MediaIndex {
         images: List<MediaItem>,
         videos: List<MediaItem>,
         access: MediaAccess,
+        missingTypes: Set<MediaType> = emptySet(),
     ): MediaLibrary {
         val items = mergeSorted(images.sortedWith(TIMELINE_ORDER), videos.sortedWith(TIMELINE_ORDER))
-        return MediaLibrary(items = items, albums = albums(items), mediaAccess = access)
+        return MediaLibrary(items = items, albums = albums(items), mediaAccess = access, missingTypes = missingTypes)
     }
 
     /** Führt zwei nach [TIMELINE_ORDER] sortierte Listen in O(n) zusammen. Die Eingaben bleiben unverändert. */

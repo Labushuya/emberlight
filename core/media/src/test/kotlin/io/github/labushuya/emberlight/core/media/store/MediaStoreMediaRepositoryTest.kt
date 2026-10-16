@@ -227,6 +227,33 @@ class MediaStoreMediaRepositoryTest {
             assertEquals(listOf(4L), readyLibrary(repo).items.map { it.id })
         }
 
+    @Test
+    fun missingTypeIsNotQueriedAndIsReported() =
+        runTest {
+            val gateway = FakeGateway(sdk = 33, images = listOf(image(1, 1_000)), videos = listOf(video(2, 2_000)))
+            val repo = repository(gateway, granted = setOf(IMAGES))
+
+            advanceUntilIdle()
+
+            val library = readyLibrary(repo)
+            assertEquals(MediaAccess.FULL, library.mediaAccess)
+            assertEquals(setOf(MediaType.VIDEO), library.missingTypes)
+            assertEquals(listOf(1L), library.items.map { it.id })
+            // Ohne Berechtigung für Videos wird nicht abgefragt. Sonst würde die ganze Bibliothek auf NONE fallen.
+            assertEquals(listOf(MediaType.IMAGE), gateway.queriedTypes)
+        }
+
+    @Test
+    fun bothTypesGrantedReportsNoMissingType() =
+        runTest {
+            val gateway = FakeGateway(sdk = 33, images = listOf(image(1, 1_000)), videos = listOf(video(2, 2_000)))
+            val repo = repository(gateway, granted = ALL_GRANTED)
+
+            advanceUntilIdle()
+
+            assertEquals(emptySet<MediaType>(), readyLibrary(repo).missingTypes)
+        }
+
     private fun TestScope.repository(
         gateway: FakeGateway,
         granted: Set<String>,
@@ -255,6 +282,7 @@ class MediaStoreMediaRepositoryTest {
         var currentGeneration: Long? = 1L,
         private val changesFail: Boolean = false,
     ) : MediaStoreGateway {
+        val queriedTypes = mutableListOf<MediaType>()
         var queryCount = 0
             private set
         private val signals = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
@@ -263,6 +291,7 @@ class MediaStoreMediaRepositoryTest {
 
         override fun query(type: MediaType): List<MediaItem> {
             queryCount++
+            queriedTypes += type
             queryError?.let { throw it }
             return if (type == MediaType.IMAGE) images else videos
         }
