@@ -24,6 +24,16 @@ Die Oberfläche soll ohne Gerät testbar sein. Robolectric 4.17 läuft auf dem J
 - Robolectric und SDK-Version müssen zusammenpassen. Bei Updates prüft der Test-Lauf das.
 - Ein Testgerät oder Emulator ist für die CI nicht nötig.
 
+## Komplexitätstests ohne Wanduhr (Nachtrag 16.10.2026)
+
+Die Laufzeit-Tests `MediaIndexPerformanceTest.buildGrowsLinearlyBetween10kAnd50k` (core:media) und `groupingReadsEachItemOnceBetween10kAnd50k` (feature:gallery, Datei `TimelineGroupingTest`) haben das Verhältnis zweier Wanduhr-Messungen geprüft. Ein Lauf unter Last hat das einmal scheitern lassen. Seither gilt:
+
+- Geprüft wird die Anzahl der Operationen, nicht die Zeit. Die Zählung hängt nur von den Eingaben und vom Sortieralgorithmus des JDK ab, nicht von der Last der Maschine.
+- `MediaIndex.build` und `mergeSorted` nehmen einen optionalen `order`-Comparator entgegen (Standard `TIMELINE_ORDER`). Der Test setzt einen zählenden Comparator ein. Produktiver Aufruf bleibt unverändert.
+- Gruppierung (`TimelineGrouping.group`) liest die Eingabe über eine zählende Liste. Lineares Verfahren heißt: jedes Element genau einmal lesen.
+- Schranken für 10.000 und 50.000 Einträge: Vergleiche höchstens 1,5 · n · log2(n) und Verhältnis 50k zu 10k höchstens 7,0. Erwartet sind linear 5,0, n log n etwa 5,9, quadratisch 25,0. Gemessen: 121.038 und 723.703 Vergleiche, Verhältnis 5,98, und die Gruppierung liest 10.000 bzw. 50.000 Elemente.
+- Die gemessene Dauer bleibt im Testlog (`println`), geht aber in keine Assertion ein.
+
 ## Alternativen
 
 - Nur JDK 17: verworfen, die Tests laufen mit JDK 21 (siehe Kontext).
