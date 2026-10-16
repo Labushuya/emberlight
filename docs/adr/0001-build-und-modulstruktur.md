@@ -30,6 +30,14 @@ Galerie und Sharing sollen unabhängig wachsen (siehe [CLAUDE.md](../../CLAUDE.m
 - Das Upgrade auf Kotlin 2.4.21 ist vollzogen. Hilt 2.60.1 und KSP 2.3.12 laufen darauf, die offizielle KSP-Freigabe für 2.4.21 fehlt noch (siehe oben).
 - Mit AGP 9 wird das Kotlin-Android-Plugin nicht separat angewendet, weil AGP 9 Kotlin eingebaut hat (siehe Quellen).
 
+## Wiedervorlage: sporadischer interner Lint-Fehler
+
+- Symptom: ein interner Lint-Fehler „Error while resolving FirRegularClassImpl“ im Task `:app:lintAnalyzeDebugUnitTest`.
+- Häufigkeit: 3 Vorkommen lokal. Danach wurde er in 10 weiteren Läufen nicht mehr reproduziert (0 von 10).
+- Hypothese, nicht belegt: Lint 32.4.1 bettet einen Kotlin-Compiler mit stdlib 2.2.10 ein. Das Projekt nutzt Kotlin 2.4.21. Die Versionen passen nicht zusammen, das könnte den Fehler auslösen.
+- Diagnose-Rezept: `LINT_PRINT_STACKTRACE=true` setzen. Ein Absturz zeigt dann den vollständigen Stacktrace. Die Variable ist in `ci.yml` und `release.yml` gesetzt, damit ein Wiederauftreten im CI-Log sichtbar ist.
+- Maßnahme erst bei belegter Ursache. Ohne Stacktrace wird nichts geändert.
+
 ## Alternativen
 
 - Groovy-DSL: verworfen, die Kotlin-DSL ist typsicher und passt zum Projekt.
