@@ -179,4 +179,41 @@ Die Goldens des Vollbild-Viewers (ADR 0010) laufen in der Aufgabe `testViewerGol
   - Nachher: PR-Run 38943495690 mit 17 min 36 s, Job rund 18 min 6 s. Kein messbarer Effekt. Der Toolchain-Schritt entfiel, aber der Build-Schritt wurde entsprechend länger.
   - Zeitverteilung im Lauf (aus den Zeitstempeln des Logs): Start und Kompilieren bis zu den Tests rund 3 bis 4 min, Unit-Tests rund 5 min, Lint und R8 für den Release-Build am Ende rund 9 min. R8 brauchte in der CI 4 min 26 s, lokal 43 s. Auf 4 vCPU laufen die Tasks deutlich langsamer als auf dem lokalen Rechner mit 16 Kernen.
   - Das Ziel von höchstens 12 min ist mit diesen Maßnahmen nicht erreicht.
-- Der Configuration Cache wird in der CI nicht wiederverwendet. Jeder Lauf meldet „Configuration cache entry stored“, aber keinen Treffer. Die Doku von setup-gradle v6.4.0 nennt für das Caching des Configuration Cache den Schlüssel `cache-encryption-key` (Secret). Ob es ohne ihn gar nicht gespeichert wird, ist dort nicht eindeutig belegt. Ein Secret ist nicht angelegt, die Entscheidung liegt beim Betreiber.
+- Der Configuration Cache wurde in der CI nicht wiederverwendet. Ohne Schlüssel speichert setup-gradle den Projektzustand gar nicht. Ursache und Umstellung stehen im Abschnitt „CI-Caches für Robolectric und Configuration Cache“ unten.
+
+## CI-Caches für Robolectric und Configuration Cache (16.10.2026)
+
+### Ausgangslage
+
+- Robolectric lädt pro Lauf das Jar `android-all-instrumented-17-robolectric-15733970-i7.jar` für SDK 37 (238.744.924 Byte) nach `~/.m2/repository/org/robolectric/android-all-instrumented/`. setup-gradle cacht `~/.m2` nicht.
+- Der Configuration Cache wurde nie wiederverwendet. Gradle meldete in jedem Lauf „Configuration cache entry stored.“, das ist aber nur der lokale Eintrag auf dem Runner. setup-gradle v6.4.0 schreibt den Projektzustand nur mit `cache-encryption-key`. Quelle: `sources/src/caching-report.ts` im Tag v6.4.0: „Project state (build-logic and configuration cache) was not cached - a [cache-encryption-key] is required.“
+
+### Umsetzung
+
+- **Robolectric:** `actions/cache` v6.1.0, Commit `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` (Tag v6.1.0 ist ein leichter Tag, er zeigt direkt auf diesen Commit). Pfad `~/.m2/repository/org/robolectric/android-all-instrumented`, Schlüssel `robolectric-<Version>-sdk<Test-SDK>-<OS>`. Version und SDK liest der Workflow aus `gradle/libs.versions.toml` und `EmberlightConfig.kt`. Ein Versionswechsel ergibt einen neuen Schlüssel. `release.yml` liest nur (`actions/cache/restore`).
+- **Verworfen:** Robolectric im Offline-Modus mit über Gradle aufgelösten Jars (`robolectric.offline`, `robolectric.dependency.dir`). Das verlangt eine zusätzliche Auflösung im Build-Logik-Modul. Das Jar läge dann im Gradle-Cache, den setup-gradle bei jedem Job lädt. Gewählt wurde der eigene Cache-Eintrag, er braucht keine Änderung am Build und koppelt den Schlüssel direkt an Version und SDK.
+- **Configuration Cache:** `cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}` in `ci.yml` und `release.yml`. Die Doku von v6.4.0 sagt: „The `cache-encryption-key` parameter allows you to provide a base64-encoded AES key to encrypt configuration-cache data stored in the GitHub Actions cache.“ Als Beispiel nennt sie `openssl rand -base64 16`, also 16 Byte. Im Quelltext des Tags (`gradle-user-home.ts`) wird der Wert als `GRADLE_ENCRYPTION_KEY` exportiert. Eine Längenprüfung fand sich dort nicht.
+- **Secret `GRADLE_ENCRYPTION_KEY`:** am 16.10.2026 angelegt. 16 Byte aus `RandomNumberGenerator`, Base64 (24 Zeichen). Übergabe per stdin aus einer Datei ohne Zeilenumbruch, die Datei wurde sofort gelöscht. Der Wert wurde nirgends ausgegeben. Der Schlüssel dient nur der Verschlüsselung des Configuration-Cache-Eintrags im GitHub-Cache. Er signiert nichts und ist kein Zugangsdatum. Ein späterer Wechsel bedeutet einen einmaligen Miss.
+- **Einschränkung:** setup-gradle schreibt den Cache nur auf `main`. PR-Läufe lesen nur (Doku: „By default, The `setup-gradle` action will only write to the cache from Jobs on the default (`main`/`master`) branch.“). Ein PR nutzt den Configuration Cache daher erst, wenn `main` einen Eintrag geschrieben hat. Der Robolectric-Cache ist davon nicht betroffen, `actions/cache` speichert auf dem eigenen Branch.
+
+### Messung PR #13 (Commit b8acc22)
+
+Zwei Läufe auf demselben Commit: Versuch 1 (Run 38955527735) und der Rerun desselben Laufs als Versuch 2.
+
+| Größe | Versuch 1 | Versuch 2 (Rerun) |
+|---|---|---|
+| Robolectric-Cache | Miss („Cache not found“), Speichern im Nachgang 3 s | Treffer („Cache restored from key“), Wiederherstellen 5,0 s |
+| Testtask `:app:testDebugUnitTest` | 50,1 s (inkl. Download des Jars) | 41,0 s |
+| Schritt „Build, Lint und Tests“ | 185 s | 177 s |
+| Zeit bis „Calculating task graph“ | 5,1 s | 5,9 s |
+| Configuration Cache | nicht gelesen, auf dem PR nicht gespeichert | nicht gelesen |
+
+- Robolectric: Der Testtask spart 9,1 s, das Wiederherstellen kostet 5,0 s. Netto etwa 4 s. Das sind Einzelmessungen auf dem Runner, die Streuung ist nicht bekannt.
+- Lokal gemessen: Der Download des Jars von Maven Central dauert 3,2 s (curl, 238,7 MB). Ein Kaltlauf der Navigationsklasse dauerte 17 s, ein warmer 11 bis 13 s. Der Nutzen ist also klein. Der Cache macht die Tests zusätzlich unabhängig von Maven Central.
+- Der Configuration Cache wurde auf dem PR nicht wiederverwendet, das folgt aus der Einschränkung oben. Die Konfigurationszeit ist mit 5 bis 6 s unverändert gegenüber den Läufen ohne Schlüssel (1,6 s bis 8,0 s in früheren main-Läufen, ebenfalls ohne Treffer).
+- Die Build-Dauer von 177 bis 185 s liegt weit unter den 16 bis 18 min früherer PR-Läufe. Der Grund ist der Gradle-Build-Cache aus dem Gradle-Home-Cache von `main`: Im Log stehen 345 Treffer `FROM-CACHE` gegenüber 121 im früheren Lauf 38943495690. Das ist nicht Teil dieser Änderung, sondern ein Zustand des Caches.
+
+### Offen
+
+- Der Configuration Cache mit Treffer ist auf `main` zu prüfen. Der Lauf auf `main` schreibt den Eintrag, ein Rerun liest ihn. Ergebnis wird nachgetragen.
+- `release.yml`: Die neuen Schritte (Robolectric-Restore, Schlüssel) sind nicht über einen Lauf geprüft. Der Probelauf per Dispatch war nicht freigegeben.
