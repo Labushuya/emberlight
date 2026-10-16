@@ -7,7 +7,6 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.item
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.millis
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -148,24 +147,48 @@ class TimelineGroupingTest {
     }
 
     /**
-     * Gruppierung ist linear: Das Verhältnis 50.000 zu 10.000 Einträge liegt nahe 5, quadratisch wäre es 25.
-     * Gemessen wird das beste von fünf Läufen nach einem Aufwärmlauf, wie in MediaIndexPerformanceTest.
+     * Gruppierung ist linear, deterministisch geprüft (ADR 0005): Jedes Element wird genau einmal gelesen. Gezählt
+     * werden die Lesezugriffe auf die Eingabeliste, nicht die Zeit. Ein quadratisches Verfahren läse mehr Elemente.
+     * Die gemessene Dauer steht nur im Testlog und geht in keine Assertion ein.
      */
     @Test
-    fun groupingGrowsLinearlyBetween10kAnd50k() {
+    fun groupingReadsEachItemOnceBetween10kAnd50k() {
         val small = sorted(count = 10_000, seed = SEED)
         val large = sorted(count = 50_000, seed = SEED)
-        TimelineGrouping.group(small, GroupingMode.DAY, TODAY, ZONE)
+
+        val smallReads = readsDuringGrouping(small)
+        val largeReads = readsDuringGrouping(large)
 
         val smallNanos = bestOf { TimelineGrouping.group(small, GroupingMode.DAY, TODAY, ZONE) }
         val largeNanos = bestOf { TimelineGrouping.group(large, GroupingMode.DAY, TODAY, ZONE) }
-        val ratio = largeNanos.toDouble() / smallNanos
-
-        val formatted = "%.2f".format(ratio)
         println(
-            "TimelineGrouping: 10k=${smallNanos / 1_000_000} ms, 50k=${largeNanos / 1_000_000} ms, ratio=$formatted",
+            "TimelineGrouping (nur Log, keine Assertion): 10k=${smallNanos / 1_000_000} ms, " +
+                "50k=${largeNanos / 1_000_000} ms, Lesezugriffe 10k=$smallReads, 50k=$largeReads",
         )
-        assertTrue("Verhältnis 50k/10k = $ratio, erwartet unter $MAX_RATIO", ratio < MAX_RATIO)
+
+        assertEquals("10k: jedes Element genau einmal lesen", small.size.toLong(), smallReads)
+        assertEquals("50k: jedes Element genau einmal lesen", large.size.toLong(), largeReads)
+    }
+
+    private fun readsDuringGrouping(items: List<MediaItem>): Long {
+        val counting = CountingList(items)
+        TimelineGrouping.group(counting, GroupingMode.DAY, TODAY, ZONE)
+        return counting.reads
+    }
+
+    /** Liste, die jeden Lesezugriff über [get] zählt. Iteration und `for`-Schleifen laufen darüber. */
+    private class CountingList(
+        private val items: List<MediaItem>,
+    ) : AbstractList<MediaItem>() {
+        var reads: Long = 0
+            private set
+
+        override val size: Int get() = items.size
+
+        override fun get(index: Int): MediaItem {
+            reads++
+            return items[index]
+        }
     }
 
     private fun sorted(
@@ -192,6 +215,5 @@ class TimelineGroupingTest {
         const val SEED = 7
         const val DAY_MS = 86_400_000L
         const val SPAN_DAYS = 3_000L
-        const val MAX_RATIO = 12.0
     }
 }
