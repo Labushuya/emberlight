@@ -1,6 +1,6 @@
 package io.github.labushuya.emberlight
 
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasNoClickAction
@@ -8,9 +8,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,6 +16,9 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import dagger.hilt.android.testing.HiltTestApplication
 import io.github.labushuya.emberlight.testing.FakeMediaRepository
 import io.github.labushuya.emberlight.testing.TestImageLoader
+import io.github.labushuya.emberlight.testing.awaitDisplayed
+import io.github.labushuya.emberlight.testing.awaitUi
+import io.github.labushuya.emberlight.testing.clickWhenDisplayed
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -33,6 +33,10 @@ import io.github.labushuya.emberlight.feature.space.R as SpaceR
  * Navigation der Alben in der App: Reiter, Album öffnen, Zurück, Wechsel zu Spaces und zurück. Dieselben Fake-Daten und
  * Ressourcen wie in [EmberlightAppNavigationTest]. Die Texte kommen aus den Ressourcen, damit der Test für Deutsch und
  * Englisch gleich bleibt.
+ *
+ * Jeder Schritt wartet auf den Zustand, den er braucht (siehe UiWaits.kt). Nach einem Klick läuft ein
+ * Navigationsübergang, und das Album lädt auf dem Default-Dispatcher. Eine sofortige Prüfung ist dann nicht
+ * deterministisch.
  */
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -66,11 +70,11 @@ class EmberlightAlbumNavigationTest {
     @Test
     fun albumOpensFromTheAlbumsTabAndBackReturnsToThatTab() {
         launchApp()
-        selectable(albumsLabel()).performClick()
+        openAlbumsTab()
 
-        composeRule.onNode(hasContentDescription(cameraCardLabel())).performClick()
+        composeRule.clickWhenDisplayed(hasContentDescription(cameraCardLabel()))
         assertAlbumShown("Camera")
-        selectable(galleryLabel()).assertIsSelected()
+        composeRule.awaitUi { onNode(selectableMatcher(galleryLabel())).assertIsSelected() }
 
         scenario?.onActivity { it.onBackPressedDispatcher.onBackPressed() }
 
@@ -81,17 +85,17 @@ class EmberlightAlbumNavigationTest {
     @Config(qualifiers = "en-w412dp-h915dp")
     fun albumStaysInTheGalleryAcrossSpacesAndBackKeepsTheTab() {
         launchApp()
-        selectable(albumsLabel()).performClick()
-        composeRule.onNode(hasContentDescription(cameraCardLabel())).performClick()
+        openAlbumsTab()
+        composeRule.clickWhenDisplayed(hasContentDescription(cameraCardLabel()))
         assertAlbumShown("Camera")
         scenario?.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         assertAlbumsTabShown()
 
-        selectable(spacesLabel()).performClick()
+        composeRule.clickWhenDisplayed(selectableMatcher(spacesLabel()))
         assertSpacesShown()
-        selectable(galleryLabel()).performClick()
+        composeRule.clickWhenDisplayed(selectableMatcher(galleryLabel()))
 
-        selectable(galleryLabel()).assertIsSelected()
+        composeRule.awaitUi { onNode(selectableMatcher(galleryLabel())).assertIsSelected() }
         assertAlbumsTabShown()
     }
 
@@ -99,9 +103,9 @@ class EmberlightAlbumNavigationTest {
     @Config(qualifiers = "en-w412dp-h915dp")
     fun albumOfTheItemsWithoutFolderIsNamedOtherAndSortedLast() {
         launchApp()
-        selectable(albumsLabel()).performClick()
+        openAlbumsTab()
 
-        composeRule.onNode(hasContentDescription(otherCardLabel())).performClick()
+        composeRule.clickWhenDisplayed(hasContentDescription(otherCardLabel()))
 
         assertAlbumShown(context.getString(GalleryR.string.feature_gallery_album_other))
     }
@@ -110,37 +114,37 @@ class EmberlightAlbumNavigationTest {
     @Config(qualifiers = "de-w412dp-h915dp")
     fun germanAlbumsTabShowsGermanNamesAndCounts() {
         launchApp()
-        selectable(context.getString(GalleryR.string.feature_gallery_tab_albums)).performClick()
+        openAlbumsTab()
 
-        composeRule.onNodeWithText(context.getString(GalleryR.string.feature_gallery_album_other)).assertIsDisplayed()
-        composeRule.onNode(hasContentDescription(cameraCardLabel())).assertIsDisplayed()
+        composeRule.awaitDisplayed(hasText(context.getString(GalleryR.string.feature_gallery_album_other)))
+        composeRule.awaitDisplayed(hasContentDescription(cameraCardLabel()))
     }
 
     private fun launchApp() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
     }
 
+    private fun openAlbumsTab() {
+        composeRule.clickWhenDisplayed(selectableMatcher(albumsLabel()))
+    }
+
     private fun assertAlbumsTabShown() {
-        selectable(albumsLabel()).assertIsSelected()
-        composeRule.onNode(hasContentDescription(cameraCardLabel())).assertIsDisplayed()
+        composeRule.awaitUi { onNode(selectableMatcher(albumsLabel())).assertIsSelected() }
+        composeRule.awaitDisplayed(hasContentDescription(cameraCardLabel()))
     }
 
     private fun assertAlbumShown(title: String) {
         // Der Titel ist kein Knopf. Karten und Navigationseinträge sind Knöpfe und zählen hier nicht mit.
-        composeRule.onNode(hasText(title) and hasNoClickAction()).assertIsDisplayed()
-        composeRule
-            .onNodeWithContentDescription(context.getString(GalleryR.string.feature_gallery_back))
-            .assertIsDisplayed()
+        composeRule.awaitDisplayed(hasText(title) and hasNoClickAction())
+        composeRule.awaitDisplayed(hasContentDescription(context.getString(GalleryR.string.feature_gallery_back)))
     }
 
     private fun assertSpacesShown() {
-        composeRule
-            .onNode(hasText(context.getString(SpaceR.string.feature_space_title)) and isHeading())
-            .assertIsDisplayed()
+        composeRule.awaitDisplayed(hasText(context.getString(SpaceR.string.feature_space_title)) and isHeading())
     }
 
     /** Ein Reiter oder Navigationseintrag: auswählbar und mit dem Text. */
-    private fun selectable(label: String) = composeRule.onNode(isSelectable() and hasText(label))
+    private fun selectableMatcher(label: String): SemanticsMatcher = isSelectable() and hasText(label)
 
     private fun albumsLabel() = context.getString(GalleryR.string.feature_gallery_tab_albums)
 

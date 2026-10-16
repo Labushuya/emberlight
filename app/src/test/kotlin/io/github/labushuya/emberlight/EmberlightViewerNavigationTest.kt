@@ -2,8 +2,6 @@ package io.github.labushuya.emberlight
 
 import android.text.format.DateFormat
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasNoClickAction
@@ -11,11 +9,8 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
@@ -32,6 +27,10 @@ import io.github.labushuya.emberlight.core.media.model.TimestampSource
 import io.github.labushuya.emberlight.testing.FakeMediaRepository
 import io.github.labushuya.emberlight.testing.TEST_ZONE
 import io.github.labushuya.emberlight.testing.TestImageLoader
+import io.github.labushuya.emberlight.testing.awaitAbsent
+import io.github.labushuya.emberlight.testing.awaitDisplayed
+import io.github.labushuya.emberlight.testing.awaitUi
+import io.github.labushuya.emberlight.testing.clickWhenDisplayed
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -50,6 +49,9 @@ import io.github.labushuya.emberlight.feature.gallery.R as GalleryR
 /**
  * Der Viewer in der App: Zeitleiste und Album öffnen den Viewer, Zurück führt zurück in dasselbe Ziel. Im Viewer ist die
  * Navigationsleiste ausgeblendet. Die Texte kommen aus den Ressourcen, der Test läuft auf Englisch.
+ *
+ * Jeder Schritt wartet auf den Zustand, den er braucht (siehe UiWaits.kt). Übergänge der Navigation und das Einblenden
+ * der Titelleiste laufen nach einem Klick noch, eine sofortige Prüfung wäre deshalb nicht deterministisch.
  */
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -91,16 +93,16 @@ class EmberlightViewerNavigationTest {
     fun timelineOpensTheViewerWithoutNavigationBarAndBackReturnsToTheTimeline() {
         launchApp()
 
-        awaitNode(photoLabel(DAY_OF_PHOTO_8)).performClick()
+        composeRule.clickWhenDisplayed(hasContentDescription(photoLabel(DAY_OF_PHOTO_8)))
 
-        composeRule.onNodeWithText(titleOf(PHOTO_8_TIME)).assertIsDisplayed()
+        composeRule.awaitDisplayed(hasText(titleOf(PHOTO_8_TIME)))
         // Im Viewer ist die Navigationsleiste ausgeblendet: Ihr Eintrag für die Galerie fehlt.
-        composeRule.onAllNodes(isSelectable() and hasText(galleryLabel())).assertCountEquals(0)
+        composeRule.awaitAbsent(isSelectable() and hasText(galleryLabel()))
 
         scenario?.onActivity { it.onBackPressedDispatcher.onBackPressed() }
 
-        selectable(galleryLabel()).assertIsSelected()
-        composeRule.onNodeWithContentDescription(photoLabel(DAY_OF_PHOTO_8)).assertIsDisplayed()
+        composeRule.awaitUi { selectable(galleryLabel()).assertIsSelected() }
+        composeRule.awaitDisplayed(hasContentDescription(photoLabel(DAY_OF_PHOTO_8)))
     }
 
     @Test
@@ -108,67 +110,54 @@ class EmberlightViewerNavigationTest {
         repository.show(FakeMediaRepository.sampleLibrary(items = manyPhotos()))
         TestImageLoader.install(manyPhotos())
         launchApp()
-        selectable(albumsLabel()).performClick()
-        selectable(photosLabel()).performClick()
+        composeRule.clickWhenDisplayed(selectableMatcher(albumsLabel()))
+        composeRule.clickWhenDisplayed(selectableMatcher(photosLabel()))
 
         // Ein Element weit unten, das man erst durch Scrollen erreicht.
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasContentDescription(photoLabel(deepDate())))
         // Die Aktion auf dem Element selbst: Eine Koordinate läge nach dem Scrollen unter der Navigationsleiste.
+        composeRule.awaitDisplayed(hasContentDescription(photoLabel(deepDate())))
         composeRule
             .onNodeWithContentDescription(
                 photoLabel(deepDate()),
             ).performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.onNodeWithText(titleOfDeep()).assertIsDisplayed()
+        composeRule.awaitDisplayed(hasText(titleOfDeep()))
 
         scenario?.onActivity { it.onBackPressedDispatcher.onBackPressed() }
 
-        selectable(galleryLabel()).assertIsSelected()
+        composeRule.awaitUi { selectable(galleryLabel()).assertIsSelected() }
         // Der Reiter ist wieder Fotos, und das gesuchte Element liegt im sichtbaren Bereich.
-        composeRule.onNodeWithContentDescription(photoLabel(deepDate())).assertIsDisplayed()
+        composeRule.awaitDisplayed(hasContentDescription(photoLabel(deepDate())))
     }
 
     @Test
     fun albumOpensTheViewerAndBackReturnsToTheAlbum() {
         launchApp()
-        selectable(albumsLabel()).performClick()
-        composeRule.onNode(hasContentDescription(cameraCardLabel())).performClick()
+        composeRule.clickWhenDisplayed(selectableMatcher(albumsLabel()))
+        composeRule.clickWhenDisplayed(hasContentDescription(cameraCardLabel()))
 
-        awaitNode(photoLabel(DAY_OF_PHOTO_8)).performClick()
-        composeRule.onNodeWithText(titleOf(PHOTO_8_TIME)).assertIsDisplayed()
+        composeRule.clickWhenDisplayed(hasContentDescription(photoLabel(DAY_OF_PHOTO_8)))
+        composeRule.awaitDisplayed(hasText(titleOf(PHOTO_8_TIME)))
 
         scenario?.onActivity { it.onBackPressedDispatcher.onBackPressed() }
 
         // Zurück im Album, nicht in der Übersicht und nicht im Viewer.
-        composeRule.onNode(hasText(cameraTitle()) and hasNoClickAction()).assertIsDisplayed()
-        composeRule
-            .onNodeWithContentDescription(context.getString(GalleryR.string.feature_gallery_back))
-            .assertIsDisplayed()
+        composeRule.awaitDisplayed(hasText(cameraTitle()) and hasNoClickAction())
+        composeRule.awaitDisplayed(hasContentDescription(context.getString(GalleryR.string.feature_gallery_back)))
     }
 
     @Test
     fun swipingInTheViewerChangesThePageTitle() {
         launchApp()
-        awaitNode(photoLabel(DAY_OF_PHOTO_8)).performClick()
+        composeRule.clickWhenDisplayed(hasContentDescription(photoLabel(DAY_OF_PHOTO_8)))
 
-        composeRule.onNodeWithText(titleOf(PHOTO_8_TIME)).assertIsDisplayed()
+        composeRule.awaitDisplayed(hasText(titleOf(PHOTO_8_TIME)))
         composeRule.onRoot().performTouchInput { swipeLeft() }
         composeRule.waitForIdle()
 
         // Der Index ist absteigend sortiert. Nach dem Foto von heute 08:15 kommt das Foto vom 15. Oktober 19:40.
-        composeRule.onNodeWithText(titleOf(PHOTO_7_TIME)).assertIsDisplayed()
+        composeRule.awaitDisplayed(hasText(titleOf(PHOTO_7_TIME)))
     }
-
-    /**
-     * Wartet, bis das Element im Baum steht. Nach einem Übergang der Navigation ist der Knoten sonst kurz nur im
-     * unverschmolzenen Baum zu finden und ein Klick schlägt fehl.
-     */
-    private fun awaitNode(label: String) =
-        composeRule
-            .also { rule ->
-                rule.waitUntil(
-                    TIMEOUT_MS,
-                ) { rule.onAllNodesWithContentDescription(label).fetchSemanticsNodes().isNotEmpty() }
-            }.onNodeWithContentDescription(label)
 
     private fun launchApp() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
@@ -182,7 +171,9 @@ class EmberlightViewerNavigationTest {
 
     private fun titleOfDeep(): String = titleOf(deepDate().atTime(LocalTime.of(9, 30)))
 
-    private fun selectable(label: String) = composeRule.onNode(isSelectable() and hasText(label))
+    private fun selectableMatcher(label: String) = isSelectable() and hasText(label)
+
+    private fun selectable(label: String) = composeRule.onNode(selectableMatcher(label))
 
     private fun albumsLabel() = context.getString(GalleryR.string.feature_gallery_tab_albums)
 
@@ -243,6 +234,5 @@ class EmberlightViewerNavigationTest {
         const val PHOTO_COUNT = 60
         const val DEEP_INDEX = 45
         const val CAMERA_BUCKET = 1L
-        const val TIMEOUT_MS = 5_000L
     }
 }
