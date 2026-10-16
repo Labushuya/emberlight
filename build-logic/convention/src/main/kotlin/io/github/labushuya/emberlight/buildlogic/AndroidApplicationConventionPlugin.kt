@@ -78,6 +78,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
         }
 
         target.configureKotlinAndroid()
+        target.configureKover()
         target.configureUnitTests()
         target.configureUnitTestDependencies()
 

@@ -19,6 +19,7 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
         }
 
         target.configureKotlinAndroid()
+        target.configureKover()
         target.configureUnitTests()
         target.configureUnitTestDependencies()
     }
