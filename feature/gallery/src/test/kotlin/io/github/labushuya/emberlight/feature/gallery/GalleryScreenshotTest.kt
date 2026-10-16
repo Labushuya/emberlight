@@ -2,17 +2,23 @@ package io.github.labushuya.emberlight.feature.gallery
 
 import android.content.Context
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.center
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
+import io.github.labushuya.emberlight.core.media.model.Album
 import io.github.labushuya.emberlight.core.media.model.MediaType
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
+import io.github.labushuya.emberlight.feature.gallery.album.albumsForDisplay
 import io.github.labushuya.emberlight.feature.gallery.timeline.GroupingMode
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 import io.github.labushuya.emberlight.feature.gallery.timeline.TestThumbnails
@@ -162,6 +168,65 @@ class GalleryScreenshotTest {
         )
     }
 
+    @Test
+    @Config(qualifiers = "en-w412dp-h915dp")
+    fun albumsPhoneEnglish() {
+        captureAlbums(
+            context.getString(GalleryR.string.feature_gallery_tab_albums),
+            "src/test/screenshots/GalleryAlbums_phone_en.png",
+        )
+    }
+
+    @Test
+    @Config(qualifiers = "de-w412dp-h915dp")
+    fun albumsPhoneGerman() {
+        captureAlbums(
+            context.getString(GalleryR.string.feature_gallery_tab_albums),
+            "src/test/screenshots/GalleryAlbums_phone_de.png",
+        )
+    }
+
+    @Test
+    @Config(qualifiers = "en-w673dp-h841dp")
+    fun albumsFoldableInnerDisplayEnglish() {
+        captureAlbums(
+            context.getString(GalleryR.string.feature_gallery_tab_albums),
+            "src/test/screenshots/GalleryAlbums_foldInner_en.png",
+        )
+    }
+
+    /** Öffnet den Alben-Reiter per Antippen, wie der Nutzer es täte, und nimmt das Bild auf. */
+    private fun captureAlbums(
+        tabLabel: String,
+        path: String,
+    ) {
+        setContent(GalleryUiState(grid = contentOf(sections(), MediaAccess.FULL, emptySet()), albums = albumList()))
+        // Der Reiter wird über die Bedienungshilfen-Aktion gewählt. Ein Touch würde die Ripple-Spur ins Bild malen.
+        composeRule.onNodeWithText(tabLabel).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(path)
+    }
+
+    private fun albumList(): List<Album> =
+        albumsForDisplay(
+            TimelineFixtures.albumsOf(TimelineFixtures.sampleItems() + TimelineFixtures.longLibrary()),
+        )
+
+    private fun setContent(state: GalleryUiState) {
+        composeRule.setContent {
+            EmberlightTheme {
+                GalleryContent(
+                    state = state,
+                    onRequestPermission = {},
+                    onOpenSettings = {},
+                    onMediaClick = {},
+                    onAlbumClick = {},
+                    onZoomLevelChange = {},
+                )
+            }
+        }
+    }
+
     private fun capture(
         state: MediaGridState,
         path: String,
@@ -175,11 +240,12 @@ class GalleryScreenshotTest {
         composeRule.setContent {
             EmberlightTheme {
                 GalleryContent(
-                    state = state,
+                    state = GalleryUiState(grid = state, albums = emptyList()),
                     onZoomLevelChange = {},
                     onRequestPermission = {},
                     onOpenSettings = {},
                     onMediaClick = {},
+                    onAlbumClick = {},
                 )
             }
         }
@@ -204,3 +270,6 @@ class GalleryScreenshotTest {
 
     private fun contentState() = contentOf(sections(), MediaAccess.FULL, emptySet())
 }
+
+/** Zeit, die eine Ripple-Animation nach dem Antippen zum Auslaufen braucht. */
+private const val RIPPLE_SETTLE_MS = 1_000L

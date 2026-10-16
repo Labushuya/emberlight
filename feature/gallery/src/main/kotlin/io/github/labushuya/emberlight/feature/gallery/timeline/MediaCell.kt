@@ -16,27 +16,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.ColorPainter
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.compose.LocalPlatformContext
-import coil3.request.ImageRequest
-import coil3.request.crossfade
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.model.MediaType
-import io.github.labushuya.emberlight.core.media.thumbnail.MediaThumbnail
 import io.github.labushuya.emberlight.feature.gallery.R
 
 /**
@@ -52,19 +43,6 @@ internal fun MediaCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalPlatformContext.current
-    // Ohne feste Größe misst Coil die Zelle selbst. Die Anfrage ist pro Eintrag gleich, daher einmal gebaut.
-    val request =
-        remember(context, item.uri, item.type) {
-            ImageRequest
-                .Builder(context)
-                .data(MediaThumbnail(uri = item.uri, type = item.type))
-                .crossfade(false)
-                .build()
-        }
-    val placeholderColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    val placeholder = remember(placeholderColor) { ColorPainter(placeholderColor) }
-
     Box(
         modifier =
             modifier
@@ -73,14 +51,7 @@ internal fun MediaCell(
                 .clickable(onClick = onClick)
                 .semantics(mergeDescendants = true) { contentDescription = label },
     ) {
-        AsyncImage(
-            model = request,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            placeholder = placeholder,
-            error = placeholder,
-            modifier = Modifier.fillMaxSize(),
-        )
+        MediaThumbnailImage(uri = item.uri, type = item.type)
         if (item.type == MediaType.VIDEO) {
             VideoBadge(durationText = formatDuration(item.durationMs ?: 0L))
         }
@@ -122,4 +93,4 @@ private fun VideoBadge(
     }
 }
 
-private val SCRIM = Color(0xB3000000)
+internal val SCRIM = Color(0xB3000000)

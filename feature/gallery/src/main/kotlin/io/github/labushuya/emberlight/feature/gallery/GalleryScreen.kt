@@ -10,12 +10,13 @@ import io.github.labushuya.emberlight.feature.gallery.permission.rememberAppSett
 import io.github.labushuya.emberlight.feature.gallery.permission.rememberMediaPermissionRequest
 
 /**
- * Galerie mit Zustand. Verbindet das ViewModel mit den Systemdialogen und den Einstellungen. [onMediaClick] meldet ein
- * Antippen nach außen. Der Viewer (Paket 5) ist noch nicht verdrahtet.
+ * Galerie mit Zustand. Verbindet das ViewModel mit den Systemdialogen und den Einstellungen. [onAlbumClick] meldet ein
+ * Antippen auf ein Album, [onMediaClick] ein Antippen auf ein Medium. Der Viewer (Paket 5) ist noch nicht verdrahtet.
  */
 @Composable
 internal fun GalleryScreen(
     modifier: Modifier = Modifier,
+    onAlbumClick: (Long?) -> Unit = {},
     onMediaClick: (MediaItem) -> Unit = {},
     viewModel: GalleryViewModel = hiltViewModel(),
 ) {
@@ -30,6 +31,7 @@ internal fun GalleryScreen(
         onRequestPermission = requestPermission,
         onOpenSettings = rememberAppSettingsOpener(),
         onMediaClick = onMediaClick,
+        onAlbumClick = onAlbumClick,
         onZoomLevelChange = viewModel::onZoomLevelChanged,
         modifier = modifier,
     )

@@ -4,15 +4,23 @@ import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptions
 import androidx.navigation.compose.composable
+import io.github.labushuya.emberlight.core.media.model.MediaItem
 import kotlinx.serialization.Serializable
 
 /** Typsichere Route der Galerie. Start-Ziel der App. */
 @Serializable
 data object GalleryRoute
 
-fun NavGraphBuilder.galleryScreen() {
+/**
+ * Ziel der Galerie. [onAlbumClick] meldet das Antippen eines Albums mit seiner Ordner-ID (`null` für „Sonstige“),
+ * [onMediaClick] das eines Mediums.
+ */
+fun NavGraphBuilder.galleryScreen(
+    onAlbumClick: (Long?) -> Unit = {},
+    onMediaClick: (MediaItem) -> Unit = {},
+) {
     composable<GalleryRoute> {
-        GalleryScreen()
+        GalleryScreen(onAlbumClick = onAlbumClick, onMediaClick = onMediaClick)
     }
 }
 

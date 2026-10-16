@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="feature_gallery_title">Fotos</string>
+    <string name="feature_gallery_title">Galerie</string>
+    <string name="feature_gallery_tab_photos">Fotos</string>
+    <string name="feature_gallery_tab_albums">Alben</string>
+    <string name="feature_gallery_album_other">Sonstige</string>
+    <string name="feature_gallery_album_unnamed">Album ohne Namen</string>
+    <string name="feature_gallery_album_label">%1$s, %2$s</string>
+    <plurals name="feature_gallery_album_items">
+        <item quantity="one">%s Element</item>
+        <item quantity="other">%s Elemente</item>
+    </plurals>
     <string name="feature_gallery_header_today">Heute</string>
     <string name="feature_gallery_header_yesterday">Gestern</string>
     <string name="feature_gallery_cell_photo">Foto vom %1$s</string>

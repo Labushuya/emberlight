@@ -1,5 +1,6 @@
 package io.github.labushuya.emberlight.feature.gallery.timeline
 
+import io.github.labushuya.emberlight.core.media.model.Album
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.model.MediaLibrary
 import io.github.labushuya.emberlight.core.media.model.MediaType
@@ -19,6 +20,11 @@ internal object TimelineFixtures {
     val ZONE: ZoneId = ZoneId.of("Europe/Berlin")
     val TODAY: LocalDate = LocalDate.of(2026, 10, 16)
 
+    /** Ordner der Beispieldaten. Die Alben-Tests erwarten genau diese Namen. */
+    const val CAMERA_BUCKET = 1L
+    const val SCREENSHOT_BUCKET = 2L
+    const val DOWNLOAD_BUCKET = 3L
+
     fun clock(): Clock = Clock.fixed(Instant.parse("2026-10-16T12:00:00Z"), ZONE)
 
     /** Epochen-Millisekunden für einen lokalen Zeitpunkt in [ZONE], Format `2026-10-16T09:30`. */
@@ -34,6 +40,8 @@ internal object TimelineFixtures {
         millis: Long,
         type: MediaType = MediaType.IMAGE,
         durationMs: Long? = null,
+        bucketId: Long? = CAMERA_BUCKET,
+        bucketName: String? = "Camera",
     ): MediaItem =
         MediaItem(
             id = id,
@@ -48,23 +56,34 @@ internal object TimelineFixtures {
             orientation = 0,
             durationMs = durationMs,
             sizeBytes = 1_000_000L,
-            bucketId = 1L,
-            bucketName = "Camera",
+            bucketId = bucketId,
+            bucketName = bucketName,
             relativePath = "DCIM/Camera/",
             volumeName = "external_primary",
         )
 
-    /** Acht Einträge, absteigend sortiert: heute, gestern, Oktober, Juli (mit Stunden-Video) und Juni 2025. */
+    /**
+     * Acht Einträge, absteigend sortiert: heute, gestern, Oktober, Juli (mit Stunden-Video) und Juni 2025. Die Ordner:
+     * Kamera (4), Screenshots (1), Downloads (2) und ein Eintrag ohne Ordner aus dem Juli. Dieser liegt zeitlich vor den
+     * Downloads und steht im Album-Raster trotzdem am Ende.
+     */
     fun sampleItems(): List<MediaItem> =
         listOf(
             item(9, millis("2026-10-16T09:30"), MediaType.VIDEO, durationMs = 42_000L),
             item(8, millis("2026-10-16T08:15")),
-            item(7, millis("2026-10-15T19:40")),
+            item(7, millis("2026-10-15T19:40"), bucketId = SCREENSHOT_BUCKET, bucketName = "Screenshots"),
             item(6, millis("2026-10-15T10:02")),
             item(5, millis("2026-10-12T17:55")),
-            item(4, millis("2026-07-02T21:10"), MediaType.VIDEO, durationMs = 3_723_000L),
-            item(3, millis("2025-06-03T11:00")),
-            item(2, millis("2025-06-03T10:30")),
+            item(
+                4,
+                millis("2026-07-02T21:10"),
+                MediaType.VIDEO,
+                durationMs = 3_723_000L,
+                bucketId = null,
+                bucketName = null,
+            ),
+            item(3, millis("2025-06-03T11:00"), bucketId = DOWNLOAD_BUCKET, bucketName = "Downloads"),
+            item(2, millis("2025-06-03T10:30"), bucketId = DOWNLOAD_BUCKET, bucketName = "Downloads"),
         )
 
     /** Mehrere hundert Einträge, je zwei Tage auseinander, rückwärts ab heute: genug für eine Schnell-Scrollleiste. */
@@ -80,10 +99,33 @@ internal object TimelineFixtures {
             item(id = 1_000L + i, millis = millis)
         }
 
+    /**
+     * Alben wie der Index sie bildet: je Ordner ein Album, das neueste Element als Cover, die Anzahl und der jüngste Zeitpunkt.
+     * Sortiert wie der Index, neueste zuerst, bei Gleichstand der Ordner ohne Namen zuletzt. Die Abbildung steht hier im
+     * Test, weil `MediaIndex` in `core:media` intern ist.
+     */
+    fun albumsOf(items: List<MediaItem>): List<Album> {
+        val byBucket = LinkedHashMap<Long?, MutableList<MediaItem>>()
+        items.sortedByDescending { it.timestamp }.forEach { byBucket.getOrPut(it.bucketId) { mutableListOf() }.add(it) }
+        return byBucket
+            .map { (bucketId, list) ->
+                Album(
+                    bucketId = bucketId,
+                    name = list.first().bucketName.orEmpty(),
+                    cover = list.first(),
+                    itemCount = list.size,
+                    latestTimestamp = list.first().timestamp,
+                )
+            }.sortedWith(
+                compareByDescending<Album> { it.latestTimestamp }
+                    .thenBy(nullsLast()) { it.bucketId },
+            )
+    }
+
     fun library(
         items: List<MediaItem> = sampleItems(),
         access: MediaAccess = MediaAccess.FULL,
         missingTypes: Set<MediaType> = emptySet(),
     ): MediaLibrary =
-        MediaLibrary(items = items, albums = emptyList(), mediaAccess = access, missingTypes = missingTypes)
+        MediaLibrary(items = items, albums = albumsOf(items), mediaAccess = access, missingTypes = missingTypes)
 }

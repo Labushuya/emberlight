@@ -28,6 +28,7 @@ import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.permission.MediaAccess
 import io.github.labushuya.emberlight.feature.gallery.GalleryContent
+import io.github.labushuya.emberlight.feature.gallery.GalleryUiState
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.TODAY
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures.ZONE
 import org.junit.After
@@ -265,10 +266,11 @@ class GalleryZoomUiTest {
             rule.setContent {
                 EmberlightTheme {
                     GalleryContent(
-                        state = content(),
+                        state = GalleryUiState(grid = content(), albums = emptyList()),
                         onRequestPermission = {},
                         onOpenSettings = {},
                         onMediaClick = {},
+                        onAlbumClick = {},
                         onZoomLevelChange = { next ->
                             changes += next
                             level = next
