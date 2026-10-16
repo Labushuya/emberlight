@@ -15,16 +15,20 @@ dependencies {
     implementation(project(":core:design"))
     implementation(project(":feature:gallery"))
     implementation(project(":feature:space"))
+    implementation(project(":core:media"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.coil.core)
+    implementation(libs.coil.video)
     implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
 
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.ext.junit)
     testImplementation(libs.hilt.android.testing)
+    testImplementation(libs.coil.test)
     kspTest(libs.hilt.compiler)
 }
