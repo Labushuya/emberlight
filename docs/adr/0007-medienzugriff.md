@@ -71,7 +71,11 @@ Regeln in `mediaAccess(sdkInt, granted)`, gespiegelt an der Doku zu „ausgewäh
 - API 32 und darunter, `READ_EXTERNAL_STORAGE` gewährt: FULL.
 - Sonst NONE.
 
-Offene Lücke: Gewährt der Nutzer ab API 33 nur einen der beiden Typen, gilt das als FULL. Der fehlende Typ fehlt dann still. Die App fordert immer beide an. Paket 3 muss das erkennen und nachfragen. Eine eigene Stufe dafür gibt es nicht.
+Gewährt der Nutzer ab API 33 nur einen der beiden Typen, bleibt der Zugriff `FULL`. Der fehlende Typ wird aber nicht mehr still verschwiegen:
+
+- `missingMediaTypes(sdkInt, granted)` liefert die Typen ohne Berechtigung. Leer vor API 33, bei `PARTIAL` und bei `NONE`.
+- `MediaLibrary.missingTypes` trägt das Ergebnis in den Index. Die UI zeigt daraus einen Hinweis mit Anfrage (ADR 0008).
+- Der Index fragt einen fehlenden Typ gar nicht erst ab. Ohne diese Regel bricht MediaStore die Abfrage des ganzen Index mit `SecurityException` ab, und die Bibliothek fiele auf `NONE` zurück. Der Test `missingTypeIsNotQueriedAndIsReported` prüft das.
 
 Berechtigungen im Manifest von `core:media`: `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_MEDIA_VISUAL_USER_SELECTED` und `READ_EXTERNAL_STORAGE` mit `maxSdkVersion="32"`. Kein `WRITE_EXTERNAL_STORAGE`, kein `MANAGE_EXTERNAL_STORAGE`, kein `ACCESS_MEDIA_LOCATION`.
 
@@ -100,7 +104,7 @@ Library-Module erzeugen das Test-Manifest nur, wenn `isIncludeAndroidResources` 
 
 - Der Index liegt vollständig im Speicher. Bei sehr großen Bibliotheken (deutlich über 50.000) wird das neu bewertet.
 - Die Zeitleiste ist deterministisch, weil die Ordnung total ist.
-- Die Berechtigungslücke bei nur einem Typ (siehe oben) muss in Paket 3 gelöst werden.
+- Die Berechtigungslücke bei nur einem Typ ist in Paket 3a über `missingTypes` gelöst (siehe oben).
 - `MediaColumnNames` nutzt Strings für Spalten ab API 29, weil die Konstanten dort in `MediaColumns` liegen und vor API 29 in anderen Interfaces. Die Werte sind identisch. Der Robolectric-Test mit Fake-Provider prüft Projektion und Mapping gegen diese Namen. Auf einem Gerät ist die Abfrage noch nicht geprüft (offener Punkt).
 
 ## Alternativen
