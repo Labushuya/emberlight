@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lesezugriff auf Medien. Bewusst ohne WRITE_EXTERNAL_STORAGE, MANAGE_EXTERNAL_STORAGE und ACCESS_MEDIA_LOCATION
+  (siehe ADR 0007). READ_MEDIA_VISUAL_USER_SELECTED gilt für „ausgewählte Fotos“ ab Android 14.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+</manifest>

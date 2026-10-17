@@ -16,9 +16,11 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
             compileOptions { useJava17() }
             lint { applyEmberlightDefaults(checkDependencies = false) }
             testOptions.targetSdk = EmberlightConfig.TARGET_SDK
+            configureUnitTestResources()
         }
 
         target.configureKotlinAndroid()
+        target.configureKover()
         target.configureUnitTests()
         target.configureUnitTestDependencies()
     }

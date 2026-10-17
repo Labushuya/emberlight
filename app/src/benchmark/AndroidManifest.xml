@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Nur der Mess-Build ist profilierbar (ADR 0011). Debug und Release bleiben unberührt. -->
+    <application>
+        <profileable android:shell="true" />
+    </application>
+</manifest>

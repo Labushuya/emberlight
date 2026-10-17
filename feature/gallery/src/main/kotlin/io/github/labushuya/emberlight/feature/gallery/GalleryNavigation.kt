@@ -10,9 +10,13 @@ import kotlinx.serialization.Serializable
 @Serializable
 data object GalleryRoute
 
-fun NavGraphBuilder.galleryScreen() {
+/**
+ * Ziel der Galerie. [onAlbumClick] meldet das Antippen eines Albums mit seiner Ordner-ID (`null` für „Sonstige“). Der Viewer
+ * ist kein eigenes Ziel: Er liegt als Overlay über dem Raster (ADR 0010).
+ */
+fun NavGraphBuilder.galleryScreen(onAlbumClick: (Long?) -> Unit = {}) {
     composable<GalleryRoute> {
-        GalleryScreen()
+        GalleryScreen(onAlbumClick = onAlbumClick)
     }
 }
 

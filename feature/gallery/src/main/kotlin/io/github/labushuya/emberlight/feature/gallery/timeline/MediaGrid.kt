@@ -1,0 +1,319 @@
+package io.github.labushuya.emberlight.feature.gallery.timeline
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import io.github.labushuya.emberlight.core.media.model.MediaItem
+import io.github.labushuya.emberlight.core.media.model.MediaType
+import io.github.labushuya.emberlight.core.media.permission.MediaAccess
+import io.github.labushuya.emberlight.feature.gallery.R
+import java.time.ZoneId
+
+/** Abstand zwischen Zellen und an den Rändern des Rasters. */
+internal val GRID_GAP: Dp = ZoomLevels.GRID_GAP_DP.dp
+
+private const val TYPE_HEADER = "header"
+private const val TYPE_BANNER = "banner"
+private const val KEY_BANNER = "access-banner"
+
+/**
+ * Das gemeinsame Raster von Galerie und Album: Überschriften, Medien, Zoom mit Anker, Schnell-Scrollleiste und
+ * Hinweis-Banner. Zeichnet den Zustand [state] und meldet Aktionen nach außen. Die Spaltenzahl folgt aus der Breite und der
+ * Zoomstufe des Zustands. Eine Stufenänderung (Pinch oder Bedienungshilfe) geht über [onZoomLevelChange].
+ *
+ * [gridState] gehört dem Aufrufer, damit die Scrollposition den Reiter- oder Ansichtswechsel übersteht.
+ */
+@Composable
+internal fun MediaGrid(
+    state: MediaGridState.Content,
+    padding: PaddingValues,
+    onRequest: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onMediaClick: (MediaItem) -> Unit,
+    onZoomLevelChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    gridState: LazyGridState = rememberLazyGridState(),
+) {
+    val density = LocalDensity.current
+    val zoom = remember { PinchZoomState() }
+    val scope = rememberCoroutineScope()
+    val currentLevel = rememberUpdatedState(state.zoomLevel)
+    val locale = LocalConfiguration.current.locales[0]
+    val formats = remember(locale) { TimelineFormats(locale, ZoneId.systemDefault()) }
+    val hasBanner = needsAccessBanner(state.access, state.missingTypes)
+    val index =
+        remember(state.sections, hasBanner) { TimelineIndex(state.sections, if (hasBanner) 1 else 0, state.today) }
+
+    val fastScroll = remember(gridState) { FastScrollState(gridState) }
+    val mode = ZoomLevels.groupingFor(state.zoomLevel)
+    val gapPx = with(density) { GRID_GAP.toPx() }
+    // Das Raster beginnt unter der Kopfzeile (siehe Modifier unten). Oben liegt daher kein Innenabstand mehr.
+    val paddingTopPx = 0f
+    val enlarge = stringResource(R.string.feature_gallery_zoom_in)
+    val shrink = stringResource(R.string.feature_gallery_zoom_out)
+
+    // Die Geste der Schnell-Scrollleiste hängt am gemeinsamen Vorfahren von Raster und Leiste (siehe fastScrollGrip).
+    val gripWidthPx = with(density) { FAST_SCROLL_GRIP_WIDTH.roundToPx() }
+    val gripHeightPx = with(density) { FAST_SCROLL_GRIP_HEIGHT.roundToPx() }
+    BoxWithConstraints(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(padding)
+                .fastScrollGrip(state = fastScroll, gripWidthPx = gripWidthPx, gripHeightPx = gripHeightPx),
+    ) {
+        GridProbeHolder.current?.let { probe -> SideEffect { probe.gridComposed() } }
+        // Sichtfenster des Rasters für die Hero-Animation: Kacheln außerhalb (unter Kopfzeile, Leiste) gelten als nicht sichtbar.
+        val cells = LocalCellBounds.current
+        DisposableEffect(cells) { onDispose { cells.setViewport(null) } }
+        val widthPx = with(density) { maxWidth.toPx() }
+        val columns = ZoomLevels.columnsFor(state.zoomLevel, maxWidth.value)
+        val tilePx = ZoomLevels.tileWidth(widthPx, gapPx, columns)
+        val cellPx = tilePx + gapPx
+
+        // Nach dem Stufenwechsel steht das neue Raster in der Komposition. Dann wird der Anker im selben Frame gesetzt.
+        SideEffect {
+            zoom.resolve(
+                level = state.zoomLevel,
+                tileNewPx = tilePx,
+                paddingTopPx = paddingTopPx,
+                index = index,
+                gridState = gridState,
+            )
+        }
+
+        val actions =
+            remember(state.zoomLevel, widthPx, gapPx, enlarge, shrink, onZoomLevelChange) {
+                listOf(
+                    CustomAccessibilityAction(enlarge) {
+                        stepZoomWithAnchor(
+                            zoom = zoom,
+                            gridState = gridState,
+                            from = state.zoomLevel,
+                            delta = -1,
+                            widthPx = widthPx,
+                            gapPx = gapPx,
+                            densityValue = density.density,
+                            onZoomLevelChange = onZoomLevelChange,
+                        )
+                    },
+                    CustomAccessibilityAction(shrink) {
+                        stepZoomWithAnchor(
+                            zoom = zoom,
+                            gridState = gridState,
+                            from = state.zoomLevel,
+                            delta = 1,
+                            widthPx = widthPx,
+                            gapPx = gapPx,
+                            densityValue = density.density,
+                            onZoomLevelChange = onZoomLevelChange,
+                        )
+                    },
+                )
+            }
+        val columnsDescription = pluralStringResource(R.plurals.feature_gallery_zoom_columns, columns, columns)
+
+        // Spalten und Zellhöhe für die Geste der Leiste (siehe fastScrollGrip). Die Geste liest sie beim Ereignis.
+        fastScroll.columns = columns
+        fastScroll.cellPx = cellPx
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            state = gridState,
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned { coords -> cells.setViewport(unclippedRootRect(coords)) }
+                    .pinchZoom(
+                        zoom = zoom,
+                        gridState = gridState,
+                        level = currentLevel,
+                        onLevelChange = onZoomLevelChange,
+                        scope = scope,
+                    ).graphicsLayer {
+                        // Nur diese Ebene wird skaliert. Der Ankerpunkt liegt unter der Fingermitte.
+                        val s = zoom.scale
+                        scaleX = s
+                        scaleY = s
+                        val w = size.width
+                        val h = size.height
+                        transformOrigin =
+                            TransformOrigin(
+                                if (w > 0f) zoom.pivotX / w else 0.5f,
+                                if (h > 0f) zoom.pivotY / h else 0.5f,
+                            )
+                        translationX = zoom.panX
+                        translationY = zoom.panY
+                        clip = true
+                    }.semantics {
+                        customActions = actions
+                        stateDescription = columnsDescription
+                    },
+            // Oben kein Abstand: Die erste Überschrift sitzt direkt unter der Kopfzeile (ADR 0008). Unten und an
+            // den Seiten
+            // der Abstand zwischen den Kacheln. Der Rand des Scaffolds (Kopfzeile, Navigation) liegt im `padding`
+            // des Modifiers.
+            contentPadding =
+                PaddingValues(
+                    start = GRID_GAP,
+                    end = GRID_GAP,
+                    top = 0.dp,
+                    bottom = GRID_GAP,
+                ),
+            horizontalArrangement = Arrangement.spacedBy(GRID_GAP),
+            verticalArrangement = Arrangement.spacedBy(GRID_GAP),
+        ) {
+            if (hasBanner) {
+                accessBannerItem(
+                    key = KEY_BANNER,
+                    contentType = TYPE_BANNER,
+                    access = state.access,
+                    missingTypes = state.missingTypes,
+                    onRequest = onRequest,
+                    onOpenSettings = onOpenSettings,
+                )
+            }
+            state.sections.forEachIndexed { sectionIndex, section ->
+                item(key = section.key, span = { GridItemSpan(maxLineSpan) }, contentType = TYPE_HEADER) {
+                    SectionHeader(header = section.header, formats = formats, first = sectionIndex == 0 && !hasBanner)
+                }
+                val media = section.items
+                items(count = media.size, key = { media[it].uri }, contentType = { CONTENT_TYPE_MEDIA }) { position ->
+                    val item = media[position]
+                    val onClick = remember(item, onMediaClick) { { onMediaClick(item) } }
+                    MediaCell(item = item, label = mediaLabel(item, formats), onClick = onClick)
+                }
+            }
+        }
+
+        FastScrollBar(
+            state = fastScroll,
+            index = index,
+            mode = mode,
+            formats = formats,
+            columns = columns,
+            cellPx = cellPx,
+        )
+    }
+}
+
+/**
+ * Schritt über die Bedienungshilfen. Wirkt wie der Pinch, ohne Geste: Der Anker ist die Zelle in der Mitte des
+ * Rasters, die
+ * Ansicht bleibt ohne Transformation. Gibt `false` zurück, wenn die Grenze der Stufen erreicht ist.
+ */
+private fun stepZoomWithAnchor(
+    zoom: PinchZoomState,
+    gridState: LazyGridState,
+    from: Int,
+    delta: Int,
+    widthPx: Float,
+    gapPx: Float,
+    densityValue: Float,
+    onZoomLevelChange: (Int) -> Unit,
+): Boolean {
+    val target = from + delta
+    if (target < ZoomLevels.MIN_LEVEL || target > ZoomLevels.MAX_LEVEL) return false
+    val viewport = gridState.layoutInfo.viewportSize
+    val centerX = viewport.width / 2f
+    val centerY = viewport.height / 2f
+    zoom.stopSettling()
+    zoom.scale = 1f
+    zoom.panX = 0f
+    zoom.panY = 0f
+    zoom.pending =
+        planLevelChange(
+            gridState = gridState,
+            anchorX = centerX,
+            anchorY = centerY,
+            pivotX = centerX,
+            pivotY = centerY,
+            fromLevel = from,
+            toLevel = target,
+            widthPx = widthPx,
+            gapPx = gapPx,
+            densityValue = densityValue,
+            visualScale = null,
+        )
+    onZoomLevelChange(target)
+    return true
+}
+
+/**
+ * Überschrift einer Gruppe. [first] ist die oberste Überschrift des Rasters: Sie bekommt keinen Abstand nach oben,
+ * damit sie
+ * direkt unter der Kopfzeile steht.
+ */
+@Composable
+private fun SectionHeader(
+    header: TimelineHeader,
+    formats: TimelineFormats,
+    first: Boolean,
+) {
+    val text =
+        when (header) {
+            TimelineHeader.Today -> stringResource(R.string.feature_gallery_header_today)
+            TimelineHeader.Yesterday -> stringResource(R.string.feature_gallery_header_yesterday)
+            is TimelineHeader.Day -> formats.dayHeader(header.date, header.withYear)
+            is TimelineHeader.Month -> formats.monthHeader(header.yearMonth)
+        }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 8.dp, top = if (first) 0.dp else 20.dp, bottom = 8.dp)
+                .semantics { heading() },
+    )
+}
+
+@Composable
+private fun mediaLabel(
+    item: MediaItem,
+    formats: TimelineFormats,
+): String {
+    val date = formats.longDate(item.timestamp)
+    return if (item.type == MediaType.VIDEO) {
+        stringResource(R.string.feature_gallery_cell_video, formatDuration(item.durationMs ?: 0L), date)
+    } else {
+        stringResource(R.string.feature_gallery_cell_photo, date)
+    }
+}

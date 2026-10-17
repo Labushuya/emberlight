@@ -120,6 +120,17 @@ Grundsätze; Details folgen als ADR in Meilenstein 3.
 - **Probelauf vor dem Release**: Jede Version läuft zuerst als Probelauf per `workflow_dispatch`, ohne Release und Tag ([docs/RELEASE.md](RELEASE.md)).
 - **Cloud-Backup deaktiviert**: Per Manifest (`allowBackup="false"`, `data_extraction_rules`) ist jede Sicherung in die Cloud ausgeschlossen.
 
+## Nachträge aus Meilenstein 2
+
+Details und Messwerte stehen in den ADRs 0006 bis 0011.
+
+- **Galerie mit Reitern**: Fotos und Alben. Der Wechsel geschieht nur per Antippen, nicht per Wischen ([ADR 0009](adr/0009-alben-und-galerie-reiter.md)).
+- **Zeitleiste**: Pinch-Zoom in Stufen, abhängig von der Kachelbreite. Die Schnell-Scrollleiste reagiert nur auf ihren Griff ([ADR 0008](adr/0008-zeitleiste.md)).
+- **Vollbild als Overlay** über dem Raster, mit Hero-Animation. Wischen nach unten schließt. Wischen nach oben zeigt den Infobereich mit Aufnahmedaten, ohne Ortsdaten und ohne Berechtigung `ACCESS_MEDIA_LOCATION`. Gezoomt wird geschwenkt, und am Rand wird geblättert ([ADR 0010](adr/0010-vollbild-viewer.md)).
+- **Kurzer Blick** über die Rückgeste: Halten zeigt die Position im Raster, Abbruch bleibt, Vollenden schließt. Die Semantik folgt Android. Der Befund vom Honor Magic V2 ist in ADR 0010 festgehalten ([ADR 0010](adr/0010-vollbild-viewer.md)).
+- **Debug- und Benchmark-Varianten** haben eigene Icons. Eine Demo-Bibliothek mit synthetischen Medien gibt es nur in diesen Varianten, zum Testen auf dem Gerät. Der Release-Build enthält sie nicht, private Fotos sind nie Teil davon ([ADR 0011](adr/0011-demo-bibliothek-und-mess-build.md)).
+- **Arbeitsregel**: Gesten und Animationen werden vor dem Merge auf einem Gerät geprüft.
+
 ## Offene Punkte
 
 - **F) Nachhalten bei App-Teilnehmern.** Gilt das Nachhalten nur beim Gastgeber oder auch bei App-Teilnehmern? Dafür müssten App-Teilnehmer während des Space alle Medien vorab in den getrennten Speicher laden, was Speicher kostet. Browser-Gäste kommen nach Ablauf technisch an nichts mehr. Vorschlag: Nachhalten nur beim Gastgeber. Teilnehmer laden während der Laufzeit selbst herunter, was sie behalten wollen.

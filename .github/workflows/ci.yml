@@ -32,6 +32,10 @@ jobs:
     name: Build, Lint und Tests
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # Ein früher sporadischer Lint-Absturz soll beim Wiederauftreten mit vollständigem Stacktrace im Log stehen
+    # (Wiedervorlage in ADR 0001). Ohne diese Variable zeigt Lint nur die Kurzfassung.
+    env:
+      LINT_PRINT_STACKTRACE: "true"
     steps:
       - name: Quellcode auschecken
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,14 +52,78 @@ jobs:
             17
 
       # Validiert den Gradle-Wrapper (validate-wrappers ist standardmäßig aktiv) und cacht Gradle.
+      # cache-encryption-key verschlüsselt den Configuration Cache im GitHub-Cache. Ohne Schlüssel speichert setup-gradle
+      # ihn nicht (Hinweis „no-encryption-key“ in der Job-Zusammenfassung). Der Schlüssel dient nur dieser Verschlüsselung,
+      # nicht dem Signieren der APK. Siehe docs/adr/0006.
       - name: Gradle einrichten
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
-      - name: Toolchains anzeigen
-        run: ./gradlew -q javaToolchains -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+      # Robolectric lädt das android-all-instrumented-Jar des Test-SDK (ca. 228 MB) pro Lauf nach ~/.m2. setup-gradle cacht
+      # ~/.m2 nicht, deshalb ein eigener Cache. Der Schlüssel nennt Robolectric-Version und SDK, beide aus dem Projekt.
+      - name: Robolectric-Version und SDK bestimmen
+        id: robolectric
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^robolectric = "\(.*\)"/\1/p' gradle/libs.versions.toml)
+          sdk=$(sed -n 's/.*const val TARGET_SDK = \([0-9]*\).*/\1/p' build-logic/convention/src/main/kotlin/io/github/labushuya/emberlight/buildlogic/EmberlightConfig.kt)
+          if [[ -z "$version" || -z "$sdk" ]]; then
+            echo "::error title=Robolectric-Cache::Robolectric-Version oder Test-SDK ist nicht lesbar."
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "sdk=${sdk}" >> "$GITHUB_OUTPUT"
 
+      # actions/cache v6.1.0 (Tag, aufgelöst auf den Commit). Der Cache wird nur bei Erfolg des Jobs gespeichert.
+      - name: Robolectric-Systemabbilder cachen
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository/org/robolectric/android-all-instrumented
+          key: robolectric-${{ steps.robolectric.outputs.version }}-sdk${{ steps.robolectric.outputs.sdk }}-${{ runner.os }}
+
+      # Der frühere Schritt „Toolchains anzeigen“ war nur eine Ausgabe. Fehlt eine JDK, bricht dieser Build selbst ab.
+      # testForks=2 passt zu den 4 vCPU des Runners (ADR 0006).
       - name: Build, Lint und Tests
-        run: ./gradlew check assembleDebug assembleRelease -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+        run: ./gradlew check koverXmlReport assembleDebug assembleRelease -Pemberlight.testForks=2 -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+
+      # Übersicht in der Job-Zusammenfassung: Zeilenabdeckung aus dem Kover-XML und die Namen abweichender Screenshots.
+      # Läuft auch bei Fehlschlag. Der Schritt selbst bricht nicht ab, die Durchsetzung passiert in check.
+      - name: Coverage und Screenshots zusammenfassen
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          summary="$GITHUB_STEP_SUMMARY"
+          report="build/reports/kover/report.xml"
+          echo "## Coverage und Screenshots" >> "$summary"
+          echo "" >> "$summary"
+          if [ -f "$report" ]; then
+            # Der Gesamtwert ist das letzte LINE-Zählerelement im Kover-XML.
+            total=$(grep -o '<counter type="LINE"[^>]*>' "$report" | tail -1 || true)
+            covered=$(sed -E 's/.*covered="([0-9]+)".*/\1/' <<< "$total")
+            missed=$(sed -E 's/.*missed="([0-9]+)".*/\1/' <<< "$total")
+            awk -v c="$covered" -v m="$missed" 'BEGIN {
+              t = c + m
+              printf "Zeilenabdeckung: %.1f %% (%d von %d Zeilen), Untergrenze 70 %%\n\n", (t > 0 ? c * 100 / t : 0), c, t
+            }' >> "$summary"
+          else
+            echo "Kein Kover-Report gefunden, die Tests sind vor dem Report abgebrochen." >> "$summary"
+            echo "" >> "$summary"
+          fi
+          # Roborazzi meldet abweichende oder fehlende Goldens mit dem Pfad unter src/test/screenshots.
+          changed=$(find . -path '*/build/test-results/*' -name '*.xml' \
+            -exec grep -hoE 'screenshots[\\/][A-Za-z0-9_.-]+\.png' {} + 2>/dev/null \
+            | sed -E 's|.*[\\/]||' | sort -u || true)
+          if [ -n "$changed" ]; then
+            echo "Screenshots mit Abweichung oder fehlendem Golden:" >> "$summary"
+            sed 's/^/- /' <<< "$changed" >> "$summary"
+          else
+            echo "Keine Screenshot-Abweichung gefunden." >> "$summary"
+          fi
+          # Die Job-Zusammenfassung steht sonst nur in der Oberfläche. Im Log ist sie nachlesbar.
+          cat "$summary"
 
       # Die Artefakt-Uploads sind Komfort, kein Qualitätsnachweis. Build, Lint und Tests sind an dieser Stelle
       # schon entschieden. Scheitert ein Upload (z. B. weil das Speicherkontingent des Accounts erschöpft ist),
@@ -81,6 +149,19 @@ jobs:
           path: |
             **/build/reports/**
             **/build/test-results/**
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Diff-Bilder der Screenshot-Tests (Golden gegen Ist und Vergleich). Nur bei Fehlschlag, nie blockierend.
+      - name: Screenshot-Diffs hochladen
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: screenshot-diffs
+          path: |
+            **/build/outputs/roborazzi/*_compare.png
+            **/build/outputs/roborazzi/*_actual.png
           retention-days: 7
           if-no-files-found: ignore
 

@@ -25,7 +25,7 @@ Dazu kommt eine Galerie, die so schön und flüssig sein soll wie möglich.
 
 | | |
 |---|---|
-| Galerie | Zeitleiste, Alben, flüssiger Zoom, Videos, eigene Themes |
+| Galerie | Zeitleiste, Alben, Pinch-Zoom, Vollbild mit Zoom, Video, Infobereich, eigene Themes |
 | Sharing-Space | Zeitlich begrenzt, Nachhaltefrist, Gäste per QR-Code |
 | Netzwerk | Vorhandenes WLAN oder eigenes WLAN der App, kein Internet nötig |
 | Datenschutz | Keine Konten, keine Cloud, kein Tracking |

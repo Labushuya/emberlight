@@ -3,13 +3,20 @@ package io.github.labushuya.emberlight.buildlogic
 import com.android.build.api.dsl.CommonExtension
 import com.android.build.api.dsl.CompileOptions
 import com.android.build.api.dsl.Lint
+import com.android.build.api.variant.AndroidComponentsExtension
+import com.android.build.api.variant.HasHostTestsBuilder
+import com.android.build.api.variant.HostTestBuilder
+import io.github.takahirom.roborazzi.RoborazziExtension
+import org.gradle.api.GradleException
 import org.gradle.api.JavaVersion
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalog
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
+import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -46,16 +53,29 @@ internal fun CompileOptions.useJava17() {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
-/** Lint: Fehler bei Warnungen, Versions-Hinweise deaktiviert, keine Baseline. */
+/**
+ * Lint: Fehler bei Warnungen, Versions-Hinweise deaktiviert, keine Baseline. Die Analyse der Unit-Test-Quellen ist
+ * ausgenommen, weil Lint 32.4.1 dort sporadisch intern abstürzt (ADR 0001). Main-Quellen bleiben vollständig geprüft.
+ */
 internal fun Lint.applyEmberlightDefaults(checkDependencies: Boolean) {
     abortOnError = true
     warningsAsErrors = true
+    ignoreTestSources = true
     this.checkDependencies = checkDependencies
     disable.addAll(LINT_VERSION_CHECKS)
 }
 
 internal fun Project.configureUnitTestDependencies() {
     dependencies.add("testImplementation", catalog.library("junit"))
+}
+
+/**
+ * Robolectric lädt das Test-Manifest und die Android-Ressourcen des Moduls nur mit diesem Flag. Ohne Flag läuft der Test
+ * auf einem Fallback-SDK (gemessen: 23 statt 37, drei Tests der Galerie-Anbindung in core:media schlagen fehl).
+ * Deshalb gilt es zentral für alle Android-Module, nicht pro Modul.
+ */
+internal fun CommonExtension.configureUnitTestResources() {
+    testOptions.unitTests.isIncludeAndroidResources = true
 }
 
 /** Kotlin-Compiler: Warnungen sind Fehler, Target ist JVM 17. Funktioniert mit dem integrierten Kotlin von AGP 9. */
@@ -81,12 +101,48 @@ internal fun Project.configureCompose(extension: CommonExtension) {
     // Compose synchronisiert unter Robolectric über Espresso. Die von ui-test gezogene Version 3.5 scheitert mit SDK 37
     // (InputManager.getInstance fehlt), daher 3.7.0.
     dependencies.add("testImplementation", catalog.library("androidx-test-espresso-core"))
+    configureScreenshotTests()
+}
+
+/**
+ * Screenshot-Tests (Goldens) mit Roborazzi auf dem JVM, Robolectric mit nativer Grafik. Goldens liegen je Modul in
+ * `src/test/screenshots` und werden bei jedem Testlauf verifiziert, nicht still neu aufgenommen (siehe ADR 0006).
+ */
+private fun Project.configureScreenshotTests() {
+    pluginManager.apply(catalog.plugin("roborazzi").get().pluginId)
+    dependencies.add("testImplementation", catalog.library("robolectric"))
+    dependencies.add("testImplementation", catalog.library("androidx-test-ext-junit"))
+    dependencies.add("testImplementation", catalog.library("roborazzi"))
+    dependencies.add("testImplementation", catalog.library("roborazzi-compose"))
+    dependencies.add("testImplementation", catalog.library("roborazzi-junit-rule"))
+    val goldenDir = layout.projectDirectory.dir("src/test/screenshots")
+    extensions.configure<RoborazziExtension> {
+        outputDir.set(goldenDir)
+    }
+    // Goldens sind Eingaben der Testaufgaben. Ohne sie bliebe ein Test nach einer Golden-Änderung UP-TO-DATE und
+    // der Vergleich liefe nicht.
+    tasks.withType<Test>().configureEach {
+        it.inputs
+            .dir(goldenDir)
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+            .optional()
+            .withPropertyName("screenshotGoldens")
+    }
+}
+
+/**
+ * Kover pro Android-Modul: misst die Debug-Unit-Tests. Aggregation, Ausschlüsse und die Untergrenze
+ * stehen im Root-Projekt (siehe ADR 0006).
+ */
+internal fun Project.configureKover() {
+    pluginManager.apply(catalog.plugin("kover").get().pluginId)
 }
 
 private val JDK_INTERNAL_OPENS = listOf("--add-opens", "java.base/jdk.internal.access=ALL-UNNAMED")
 
 /**
  * Unit-Tests: JDK 21 als Launcher für alle Test-Tasks. Der Build selbst (Compiler, Lint) bleibt auf JDK 17.
+ * Release-Unit-Tests sind abgeschaltet (siehe ADR 0006).
  */
 internal fun Project.configureUnitTests() {
     val toolchains = extensions.getByType<JavaToolchainService>()
@@ -94,9 +150,47 @@ internal fun Project.configureUnitTests() {
         toolchains.launcherFor { spec ->
             spec.languageVersion.set(JavaLanguageVersion.of(EmberlightConfig.TEST_JAVA_VERSION))
         }
+    val forks = testForks()
     tasks.withType<Test>().configureEach { task ->
         task.javaLauncher.set(testLauncher)
         // Robolectric greift unter JDK 17+ auf interne Klassen zu, die Module-System-Öffnung ist dafür nötig.
         task.jvmArgs(JDK_INTERNAL_OPENS)
+        task.maxParallelForks = forks
     }
+    disableReleaseUnitTests()
+}
+
+/**
+ * Parallele Test-JVMs je Test-Task, gesteuert über `-Pemberlight.testForks=N`. Lokal ist der Standard 1, damit der
+ * Speicherbedarf der Robolectric-Prozesse dort unverändert bleibt. Die CI setzt 2 passend zu ihren 4 vCPU (ADR 0006).
+ */
+private fun Project.testForks(): Int {
+    val raw = providers.gradleProperty(TEST_FORKS_PROPERTY).orNull ?: return DEFAULT_TEST_FORKS
+    val value = raw.toIntOrNull()
+    if (value == null || value !in 1..MAX_TEST_FORKS) {
+        throw GradleException(
+            "$TEST_FORKS_PROPERTY muss eine Zahl von 1 bis $MAX_TEST_FORKS sein, gefunden: \"$raw\".",
+        )
+    }
+    return value
+}
+
+private const val TEST_FORKS_PROPERTY = "emberlight.testForks"
+private const val DEFAULT_TEST_FORKS = 1
+private const val MAX_TEST_FORKS = 4
+
+/**
+ * Release-Unit-Tests werden nicht ausgeführt: R8 greift in Unit-Tests nicht, die Release-Variante
+ * würde nur die Laufzeit verdoppeln. Die Debug-Variante bleibt Maßstab für Tests und Coverage.
+ */
+private fun Project.disableReleaseUnitTests() {
+    // Registriert ist nur der konkrete Typ (App oder Library), daher über den Namen lesen.
+    (extensions.getByName("androidComponents") as AndroidComponentsExtension<*, *, *>)
+        .beforeVariants { variant ->
+            // App- und Library-Builder implementieren HasHostTestsBuilder. Der Callback-Typ ist nur VariantBuilder.
+            val unitTest = (variant as? HasHostTestsBuilder)?.hostTests?.get(HostTestBuilder.UNIT_TEST_TYPE)
+            if (variant.buildType == "release" && unitTest != null) {
+                unitTest.enable = false
+            }
+        }
 }
