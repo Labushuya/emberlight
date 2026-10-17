@@ -27,14 +27,14 @@ import kotlinx.coroutines.launch
 import me.saket.telephoto.zoomable.ZoomableState
 
 /**
- * Zustand des Vollbild-Overlays (ADR 0010). Besitzt die Phase, den Fortschritt der Hero-Animation, den Zieh-Versatz und das
- * gewählte Element. Alles, was die Zeichnung liest, sind Zustandswerte, die in der Zeichenphase gelesen werden: Ein Frame
- * setzt die Oberfläche nicht neu zusammen.
+ * Zustand des Vollbild-Overlays (ADR 0010). Besitzt die Phase, den Fortschritt der Hero-Animation, den Zieh-Versatz, den Kurzen
+ * Blick, den Infobereich und das gewählte Element. Alles, was die Zeichnung liest, sind Zustandswerte, die in der Zeichenphase
+ * gelesen werden: Ein Frame setzt die Oberfläche nicht neu zusammen.
  *
  * [shown] trägt die ID des gezeigten Elements, `null` heißt geschlossen. Die Galerie hält es über `rememberSaveable`, damit es
  * Drehen und Falten übersteht. [cellRect] liefert die Grenzen der sichtbaren Kachel in Root-Koordinaten (ohne Beobachtung).
- * [beforeClose] bringt die Kachel vor dem Öffnen bzw. Schließen in den sichtbaren Bereich und liefert ihre aktuellen Grenzen
- * (`null`, wenn sie nicht sichtbar wird). Der Aufrufer setzt es bei jeder Komposition neu.
+ * [beforeClose] bringt die Kachel vor dem Öffnen, Schließen und Blicken in den sichtbaren Bereich und liefert ihre aktuellen
+ * Grenzen (`null`, wenn sie nicht sichtbar wird). Der Aufrufer setzt es bei jeder Komposition neu.
  */
 @Stable
 internal class ViewerOverlayState(
@@ -42,8 +42,11 @@ internal class ViewerOverlayState(
     private val shown: MutableState<Long?>,
     private val cellRect: (Long) -> Rect?,
 ) {
-    /** Sicherung vor Öffnen und Schließen: Kachel sichtbar machen, Grenzen nach dem Layout liefern. */
+    /** Sicherung vor Öffnen, Schließen und Blick: Kachel sichtbar machen, Grenzen nach dem Layout liefern. */
     var beforeClose: suspend (Long) -> Rect? = { id -> cellRect(id) }
+
+    /** Wird beim Beginn des Kurzen Blicks gerufen (Haptik). Die Oberfläche setzt es bei jeder Komposition neu. */
+    var onPeekStarted: () -> Unit = {}
 
     /** Die gezeigte Medien-ID, `null` wenn geschlossen. */
     val shownId: Long? get() = shown.value
@@ -57,6 +60,22 @@ internal class ViewerOverlayState(
 
     /** Zieh-Versatz nach unten in Pixeln, nie negativ. */
     var dragY: Float by mutableFloatStateOf(0f)
+        private set
+
+    /** Anteil des Kurzen Blicks, 0 ohne Blick, 1 auf der Blick-Stufe (ADR 0010, Kurzer Blick). Steuert die Deckkraft des Grundes. */
+    var peek: Float by mutableFloatStateOf(0f)
+        private set
+
+    /** Hervorhebung der Kachel während des Blicks und der Rückgeste, 0 bis 1. */
+    var highlight: Float by mutableFloatStateOf(0f)
+        private set
+
+    /** Infobereich offen? Die Oberfläche zeigt ihn, sobald der Wert gesetzt ist. */
+    var infoOpen: Boolean by mutableStateOf(false)
+        private set
+
+    /** Öffnungsstand des Infobereichs, 0 zu bis 1 offen. Folgt dem Finger und rastet per Feder ein. */
+    var infoFraction: Float by mutableFloatStateOf(0f)
         private set
 
     /** Höhe des Overlays in Pixeln und Ursprung in Root-Koordinaten. Die Oberfläche setzt sie beim Layout. */
@@ -95,7 +114,16 @@ internal class ViewerOverlayState(
     /** ID der Seite, die ihr Bild nachweislich zeigt. */
     private var pageReadyId: Long? = null
 
+    /** Zeitpunkt des Beginns der Rückgeste (Nanosekunden, monoton). `null`, wenn keine läuft. */
+    private var backStartedNanos: Long? = null
+
+    /** Ist seit dem Beginn der Rückgeste ein Fortschritt eingetroffen? Dann folgt der Schrumpf dem Fortschritt, nicht dem Blick. */
+    private var progressSeen = false
+
     private var job: Job? = null
+    private var peekJob: Job? = null
+    private var highlightJob: Job? = null
+    private var infoJob: Job? = null
     private var fallbackJob: Job? = null
     private var fadeJob: Job? = null
     private var fading = false
@@ -126,6 +154,10 @@ internal class ViewerOverlayState(
         fading = false
         heroAlpha = 1f
         heroTile = tile
+        peek = 0f
+        highlight = 0f
+        infoOpen = false
+        infoFraction = 0f
         phase = nextPhase(phase, OverlayEvent.Open)
         ViewerTrace.mark("Hero-Animation Start", id)
         job?.cancel()
@@ -180,29 +212,148 @@ internal class ViewerOverlayState(
         }
     }
 
+    /** Der Infobereich wird gezogen. Nur im Ruhezustand des Bildes, sonst ohne Wirkung. */
+    fun infoDragStarted() {
+        if (phase != OverlayPhase.OPEN) return
+        infoJob?.cancel()
+    }
+
+    /** Folgt dem Finger um [deltaY] Pixel (nach oben negativ). Der Stand ist 0 bis 1. */
+    fun infoDragBy(deltaY: Float) {
+        if (phase != OverlayPhase.OPEN) return
+        infoFraction = (infoFraction - deltaY / panelHeightPx()).coerceIn(0f, 1f)
+    }
+
+    /** Loslassen des Infobereichs: rastet offen oder zu, je nach Stand und Geschwindigkeit (ADR 0010, Infobereich). */
+    fun infoDragEnded(
+        velocityYPerSecond: Float,
+        flingPerSecond: Float,
+    ) {
+        if (phase != OverlayPhase.OPEN) return
+        setInfo(infoSheetOpens(infoFraction, velocityYPerSecond, flingPerSecond))
+    }
+
+    /** Öffnet den Infobereich, etwa über die Bedienungshilfen. Nur im Ruhezustand des Bildes. */
+    fun openInfo() {
+        if (phase == OverlayPhase.OPEN && !infoOpen) setInfo(true)
+    }
+
+    /** Schließt den Infobereich, falls er offen ist. */
+    fun closeInfo() {
+        if (infoOpen) setInfo(false)
+    }
+
+    /** Öffnet oder schließt den Infobereich. */
+    fun toggleInfo() {
+        if (infoOpen) closeInfo() else openInfo()
+    }
+
+    /** Rastet den Infobereich per Feder ein und merkt den Zustand. */
+    private fun setInfo(open: Boolean) {
+        infoOpen = open
+        infoJob?.cancel()
+        infoJob =
+            scope.launch {
+                animate(infoFraction, if (open) 1f else 0f, animationSpec = SETTLE_SPRING) { value, _ ->
+                    infoFraction =
+                        value
+                }
+            }
+    }
+
+    /** Höhe des Infobereichs in Pixeln, wenn er ganz offen ist. */
+    fun panelHeightPx(): Float = heightPx * INFO_PANEL_FRACTION
+
     /**
-     * Die System-Rückgeste meldet [fraction] (0 bis 1). Das Bild schrumpft in Richtung Kachel. Ist das Bild gezoomt, startet
-     * der Schrumpf aus dem sichtbaren Ausschnitt.
+     * Verschiebung des Bildes nach oben bei offenem Infobereich, in Pixeln. Die Unterkante des Bildes rückt auf die Oberkante
+     * des freien Bereichs oberhalb des Infobereichs. Dort bleibt ein Teil des Bildes sichtbar.
+     */
+    fun infoShiftPx(): Float = (fit.bottom - heightPx * (1f - INFO_PANEL_FRACTION)).coerceAtLeast(0f)
+
+    /**
+     * Die System-Rückgeste hat begonnen. Ohne Fortschritt (Tastenhalten) tritt nach [PEEK_GRACE_MS] der Kurze Blick ein. Erst
+     * danach ist klar, dass kein Fortschritt kommt. Ist der Infobereich offen, schließt die Rückgeste zuerst ihn. Gezoomt gibt
+     * es keinen Blick: die Rückgeste verhält sich wie bisher.
+     */
+    fun backStarted() {
+        if (infoOpen) return
+        if (phase != OverlayPhase.OPEN) return
+        val id = shown.value ?: return
+        if (isZoomed(id)) return
+        phase = nextPhase(phase, OverlayEvent.BackStarted)
+        backStartedNanos = System.nanoTime()
+        progressSeen = false
+        job?.cancel()
+        peekJob?.cancel()
+        peekJob =
+            scope.launch {
+                // Die Kachel vor dem Blick in den sichtbaren Bereich bringen, wie beim Öffnen (ADR 0010, Feinschliff).
+                heroTile = beforeClose(id)
+                delay(PEEK_GRACE_MS)
+                if (progressSeen || phase != OverlayPhase.PEEKING) return@launch
+                ViewerTrace.mark("Blick Start (ohne Fortschritt)", id)
+                onPeekStarted()
+                fadeHighlight(1f)
+                // Bild auf die Blick-Stufe, der Grund wird dabei dunkler. Beides läuft im Blick-Job, damit ein Fortschritt es stoppt.
+                coroutineScope {
+                    launch {
+                        animate(progress, PEEK_STAGE, animationSpec = tween(PEEK_MS)) { value, _ ->
+                            progress =
+                                value
+                        }
+                    }
+                    launch { animate(peek, 1f, animationSpec = tween(PEEK_MS)) { value, _ -> peek = value } }
+                }
+                if (phase == OverlayPhase.PEEKING) ViewerTrace.mark("Blick Stufe erreicht", id)
+            }
+    }
+
+    /**
+     * Die Rückgeste meldet [fraction] (0 bis 1). Das Bild schrumpft in Richtung Kachel. Ist das Bild gezoomt, startet der
+     * Schrumpf aus dem sichtbaren Ausschnitt. Ein Fortschritt schaltet den Kurzen Blick ab, der Schrumpf folgt dem Fortschritt.
      */
     fun backProgressed(fraction: Float) {
+        if (infoOpen) return
         val next = nextPhase(phase, OverlayEvent.BackProgressed)
         if (next == phase && next != OverlayPhase.BACK) return
+        val id = shown.value
+        if (backStartedNanos != null && !progressSeen && id != null) {
+            ViewerTrace.mark("Blick Start (mit Fortschritt)", id)
+        }
+        progressSeen = true
         if (phase == OverlayPhase.OPEN) captureZoomStart()
         job?.cancel()
+        peekJob?.cancel()
         phase = next
         progress = 1f - fraction.coerceIn(0f, 1f)
+        peek = 0f
         dragY = 0f
+        fadeHighlight(1f)
         retireHeroIfReady()
     }
 
-    /** Die Rückgeste wurde abgebrochen: Das Bild federt zurück zum Vollbild. */
+    /**
+     * Die Rückgeste wurde abgebrochen. Der Viewer federt zurück ins Vollbild und bleibt offen. Das gilt für den Blick wie für
+     * den Fortschritt. Die Meldung trägt die Zeit seit dem Beginn (ADR 0010).
+     */
     fun backCancelled() {
-        if (phase != OverlayPhase.BACK) return
-        phase = nextPhase(phase, OverlayEvent.BackCancelled)
+        if (phase != OverlayPhase.BACK && phase != OverlayPhase.PEEKING) return
+        val id = shown.value
+        val started = backStartedNanos
+        if (id != null && started != null) {
+            ViewerTrace.mark("Blick abgebrochen nach ${elapsedMs(started)} ms", id)
+        }
+        backStartedNanos = null
+        peekJob?.cancel()
         job?.cancel()
+        phase = nextPhase(phase, OverlayEvent.BackCancelled)
+        fadeHighlight(0f)
         job =
             scope.launch {
-                animate(progress, 1f, animationSpec = SETTLE_SPRING) { value, _ -> progress = value }
+                coroutineScope {
+                    launch { animate(progress, 1f, animationSpec = SETTLE_SPRING) { value, _ -> progress = value } }
+                    launch { animate(peek, 0f, animationSpec = tween(PEEK_MS)) { value, _ -> peek = value } }
+                }
                 phase = nextPhase(phase, OverlayEvent.SettleFinished)
                 // Die Seite ist wieder sichtbar, derselbe Zoom liegt darunter. Der Rückweg aus dem Zoom endet hier.
                 zoomFrom = null
@@ -210,10 +361,21 @@ internal class ViewerOverlayState(
             }
     }
 
-    /** Die Rückgeste wurde vollendet: der Viewer schließt zur Kachel. */
+    /**
+     * Die Rückgeste wurde vollendet: der Viewer schließt zur Kachel. Ist der Infobereich offen, schließt die Geste zuerst ihn.
+     * Ohne Fortschritt (das System meldet nur das Vollenden, etwa bei der Zurück-Taste) schließt der Viewer trotzdem.
+     */
     fun backCommitted() {
-        // Ohne Fortschritt (das System meldet nur das Vollenden, etwa bei der Zurück-Taste) schließt der Viewer trotzdem.
-        if (phase == OverlayPhase.BACK) {
+        if (infoOpen) {
+            backStartedNanos = null
+            closeInfo()
+            return
+        }
+        if (phase == OverlayPhase.BACK || phase == OverlayPhase.PEEKING) {
+            val id = shown.value
+            if (id != null && backStartedNanos != null) ViewerTrace.mark("Blick vollendet", id)
+            backStartedNanos = null
+            peekJob?.cancel()
             phase = nextPhase(phase, OverlayEvent.BackCommitted)
             closeAnimated()
         } else {
@@ -221,7 +383,7 @@ internal class ViewerOverlayState(
         }
     }
 
-    /** Wählt das gezeigte Element, etwa nach einem Seitenwechsel. Ohne Wirkung, wenn geschlossen. */
+    /** Wählt das gezeigte Element, etwa nach einem Seitenwechsel. Ohne Wirkung, wenn geschlossen. Ein offener Infobereich bleibt. */
     fun select(id: Long) {
         if (shown.value == null) return
         shown.value = id
@@ -229,23 +391,63 @@ internal class ViewerOverlayState(
         if (id != openedId) dropHero()
     }
 
+    /**
+     * Ruhezustand des Kurzen Blicks ohne Animation, für Tests und Goldens: Blick-Stufe, Hintergrund abgedunkelt, Kachel [tile]
+     * hervorgehoben. Die Zustandsmaschine bleibt unberührt, es läuft kein Job.
+     */
+    internal fun snapPeek(tile: Rect) {
+        cancelAnimations()
+        phase = OverlayPhase.PEEKING
+        progress = PEEK_STAGE
+        peek = 1f
+        highlight = 1f
+        heroTile = tile
+        heroAlpha = 0f
+    }
+
+    /** Ruhezustand des Infobereichs ohne Animation, für Tests und Goldens. */
+    internal fun snapInfo(open: Boolean) {
+        infoJob?.cancel()
+        infoOpen = open
+        infoFraction = if (open) 1f else 0f
+    }
+
+    private fun cancelAnimations() {
+        job?.cancel()
+        peekJob?.cancel()
+        highlightJob?.cancel()
+    }
+
     /** Schließt ohne Animation, etwa wenn es nichts mehr zu zeigen gibt. */
     fun forceClose() {
         cancelHeroJobs()
         job?.cancel()
+        peekJob?.cancel()
+        infoJob?.cancel()
+        highlightJob?.cancel()
         shown.value = null
         progress = 0f
         dragY = 0f
+        peek = 0f
+        highlight = 0f
+        infoOpen = false
+        infoFraction = 0f
         zoomFrom = null
         heroAlpha = 0f
+        backStartedNanos = null
         phase = OverlayPhase.CLOSED
     }
 
-    /** Schließen über Zurück-Taste oder Schließen-Knopf. */
+    /** Schließen über Zurück-Taste oder Schließen-Knopf. Ein offener Infobereich schließt zuerst. */
     fun close() {
+        if (infoOpen) {
+            closeInfo()
+            return
+        }
         val next = nextPhase(phase, OverlayEvent.CloseRequested)
         if (next == phase) return
         if (phase == OverlayPhase.OPEN) captureZoomStart()
+        peekJob?.cancel()
         phase = next
         closeAnimated()
     }
@@ -262,7 +464,8 @@ internal class ViewerOverlayState(
 
     /**
      * Schließt: Die Kachel wird vorher sichtbar gemacht ([beforeClose]), dann läuft die Hero-Animation vom aktuellen Stand
-     * zurück zur Kachel. Aus dem Zoom startet sie am sichtbaren Inhalts-Rechteck, ohne vorheriges Zurücksetzen des Zooms.
+     * zurück zur Kachel. Aus dem Zoom startet sie am sichtbaren Inhalts-Rechteck, ohne vorheriges Zurücksetzen des Zooms. Die
+     * Hervorhebung bleibt bis zum Ende stehen und blendet dann mit dem Viewer aus.
      */
     private fun closeAnimated() {
         job?.cancel()
@@ -280,9 +483,20 @@ internal class ViewerOverlayState(
                 coroutineScope {
                     launch { animate(progress, 0f, animationSpec = heroSpec()) { value, _ -> progress = value } }
                     launch { animate(dragY, 0f, animationSpec = heroSpec()) { value, _ -> dragY = value } }
+                    launch { animate(peek, 0f, animationSpec = tween(PEEK_MS)) { value, _ -> peek = value } }
+                    launch {
+                        animate(
+                            infoFraction,
+                            0f,
+                            animationSpec = heroSpec(),
+                        ) { value, _ -> infoFraction = value }
+                    }
                 }
                 shown.value = null
                 zoomFrom = null
+                infoOpen = false
+                highlightJob?.cancel()
+                highlight = 0f
                 heroAlpha = 0f
                 phase = nextPhase(phase, OverlayEvent.CloseFinished)
             }
@@ -308,12 +522,21 @@ internal class ViewerOverlayState(
 
     private fun isZoomed(id: Long): Boolean = (zoomStates[id]?.zoomFraction ?: 0f) > ZOOM_EPSILON
 
+    /** Blendet die Hervorhebung der Kachel auf [target], kurz und sanft. */
+    private fun fadeHighlight(target: Float) {
+        highlightJob?.cancel()
+        highlightJob =
+            scope.launch {
+                animate(highlight, target, animationSpec = tween(HIGHLIGHT_MS)) { value, _ -> highlight = value }
+            }
+    }
+
     /** Blendet das Vorschaubild aus, sobald die Seite es zeigt und nichts anderes es braucht (Animation, Zoom-Rückweg). */
     private fun retireHeroIfReady() {
         val id = shown.value ?: return
         if (pageReadyId != id || zoomFrom != null) return
-        if (phase != OverlayPhase.OPEN && phase != OverlayPhase.DRAGGING && phase != OverlayPhase.BACK &&
-            phase != OverlayPhase.SETTLING
+        if (phase != OverlayPhase.OPEN && phase != OverlayPhase.PEEKING && phase != OverlayPhase.DRAGGING &&
+            phase != OverlayPhase.BACK && phase != OverlayPhase.SETTLING
         ) {
             return
         }
@@ -358,6 +581,8 @@ internal class ViewerOverlayState(
 
     private fun heroSpec(): FiniteAnimationSpec<Float> = EmberlightMotion.heroSpec()
 
+    private fun elapsedMs(startedNanos: Long): Long = (System.nanoTime() - startedNanos) / NANOS_PER_MILLI
+
     private companion object {
         val SETTLE_SPRING: FiniteAnimationSpec<Float> =
             spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
@@ -369,6 +594,23 @@ internal const val HERO_FADE_MS = 100
 
 /** Wie lange das Vorschaubild höchstens stehen bleibt, wenn die Seite kein Bild meldet (ms). */
 internal const val HERO_FALLBACK_MS = 1_000L
+
+/**
+ * Gnadenfrist des Kurzen Blicks (ms). Kommt innerhalb dieser Zeit ein Fortschritt, ist es eine Gesten-Navigation und der Schrumpf
+ * folgt dem Finger. Kommt keiner, hält die Rückgeste ohne Fortschritt (Tastenhalten) und der Blick beginnt.
+ */
+internal const val PEEK_GRACE_MS = 80L
+
+/** Dauer, in der das Bild auf die Blick-Stufe fährt (ms). */
+internal const val PEEK_MS = 200
+
+/** Blick-Stufe des Bildes als Fortschritt: ca. 80 bis 85 % Größe, je nach Kachelgröße (ADR 0010, Kurzer Blick). */
+internal const val PEEK_STAGE = 0.8f
+
+/** Dauer des Ein- und Ausblendens der Kachel-Hervorhebung (ms). */
+internal const val HIGHLIGHT_MS = 150
+
+private const val NANOS_PER_MILLI = 1_000_000L
 
 /**
  * Overlay-Zustand der Galerie oder des Albums. Die gewählte ID bleibt über `rememberSaveable` erhalten. Nach einem Prozess-Tod

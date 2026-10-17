@@ -15,6 +15,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.core.media.MediaLibraryState
 import io.github.labushuya.emberlight.core.media.MediaRepository
+import io.github.labushuya.emberlight.core.media.exif.PhotoExif
+import io.github.labushuya.emberlight.core.media.exif.PhotoExifSource
 import io.github.labushuya.emberlight.feature.gallery.GalleryViewModel
 import io.github.labushuya.emberlight.feature.gallery.permission.DataStorePermissionPromptStore
 import io.github.labushuya.emberlight.feature.gallery.permission.anyPermissionRationale
@@ -27,6 +29,7 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFixtures
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFormats
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevelStore
 import io.github.labushuya.emberlight.feature.gallery.timeline.ZoomLevels
+import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerDetailsViewModel
 import io.github.labushuya.emberlight.feature.gallery.viewer.testPlayback
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -86,7 +89,11 @@ class GalleryWiringTest {
 
         composeRule.setContent {
             EmberlightTheme {
-                GalleryScreen(viewModel = viewModel, playback = testPlayback())
+                GalleryScreen(
+                    viewModel = viewModel,
+                    playback = testPlayback(),
+                    details = ViewerDetailsViewModel(NoPhotoExifSource, emptySet()),
+                )
             }
         }
 
@@ -187,4 +194,9 @@ class GalleryWiringTest {
             // Feste Daten: nichts zu lesen.
         }
     }
+}
+
+/** Ohne EXIF-Quelle: der Infobereich zeigt nur die Basisdaten. Hilt ist in diesem Test nicht vorhanden. */
+private object NoPhotoExifSource : PhotoExifSource {
+    override suspend fun read(uri: String): PhotoExif? = null
 }

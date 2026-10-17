@@ -47,4 +47,27 @@
     <string name="feature_gallery_viewer_error_title">This item can\'t be shown</string>
     <string name="feature_gallery_viewer_error_text">The file may have been moved or deleted.</string>
     <string name="feature_gallery_viewer_demo_unplayable">Not playable in demo mode</string>
+    <string name="feature_gallery_info_show">Show details</string>
+    <string name="feature_gallery_info_hide">Hide details</string>
+    <string name="feature_gallery_info_title">Details</string>
+    <string name="feature_gallery_info_date">Date</string>
+    <string name="feature_gallery_info_date_estimated">Capture date unknown, file date used</string>
+    <string name="feature_gallery_info_name">File name</string>
+    <string name="feature_gallery_info_album">Album</string>
+    <string name="feature_gallery_info_folder">Folder</string>
+    <string name="feature_gallery_info_resolution">Resolution</string>
+    <string name="feature_gallery_info_resolution_megapixels">%1$s (%2$s)</string>
+    <string name="feature_gallery_info_size">Size</string>
+    <string name="feature_gallery_info_type">File type</string>
+    <string name="feature_gallery_info_duration">Duration</string>
+    <string name="feature_gallery_info_section_camera">Camera</string>
+    <string name="feature_gallery_info_camera">Camera</string>
+    <string name="feature_gallery_info_lens">Lens</string>
+    <string name="feature_gallery_info_aperture">Aperture</string>
+    <string name="feature_gallery_info_exposure">Exposure time</string>
+    <string name="feature_gallery_info_iso">ISO</string>
+    <string name="feature_gallery_info_focal_length">Focal length</string>
+    <string name="feature_gallery_info_flash">Flash</string>
+    <string name="feature_gallery_info_flash_fired">fired</string>
+    <string name="feature_gallery_info_flash_not_fired">did not fire</string>
 </resources>

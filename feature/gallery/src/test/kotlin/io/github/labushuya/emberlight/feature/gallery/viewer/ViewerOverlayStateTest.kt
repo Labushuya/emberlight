@@ -371,7 +371,7 @@ class ViewerOverlayStateTest {
  * Taktgeber für die Animationen im Test. Jeder Takt liefert sofort den nächsten Zeitpunkt (je 16 ms), ohne auf ein Bild zu
  * warten. Die Compose-Animationen brauchen einen solchen Takt im Kontext.
  */
-private object FakeFrameClock : MonotonicFrameClock {
+internal object FakeFrameClock : MonotonicFrameClock {
     private var nanos = 0L
 
     override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R {

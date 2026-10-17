@@ -7,6 +7,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.labushuya.emberlight.feature.gallery.permission.rememberAppSettingsOpener
 import io.github.labushuya.emberlight.feature.gallery.permission.rememberMediaPermissionRequest
+import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerDetailsViewModel
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerPlaybackViewModel
 
 /**
@@ -21,6 +22,7 @@ internal fun GalleryScreen(
     onAlbumClick: (Long?) -> Unit = {},
     viewModel: GalleryViewModel = hiltViewModel(),
     playback: ViewerPlaybackViewModel = hiltViewModel(),
+    details: ViewerDetailsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val requestPermission =
@@ -35,6 +37,7 @@ internal fun GalleryScreen(
         onAlbumClick = onAlbumClick,
         onZoomLevelChange = viewModel::onZoomLevelChanged,
         playback = playback,
+        exif = details,
         zone = viewModel.zone,
         modifier = modifier,
     )

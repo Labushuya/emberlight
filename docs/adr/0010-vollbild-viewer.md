@@ -438,3 +438,72 @@ Rückgeste durch den Nutzer, drei Versuche mit Haltedauer von etwa 1 s (Log `Emb
 Die Marke „Rückgeste ohne Fortschritt“ und Fortschrittswerte erschienen bei den Nutzer-Versuchen nicht. Zwei von drei Haltevorgängen endeten mit „abgebrochen“, einer mit „vollendet“. Zum Vergleich: Bei 10 Schließen per Zurück-Taste (`adb shell input keyevent 4`) folgte jeweils „Rückgeste ohne Fortschritt“ und danach „Rückgeste vollendet“.
 
 Befund: Die 3-Tasten-Navigation meldet beim Loslassen nicht durchgängig „vollendet“. Ob das an der Haltedauer, am Zeitpunkt des Loslassens oder am Framework liegt, ist mit den vorliegenden Marken nicht entscheidbar. Die Zuordnung in `ViewerOverlay` ist unverändert. Ein Fix ist in diesem Auftrag nicht vorgesehen; die Entscheidung liegt beim Projekt. Offen bleibt: Haltedauer und Fortschritt je Versuch protokollieren, damit sich der Befund belegen oder widerlegen lässt.
+## Kurzer Blick und Infobereich (Meilenstein 2, Nachtrag)
+
+Status: umgesetzt im Branch `feat/m2-kurzer-blick-und-infobereich`. Geräteprüfung am Honor Magic V2 (Demo-Modus), Ergebnisse unter „Geräteprüfung Kurzer Blick und Infobereich“.
+
+### Android-Semantik und der Befund auf dem Gerät
+
+- Android meldet die Rückgeste mit `onBackStarted`, optional `onBackProgressed`, und endet mit `onBackInvoked` (vollendet) oder `onBackCancelled` (abgebrochen). Die Zuordnung in `ViewerOverlay` bleibt wie in Korrektur 4 beschrieben: Vollenden schließt, Abbruch bleibt.
+- Befund aus Korrektur 4: Die Zurück-Taste gehalten, ohne Fortschritt, endet nach etwa 1,6 s mit `onBackCancelled`. Bisher federte das Bild dann kommentarlos zurück.
+- Entscheidung: Diese Folge wird zur bewussten Funktion „Kurzer Blick“. Die Semantik bleibt Android-konform: Abbruch heißt bleiben, Vollenden heißt schließen. Der Abbruch wird nicht in ein Schließen umgedeutet.
+
+### Gestaltung des Kurzen Blicks
+
+- Start ohne Fortschritt: Nach einer Gnadenfrist von 80 ms (`PEEK_GRACE_MS`) fährt das Bild in 200 ms auf die Blick-Stufe (Fortschritt 0,8, also etwa 80 bis 85 % Größe, leicht zur Kachel versetzt). Der schwarze Grund sinkt auf 35 % Deckkraft, das Raster bleibt darunter sichtbar. Die Leisten blenden aus.
+- Die Gnadenfrist trennt die Fälle. Kommt innerhalb von 80 ms ein Fortschritt, ist es eine Gesten-Navigation, und das Bild folgt dem Finger wie bisher. Kommt keiner, hält der Nutzer die Taste. Ein schnelles Antippen schließt ohne Blick.
+- Haptik beim Start des Blicks: `View.performHapticFeedback(CONTEXT_CLICK)`, ohne neue Berechtigung.
+- Kachel-Hervorhebung: Ein Rahmen mit Leuchten in `primary` des Themes, 150 ms ein- und ausgeblendet. Die Kachel wird vorher über `beforeClose` (vorhandene Sichtbarkeitslogik) in den sichtbaren Bereich gebracht.
+- Abweichung von der Vorgabe: Die Hervorhebung zeichnet das Overlay, nicht die Zelle. Die Blick-Stufe liegt über dem Raster und verdeckt die Kachel. Ein Rahmen in der Zelle wäre darunter nicht zu sehen. Die Zellen werden trotzdem nicht neu zusammengesetzt, ein Zähler in den Tests belegt das.
+- Abbruch: Das Bild federt per Feder zurück ins Vollbild, die Hervorhebung blendet aus. Die Debug-Marke „Blick abgebrochen nach X ms“ trägt die Zeit seit dem Start.
+- Vollenden: Schließen mit Hero-Animation in die hervorgehobene Kachel, wie bisher.
+- Gezoomt gibt es keinen Blick. Die Rückgeste verhält sich wie bisher (Schrumpf aus dem Zoom, Abbruch federt zurück).
+
+### Gesten-Priorität
+
+- Nach unten: Wegwischen, wenn der Infobereich zu ist und das Bild nicht gezoomt ist. Ist der Infobereich offen, schließt die Geste zuerst den Infobereich.
+- Nach oben: öffnet den Infobereich, nur ungezoomt und bei geschlossenem Bereich. Ist er offen, geschieht nichts.
+- Gezoomt: Wischen schwenkt das Bild, in alle Richtungen. Kein Wegwischen, kein Infobereich.
+- Horizontal: Pager. Auch bei offenem Infobereich wechselt das Medium, der Bereich zeigt dann die neuen Angaben.
+- Rückgeste bei offenem Infobereich: schließt zuerst den Bereich, der Kurze Blick startet dann nicht.
+- Antippen des Bildes schließt einen offenen Infobereich, sonst schaltet es die Leisten um.
+
+### Der Infobereich
+
+- Quellenunabhängiges Modell `MediaDetails` (Anzeigename, MIME, Größe, Album, Ordner, Schätzung des Datums). Die Anzeige kennt nur `ViewerItem`, damit ein Space dieselben Bausteine mit eigener Quelle nutzen kann.
+- Darstellung: Material 3 `surfaceContainer`, obere Ecken 28 dp, Inhalt scrollbar. Der Bereich nimmt 60 % der Höhe ein, das Bild rückt so nach oben, dass 40 % der Höhe darüber sichtbar bleiben. Einrasten per Feder bei 50 % oder bei einem Schnellschluss (600 dp/s).
+- Inhalt: Wochentag, Datum und Uhrzeit mit demselben Formatierer wie im Titel. Bei einer Zeitstempel-Quelle ungleich `DATE_TAKEN` der Hinweis „Aufnahmedatum unbekannt, Datum der Datei“. Dateiname, Album, Ordner, Auflösung „B × H“ mit Megapixel bei Fotos, Größe über `Formatter.formatShortFileSize`, Dateityp lesbar (JPEG, HEIC, MP4). Videos: Dauer.
+- Bildrate ist nicht enthalten. MediaStore liefert sie nicht verlässlich, und `MediaMetadataRetriever` wäre bei jedem Öffnen zu teuer.
+- Fehlende Werte fehlen in der Anzeige, nie als „null“.
+- Barrierefreiheit: Die Überschrift „Details“ und das Pane des Bereichs sind benannt, jeder Wert ist eine Zeile „Bezeichnung: Wert“. Eine Bedienungshilfen-Aktion am Viewer heißt „Details anzeigen“ bzw. „Details ausblenden“.
+
+### EXIF: lazy, ohne Ortsdaten
+
+- Der Leser liegt in `core:media` (`PhotoExifSource`, Hilt-Bindung in `MediaModule`). Er öffnet die Datei über `ContentResolver.openInputStream` auf dem IO-Dispatcher, ohne Kopie. Gelesen wird erst, wenn der Infobereich offen ist.
+- Gelesen werden nur Aufnahmefelder: Hersteller, Modell, Objektiv, Blende, Belichtungszeit, ISO, Brennweite und Blitz (Bit 0). GPS-Felder werden nie ausgewertet und nie angezeigt. Ohne `ACCESS_MEDIA_LOCATION` sind sie ohnehin redigiert, die Berechtigung bleibt aus.
+- Einschränkung: `androidx.exifinterface` 1.4.2 parst beim Öffnen den gesamten Kopf, also auch einen eventuellen GPS-Block. Die App wertet ihn nicht aus und speichert nichts davon.
+- Ergebnisse bleiben im Speicher, begrenzt auf 64 Einträge (am längsten ungenutzte fallen zuerst heraus). Auch leere Ergebnisse werden gemerkt, damit eine unlesbare Datei nicht bei jedem Öffnen erneut gelesen wird.
+- Fehler beim Lesen (Datei fehlt, Berechtigung entzogen, kein EXIF) bleiben still. Es werden dann nur die Basisdaten gezeigt.
+- Abhängigkeit: `androidx.exifinterface:exifinterface` 1.4.2 (stabil, Google Maven), ohne Play-Services-Abhängigkeit. `checkNoPlayServices` bleibt grün.
+
+### Architekturentscheidung: der Infobereich liegt in jeder Seite
+
+- Zuerst lag der Infobereich als Geschwister des Pagers im Overlay. Compose liefert eine Zeigereingabe nur an das oberste Element mit Eingabe. Der Infobereich fing horizontales Wischen und Wegwischen ab, der Pager bekam sie nicht. Das belegte der Compose-Test.
+- Deshalb ist der Infobereich ein Kind jeder Seite (`ViewerInfoLayer`). Horizontales Wischen, das der Bereich nicht verbraucht, erreicht den Pager über die übliche Verschachtelung. Vertikales Wischen erreicht die Seite.
+- Die Bildverschiebung liegt im Seiteninhalt, nicht im Pager. Der Bereich bleibt damit stehen, während das Bild nach oben rückt.
+- Tippen gilt dem Bildinhalt, nicht der ganzen Seite. Ein Tipp auf den Bereich schließt ihn nicht.
+
+### Demo-Modus
+
+- `DemoViewerDetailsContribution` (nur Demo-Source-Set, Debug und Benchmark) liefert für die synthetischen Fotos deterministische, plausible EXIF-Angaben („Demo-Kamera“, feste Werte je Index). Videos und fremde Einträge bleiben bei der Quelle des Geräts.
+- Im Release-Build gibt es diesen Beitrag nicht. Dort zeigt der Infobereich nur echte Angaben aus dem MediaStore.
+
+### Tests
+
+- Unit: `ViewerPeekStateTest` (Zustandsmaschine des Blicks und des Infobereichs), `OverlayPeekPhaseTest`, `InfoSheetRulesTest` (Achse nach oben, Einrasten), `InfoFormatsTest` (Blende, Belichtung, ISO, Brennweite, Megapixel, Auflösung, MIME, de und en), `MediaDetailsMappingTest`, `PhotoExifMappingTest` (Test-JPEG `core/media/src/test/resources/exif/sample-exif.jpg` ohne GPS-Block), `DemoViewerDetailsTest`.
+- Compose (Robolectric): `ViewerInfoComposeTest` (Wischen nach oben öffnet mit Texten, nach unten schließt, Zurück schließt zuerst den Bereich, horizontales Wischen aktualisiert, gezoomt kein Bereich), `ViewerPeekComposeTest` (Blick mit Stufe und Hervorhebung, Abbruch, Vollenden, Fortschritt folgt dem Finger).
+- Goldens (en, de, Video): `Viewer_phone_en_info.png`, `Viewer_phone_de_info.png`, `Viewer_phone_en_info_video.png`, `Viewer_phone_en_peek_highlight.png`. Feste Zustände über `snapInfo` und `snapPeek`, ohne Animation.
+
+### Gerätebefunde und Messwerte
+
+Siehe Abschnitt „Geräteprüfung Kurzer Blick und Infobereich“.

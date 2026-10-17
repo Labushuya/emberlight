@@ -15,8 +15,14 @@ internal class ViewerFormats(
     locale: Locale,
     private val zone: ZoneId,
 ) {
+    private val weekdayDateTime =
+        DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, "EEEEdMMMMyHHmm"), locale)
     private val dateTime =
         DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, "dMMMMyHHmm"), locale)
 
     fun title(timestampMillis: Long): String = dateTime.format(Instant.ofEpochMilli(timestampMillis).atZone(zone))
+
+    /** Wochentag, Datum und Uhrzeit für den Infobereich, mit denselben Regeln wie der Titel (ADR 0010). */
+    fun withWeekday(timestampMillis: Long): String =
+        weekdayDateTime.format(Instant.ofEpochMilli(timestampMillis).atZone(zone))
 }

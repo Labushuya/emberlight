@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import io.github.labushuya.emberlight.core.design.motion.LocalNavigationChrome
 import io.github.labushuya.emberlight.core.media.model.MediaItem
+import io.github.labushuya.emberlight.feature.gallery.viewer.ExifLookup
 import io.github.labushuya.emberlight.feature.gallery.viewer.OverlayPhase
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerItem
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerOverlay
@@ -72,6 +73,7 @@ internal fun MediaBrowser(
     playback: ViewerPlaybackViewModel,
     modifier: Modifier = Modifier,
     zone: ZoneId = ZoneId.systemDefault(),
+    exif: ExifLookup = ExifLookup.None,
     grid: @Composable (browser: MediaBrowserState, gridModifier: Modifier) -> Unit,
 ) {
     val cells = remember { CellBounds() }
@@ -110,7 +112,7 @@ internal fun MediaBrowser(
             grid(browser, Modifier.fillMaxSize().graphicsLayer { alpha = browser.gridAlpha })
         }
         if (shownId != null && viewerItems.isNotEmpty()) {
-            ViewerOverlay(overlay = overlay, items = viewerItems, playback = playback, zone = zone)
+            ViewerOverlay(overlay = overlay, items = viewerItems, playback = playback, zone = zone, exif = exif)
         }
     }
 }

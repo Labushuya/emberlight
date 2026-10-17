@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -38,6 +39,7 @@ import me.saket.telephoto.zoomable.ZoomableImageSource
 import me.saket.telephoto.zoomable.ZoomableImageState
 import me.saket.telephoto.zoomable.rememberZoomableImageState
 import me.saket.telephoto.zoomable.rememberZoomableState
+import java.time.ZoneId
 
 /**
  * Bildquelle einer Seite. Erhält das Element, den Schalter „Bild darf geladen werden“ und einen Callback bei Fehlern. Die
@@ -79,6 +81,8 @@ internal fun ViewerImagePage(
     modifier: Modifier = Modifier,
     screen: ImageBitmap? = null,
     state: ZoomableImageState = rememberZoomableImageState(rememberZoomableState()),
+    exif: ExifLookup = ExifLookup.None,
+    zone: ZoneId = ZoneId.systemDefault(),
 ) {
     val failed = remember(item.id) { mutableStateOf(false) }
     val isSettled = settled
@@ -104,29 +108,39 @@ internal fun ViewerImagePage(
         modifier =
             modifier
                 .fillMaxSize()
-                .swipeDownToDismiss(
+                .verticalSwipe(
                     overlay = overlay,
                     canStart = { canStartDismiss(state.zoomableState.zoomFraction) },
                 ),
     ) {
-        if (failed.value) {
-            ViewerLoadError(modifier = Modifier.fillMaxSize())
-        } else {
-            if (!isSettled) {
-                // Scheitert nur die Vorschau, bleibt das Original die Quelle. Schlägt auch das fehl, meldet die Quelle den Fehler.
-                ViewerPreview(item = item, onError = {}, screen = screen)
+        // Das Bild rückt bei offenem Infobereich nach oben. Der Infobereich selbst bleibt unten stehen (ADR 0010).
+        Box(
+            modifier =
+                Modifier.fillMaxSize().graphicsLayer {
+                    translationY =
+                        -overlay.infoFraction * overlay.infoShiftPx()
+                },
+        ) {
+            if (failed.value) {
+                ViewerLoadError(modifier = Modifier.fillMaxSize())
+            } else {
+                if (!isSettled) {
+                    // Scheitert nur die Vorschau, bleibt das Original die Quelle. Schlägt auch das fehl, meldet die Quelle den Fehler.
+                    ViewerPreview(item = item, onError = {}, screen = screen)
+                }
+                ZoomableImage(
+                    image = imageSource(item, settledState, screen) { failed.value = true },
+                    contentDescription = contentDescription,
+                    gestures = EnabledZoomGestures.ZoomAndPan,
+                    modifier = Modifier.fillMaxSize(),
+                    state = state,
+                    // Immer voll deckend. Der Platzhalter zeichnet schon während der Animation, damit die Seite ihre Bereitschaft meldet.
+                    alpha = 1f,
+                    onClick = { _ -> if (overlay.infoOpen) overlay.closeInfo() else onTap() },
+                )
             }
-            ZoomableImage(
-                image = imageSource(item, settledState, screen) { failed.value = true },
-                contentDescription = contentDescription,
-                gestures = EnabledZoomGestures.ZoomAndPan,
-                modifier = Modifier.fillMaxSize(),
-                state = state,
-                // Immer voll deckend. Der Platzhalter zeichnet schon während der Animation, damit die Seite ihre Bereitschaft meldet.
-                alpha = 1f,
-                onClick = { _ -> onTap() },
-            )
         }
+        ViewerInfoLayer(item = item, overlay = overlay, exif = exif, zone = zone)
     }
 }
 

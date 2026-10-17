@@ -40,6 +40,8 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.MediaBrowserState
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGrid
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaStateBody
+import io.github.labushuya.emberlight.feature.gallery.viewer.ExifLookup
+import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerDetailsViewModel
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerPlaybackViewModel
 import java.time.ZoneId
 
@@ -54,6 +56,7 @@ internal fun AlbumScreen(
     onBack: () -> Unit,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
     playback: ViewerPlaybackViewModel = hiltViewModel(),
+    details: ViewerDetailsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val requestPermission =
@@ -68,6 +71,7 @@ internal fun AlbumScreen(
         onOpenSettings = rememberAppSettingsOpener(),
         onZoomLevelChange = viewModel::onZoomLevelChanged,
         playback = playback,
+        exif = details,
         zone = viewModel.zone,
     )
 }
@@ -88,6 +92,7 @@ internal fun AlbumContent(
     playback: ViewerPlaybackViewModel,
     modifier: Modifier = Modifier,
     zone: ZoneId = ZoneId.systemDefault(),
+    exif: ExifLookup = ExifLookup.None,
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
     val content = state.grid as? MediaGridState.Content
@@ -96,6 +101,7 @@ internal fun AlbumContent(
         gridState = gridState,
         playback = playback,
         zone = zone,
+        exif = exif,
         modifier = modifier.fillMaxSize(),
     ) { browser, gridModifier ->
         AlbumScaffold(

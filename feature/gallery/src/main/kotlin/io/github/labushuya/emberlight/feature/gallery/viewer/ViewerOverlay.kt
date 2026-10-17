@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.feature.gallery.viewer
 
 import android.content.Context
+import android.view.HapticFeedbackConstants
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -18,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,21 +31,26 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -92,6 +99,7 @@ internal fun ViewerOverlay(
     imageSource: ViewerImageSource? = null,
     initialChromeVisible: Boolean = true,
     zone: ZoneId = ZoneId.systemDefault(),
+    exif: ExifLookup = ExifLookup.None,
 ) {
     val id = overlay.shownId ?: return
     val context = LocalContext.current
@@ -154,7 +162,10 @@ internal fun ViewerOverlay(
 
     // Die System-Rückgeste steuert dieselbe Ansicht wie das Ziehen. Ein Flow, der normal endet, ist ein Vollenden und schließt
     // immer, unabhängig vom Fortschritt. Nur `CancellationException` ist ein Abbruch und federt zurück (ADR 0010).
+    // Beginn ohne Fortschritt tritt der Kurze Blick ein, mit Fortschritt folgt das Bild dem Finger (ADR 0010). Ist der
+    // Infobereich offen, schließt die Rückgeste zuerst ihn.
     PredictiveBackHandler { progress ->
+        latestOverlay.backStarted()
         var sawProgress = false
         try {
             progress.collect { event ->
@@ -175,8 +186,18 @@ internal fun ViewerOverlay(
     val title = titles.title(item.timestamp)
     val label = mediaLabel(item, dates)
     val durationText = item.takeIf { it.type == ViewerMediaType.VIDEO }?.durationMs?.let(::formatDuration)
-    // Während des Ziehens sind die Leisten aus. Nur die Seite und der Grund bewegen sich.
-    val chromeShown = chromeVisible && phase != OverlayPhase.DRAGGING && phase != OverlayPhase.CLOSING
+    // Während des Ziehens und des Kurzen Blicks sind die Leisten aus. Der offene Infobereich blendet sie nie aus.
+    val infoOpen = overlay.infoOpen
+    val chromeShown =
+        (chromeVisible || infoOpen) &&
+            phase != OverlayPhase.DRAGGING && phase != OverlayPhase.CLOSING && phase != OverlayPhase.PEEKING
+    // Die Haptik beim Kurzen Blick läuft über die Ansicht, ohne neue Berechtigung (ADR 0010).
+    val view = LocalView.current
+    SideEffect { overlay.onPeekStarted = { view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK) } }
+    val showInfoLabel = stringResource(R.string.feature_gallery_info_show)
+    val hideInfoLabel = stringResource(R.string.feature_gallery_info_hide)
+    val infoActionLabel = if (infoOpen) hideInfoLabel else showInfoLabel
+    val highlightColor = MaterialTheme.colorScheme.primary
     val attachedHere = playbackState.attachedId == itemId
     val video =
         rememberVideoPlaybackUi(
@@ -187,21 +208,37 @@ internal fun ViewerOverlay(
         )
     val settled = overlay.phase.pagerShown
 
-    ImmersiveSystemBars(immersive = !chromeVisible)
+    ImmersiveSystemBars(immersive = !chromeVisible && !infoOpen)
 
     Box(
         modifier =
             modifier
                 .fillMaxSize()
                 .testTag(VIEWER_OVERLAY_TAG)
-                .onGloballyPositioned { coords ->
+                .semantics {
+                    // Bedienungshilfen können den Infobereich öffnen und schließen, ohne zu wischen (ADR 0010).
+                    customActions =
+                        listOf(
+                            CustomAccessibilityAction(infoActionLabel) {
+                                overlay.toggleInfo()
+                                true
+                            },
+                        )
+                }.onGloballyPositioned { coords ->
                     overlay.originInRoot = coords.positionInRoot()
                     overlay.heightPx = coords.size.height.toFloat()
                     overlay.fit = fitInside(coords.size.width.toFloat(), coords.size.height.toFloat(), aspect)
                 }.drawBehind {
                     drawRect(
                         Color.Black,
-                        alpha = backdropAlpha(overlay.phase, overlay.progress, overlay.dragY, overlay.heightPx),
+                        alpha =
+                            backdropAlpha(
+                                overlay.phase,
+                                overlay.progress,
+                                overlay.dragY,
+                                overlay.heightPx,
+                                overlay.peek,
+                            ),
                     )
                 },
     ) {
@@ -226,8 +263,10 @@ internal fun ViewerOverlay(
                         imageSource = pageSource,
                         overlay = overlay,
                         settled = settled,
-                        onTap = { chromeVisible = !chromeVisible },
+                        onTap = { if (overlay.infoOpen) overlay.closeInfo() else chromeVisible = !chromeVisible },
                         screen = screens.bitmapOf(pageItem.uri),
+                        exif = exif,
+                        zone = zone,
                     )
                 }
 
@@ -242,14 +281,20 @@ internal fun ViewerOverlay(
                         overlay = overlay,
                         settled = settled,
                         onPlay = { playback.onPlayPressed(pageItem.id, pageItem.uri) },
-                        onTap = { chromeVisible = !chromeVisible },
+                        onTap = { if (overlay.infoOpen) overlay.closeInfo() else chromeVisible = !chromeVisible },
                         screen = screens.bitmapOf(pageItem.uri),
+                        exif = exif,
+                        zone = zone,
                     )
                 }
             }
         }
 
         HeroLayer(overlay = overlay, bitmap = heroBitmap, screens = screens, item = item)
+
+        // Die Kachel des Elements im Raster wird während des Blicks und der Rückgeste hervorgehoben. Die Hervorhebung liegt über
+        // dem Bild, sonst verdeckt das Bild sie (ADR 0010, Kurzer Blick). Nur diese Ebene zeichnet, kein Zellen-Recompose.
+        PeekHighlight(overlay = overlay, color = highlightColor)
 
         AnimatedVisibility(
             visible = chromeShown,
@@ -261,7 +306,8 @@ internal fun ViewerOverlay(
         }
 
         AnimatedVisibility(
-            visible = chromeShown && item.type == ViewerMediaType.VIDEO,
+            // Bei offenem Infobereich weicht die Steuerung, sonst läge sie über dem Bereich (ADR 0010, Infobereich).
+            visible = chromeShown && item.type == ViewerMediaType.VIDEO && !infoOpen,
             modifier = Modifier.align(Alignment.BottomCenter),
             enter = fadeIn(),
             exit = fadeOut(),
@@ -314,9 +360,54 @@ internal fun backdropAlpha(
     progress: Float,
     dragY: Float,
     heightPx: Float,
+    peek: Float = 0f,
 ): Float {
     if (phase == OverlayPhase.OPEN) return 1f
-    return progress.coerceIn(0f, 1f) * (1f - dismissProgress(dragY, heightPx))
+    val base = progress.coerceIn(0f, 1f) * (1f - dismissProgress(dragY, heightPx))
+    // Der Kurze Blick senkt die Deckkraft, damit das Raster darunter deutlich sichtbar ist (ADR 0010).
+    return base + (PEEK_BACKDROP_ALPHA - base) * peek.coerceIn(0f, 1f)
+}
+
+/** Deckkraft des schwarzen Grundes auf der Blick-Stufe: Das Raster darunter bleibt deutlich sichtbar. */
+internal const val PEEK_BACKDROP_ALPHA = 0.35f
+
+/** Strichstärke der Hervorhebung der Kachel und ihres Leuchtens. */
+private val HIGHLIGHT_BORDER = 2.dp
+private val HIGHLIGHT_GLOW = 6.dp
+private val HIGHLIGHT_CORNER = 6.dp
+private const val HIGHLIGHT_GLOW_ALPHA = 0.35f
+
+/**
+ * Hervorhebung der Kachel während des Kurzen Blicks und der Rückgeste (ADR 0010). Die Ebene liegt über dem Bild, weil das Bild
+ * auf der Blick-Stufe die Kachel sonst verdeckt. Gelesen werden nur Zustandswerte in der Zeichenphase. So zeichnet nur diese
+ * Ebene neu, keine Kachel des Rasters wird neu zusammengesetzt.
+ */
+@Composable
+private fun PeekHighlight(
+    overlay: ViewerOverlayState,
+    color: Color,
+) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val alpha = overlay.highlight
+        if (alpha <= 0f) return@Canvas
+        val tile = overlay.heroTile?.translate(-overlay.originInRoot) ?: return@Canvas
+        val glow = HIGHLIGHT_GLOW.toPx()
+        val corner = CornerRadius(HIGHLIGHT_CORNER.toPx())
+        drawRoundRect(
+            color = color.copy(alpha = alpha * HIGHLIGHT_GLOW_ALPHA),
+            topLeft = Offset(tile.left - glow, tile.top - glow),
+            size = Size(tile.width + 2 * glow, tile.height + 2 * glow),
+            cornerRadius = corner,
+            style = Stroke(width = glow),
+        )
+        drawRoundRect(
+            color = color.copy(alpha = alpha),
+            topLeft = tile.topLeft,
+            size = tile.size,
+            cornerRadius = corner,
+            style = Stroke(width = HIGHLIGHT_BORDER.toPx()),
+        )
+    }
 }
 
 /** Seitenverhältnis des Fit-Rechtecks: aus dem Vorschaubild, sonst aus dem MediaStore. `null`, wenn unbekannt. */
