@@ -70,7 +70,7 @@ internal class SolidImageSource(
 }
 
 /** Bildquelle für alle Seiten der Tests: jede Seite bekommt eine warme Farbe aus einer festen Palette. */
-internal val solidImageSources: ViewerImageSource = { item, _, _ ->
+internal val solidImageSources: ViewerImageSource = { item, _, _, _ ->
     val color = warmPalette[(item.id % warmPalette.size).toInt()]
     remember(item.id) { SolidImageSource(solidPainter(color)) }
 }

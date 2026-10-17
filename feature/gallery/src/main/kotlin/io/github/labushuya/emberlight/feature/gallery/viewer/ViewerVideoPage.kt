@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -44,6 +45,7 @@ internal fun ViewerVideoPage(
     onPlay: () -> Unit,
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
+    screen: ImageBitmap? = null,
 ) {
     val stillFailed = remember(item.id) { mutableStateOf(false) }
     val isSettled = settled
@@ -71,10 +73,13 @@ internal fun ViewerVideoPage(
 
             else -> {
                 // Das Standbild meldet die Bereitschaft: Erst wenn es gezeichnet ist, darf das Vorschaubild der Animation gehen.
+                // Bereit meldet das Standbild erst in der Vorschau in Bildschirmgröße. Das Raster-Vorschaubild allein hält den
+                // Hero nicht: Die Bildschirm-Vorschau soll ihn ablösen. Bleibt sie aus, beendet der Rückfall des Overlays den Hero.
                 ViewerPreview(
                     item = item,
                     onError = { stillFailed.value = true },
-                    onReady = { overlay.pageShown(item.id) },
+                    screen = screen,
+                    onReady = { if (screen != null) overlay.pageShown(item.id) },
                 )
                 if (!attached) {
                     FilledIconButton(onClick = onPlay, modifier = Modifier.size(PLAY_BUTTON_SIZE)) {

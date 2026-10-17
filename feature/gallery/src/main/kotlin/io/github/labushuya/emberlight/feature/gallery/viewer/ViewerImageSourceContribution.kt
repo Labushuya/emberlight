@@ -18,5 +18,10 @@ interface ViewerImageSourceContribution {
 val LocalViewerImageSources = compositionLocalOf<List<ViewerImageSourceContribution>> { emptyList() }
 
 /** Die Quelle für [item]: der erste Beitrag, der eine liefert, sonst die Standardquelle. */
-internal fun List<ViewerImageSourceContribution>.imageSourceFor(item: ViewerItem): ViewerImageSource =
-    firstNotNullOfOrNull { it.sourceFor(item) } ?: ContentUriImageSources
+internal fun List<ViewerImageSourceContribution>.imageSourceFor(item: ViewerItem): ViewerImageSource {
+    for (contribution in this) {
+        val source: ViewerImageSource? = contribution.sourceFor(item)
+        if (source != null) return source
+    }
+    return ContentUriImageSources
+}

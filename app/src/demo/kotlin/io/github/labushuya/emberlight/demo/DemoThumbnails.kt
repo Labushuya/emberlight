@@ -18,6 +18,8 @@ import coil3.request.Options
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.thumbnail.MediaThumbnail
 import io.github.labushuya.emberlight.extensions.CoilComponents
+import io.github.labushuya.emberlight.feature.gallery.viewer.SCREEN_PREVIEW_EDGE_PX
+import io.github.labushuya.emberlight.feature.gallery.viewer.ScreenPreviewExtra
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -41,17 +43,27 @@ internal class DemoThumbnailFactory : Fetcher.Factory<MediaThumbnail> {
         imageLoader: ImageLoader,
     ): Fetcher? {
         val index = SyntheticLibrary.indexOf(data.uri) ?: return null
-        return DemoThumbnailFetcher(SyntheticLibrary.itemAt(index))
+        // Die Vorschau in Bildschirmgröße (Vollbild-Viewer) bekommt das Motiv in dieser Größe, sonst das Thumbnail.
+        val longEdge =
+            if (options.extras.get(ScreenPreviewExtra) ==
+                true
+            ) {
+                SCREEN_PREVIEW_EDGE_PX
+            } else {
+                THUMBNAIL_LONG_EDGE
+            }
+        return DemoThumbnailFetcher(SyntheticLibrary.itemAt(index), longEdge)
     }
 }
 
 /** Vorschaubild eines synthetischen Eintrags in der Auflösung des Thumbnails. Die Pixel entstehen im Speicher. */
 internal class DemoThumbnailFetcher(
     private val item: MediaItem,
+    private val longEdge: Int = THUMBNAIL_LONG_EDGE,
 ) : Fetcher {
     override suspend fun fetch(): FetchResult? =
         ImageFetchResult(
-            image = renderDemoBitmap(item.id, item.timestamp, item.width, item.height, THUMBNAIL_LONG_EDGE).asImage(),
+            image = renderDemoBitmap(item.id, item.timestamp, item.width, item.height, longEdge).asImage(),
             isSampled = false,
             dataSource = DataSource.MEMORY,
         )

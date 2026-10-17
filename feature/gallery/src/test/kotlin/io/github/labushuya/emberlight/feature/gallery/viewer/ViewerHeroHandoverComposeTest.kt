@@ -149,4 +149,4 @@ private object SilentImageSource : ZoomableImageSource {
         ZoomableImageSource.ResolveResult(delegate = null)
 }
 
-private val silentImageSources: ViewerImageSource = { _, _, _ -> remember { SilentImageSource } }
+private val silentImageSources: ViewerImageSource = { _, _, _, _ -> remember { SilentImageSource } }

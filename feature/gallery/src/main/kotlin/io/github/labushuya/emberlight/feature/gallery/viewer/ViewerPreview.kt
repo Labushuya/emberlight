@@ -1,10 +1,14 @@
 package io.github.labushuya.emberlight.feature.gallery.viewer
 
 import android.content.Context
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -29,8 +33,21 @@ internal fun ViewerPreview(
     item: ViewerItem,
     onError: () -> Unit,
     modifier: Modifier = Modifier,
+    screen: ImageBitmap? = null,
     onReady: () -> Unit = {},
 ) {
+    // Liegt die Vorschau in Bildschirmgröße schon im Speicher, zeigt die Seite sie ohne Ladezeit und meldet sich sofort bereit.
+    if (screen != null) {
+        val currentOnReady by rememberUpdatedState(onReady)
+        LaunchedEffect(screen) { currentOnReady() }
+        Image(
+            bitmap = screen,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
     val context = LocalPlatformContext.current
     val request =
         remember(context, item.uri, item.type, item.previewKey) {
@@ -95,11 +112,6 @@ internal fun previewAspect(
     }
 }
 
-private fun ViewerItem.thumbnailType(): MediaType =
-    if (type ==
-        ViewerMediaType.VIDEO
-    ) {
-        MediaType.VIDEO
-    } else {
-        MediaType.IMAGE
-    }
+/** Medienart für die Anfrage an den Thumbnail-Fetcher. */
+internal fun ViewerItem.thumbnailType(): MediaType =
+    if (type == ViewerMediaType.VIDEO) MediaType.VIDEO else MediaType.IMAGE
