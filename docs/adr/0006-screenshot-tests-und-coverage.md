@@ -220,3 +220,28 @@ Zwei Läufe auf demselben Commit: Versuch 1 (Run 38955527735) und der Rerun dess
 
 - Configuration Cache mit Treffer: nicht erreicht. Der Schlüssel allein genügt nicht (zweite Bedingung oben). Es braucht eine Entscheidung des Betreibers: entweder Develocity-Zugang mit Caching-Trial einrichten, oder den Configuration Cache in der CI ohne Wiederverwendung lassen. Das Secret `GRADLE_ENCRYPTION_KEY` ist angelegt. Solange die zweite Bedingung fehlt, hat es keine Wirkung.
 - `release.yml`: Die neuen Schritte (Robolectric-Restore, Schlüssel) sind nicht über einen Lauf geprüft. Ein Probelauf per Dispatch wurde nicht ausgeführt, weil die Freigabe dafür fehlte.
+
+## Nachtrag: Aufnahme und Verifikation der Viewer-Goldens (17.10.2026)
+
+Die Lösung im Nachtrag Paket 5a hat einen Fehler. Die Viewer-Goldens waren nicht verifiziert. Dieser Abschnitt ersetzt dafür den Stand dort.
+
+### Befund
+
+- Roborazzi setzt `roborazzi.test.verify` und `roborazzi.test.record` nur auf `testDebugUnitTest` (Gradle-Plugin 1.76.0). `testViewerGoldens` bekam beides nicht. Ein absichtlich falsches Golden ließ den Test grün durchlaufen. Die Aussage „alle fünf Viewer-Goldens sind gegen die committeten Bilder grün“ oben war deshalb keine Verifikation.
+- `recordRoborazziDebug` nahm die Viewer-Goldens nicht auf. Aufgenommen wurde nur mit einer temporären Systemproperty.
+- Mit aktiver Verifikation schlug der gemeinsame Prozess fehl. Die Aufnahmen einzelner Tests waren leer (`#FAFAFA`). Welche Tests betroffen waren, wechselte zwischen Läufen. Je Klasse in einem eigenen Prozess liefen alle Tests grün. Die Ursache im Robolectric-Zustand ist weiterhin nicht geklärt, die Isolation je Klasse ist die Behandlung.
+- Die Golden-Dateien waren keine Eingaben der Testaufgaben. Ein Test blieb nach einer Golden-Änderung `UP-TO-DATE`, und der Vergleich lief nicht.
+
+### Lösung
+
+- `testViewerGoldens` (Verifikation, von `check` und `verifyRoborazziDebug` abhängig): setzt `roborazzi.test.verify=true` und `roborazzi.test.record=false` explizit.
+- `recordViewerGoldens` (Aufnahme, von `recordRoborazziDebug` abhängig): setzt `roborazzi.test.record=true` und `roborazzi.test.verify=false`.
+- Beide Aufgaben laufen mit `forkEvery = 1`, je Viewer-Klasse ein Prozess. Der Lauf dauert 44 bis 48 s statt 7 bis 8 s. Der Mehraufwand ist die Stabilität wert.
+- Das Golden-Verzeichnis ist in `configureScreenshotTests()` (`AndroidCommon.kt`) als optionale, relative Eingabe aller `Test`-Aufgaben eingetragen.
+- Aufnahme: `./gradlew recordRoborazziDebug` (Galerie-Goldens und Viewer-Goldens). Prüfung: `./gradlew check` bzw. `./gradlew verifyRoborazziDebug`. Ein normaler Lauf nimmt nie auf. Die Aufnahme setzt nur der Aufnahme-Task.
+
+### Belege
+
+- Golden entfernt, `:feature:gallery:recordRoborazziDebug`: Datei wieder da, byte-identisch zu HEAD. Alle übrigen Goldens der Galerie ebenfalls unverändert.
+- Golden gegen ein anderes PNG getauscht, `testViewerGoldens`: rot (`peekStageWithHighlightedTile`). Nach Rücktausch grün.
+- Alle neun Viewer-Tests mit den committeten Goldens: grün, je Klasse ein Prozess, zwei Läufe.

@@ -42,7 +42,7 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
 ## Befehle
 
 - `./gradlew check`: Spotless/ktlint, Lint, Unit-Tests, Screenshot-Verifikation, Coverage-Untergrenze (`koverVerify`), Tests der Convention-Plugins und `checkNoPlayServices`
-- `./gradlew recordRoborazziDebug`: Screenshot-Goldens bewusst neu aufnehmen (Ablage `src/test/screenshots`, Details in [ADR 0006](docs/adr/0006-screenshot-tests-und-coverage.md)). `./gradlew verifyRoborazziDebug`: nur prüfen.
+- `./gradlew recordRoborazziDebug`: Screenshot-Goldens bewusst neu aufnehmen, die Viewer-Goldens eingeschlossen (Ablage `src/test/screenshots`, Details in [ADR 0006](docs/adr/0006-screenshot-tests-und-coverage.md)). `./gradlew verifyRoborazziDebug`: nur prüfen, Viewer-Goldens eingeschlossen. `check` verifiziert immer und nimmt nie auf.
 - `./gradlew koverHtmlReport` bzw. `./gradlew koverXmlReport`: Coverage-Report (HTML unter `build/reports/kover/html`)
 - `./gradlew assembleDebug`: Debug-APK
 - `./gradlew assembleRelease -Pemberlight.version=X.Y.Z`: Release-APK. Ohne Property gilt `0.0.0-dev` mit versionCode 1.
