@@ -1,8 +1,12 @@
 package io.github.labushuya.emberlight.demo
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import coil3.BitmapImage
+import coil3.fetch.ImageFetchResult
+import io.github.labushuya.emberlight.feature.gallery.viewer.SCREEN_PREVIEW_EDGE_PX
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerItem
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerMediaType
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -48,6 +52,15 @@ class DemoViewerImagesTest {
         val full = renderDemoBitmap(item.id, item.timestamp, item.width, item.height, FULL_LONG_EDGE)
 
         assertEquals(thumbnail.width.toDouble() / thumbnail.height, full.width.toDouble() / full.height, 0.01)
+    }
+
+    @Test
+    fun theScreenPreviewFetcherRendersTheEntryAtScreenSize() {
+        val item = SyntheticLibrary.itemAt(5)
+        val result = runBlocking { DemoThumbnailFetcher(item, SCREEN_PREVIEW_EDGE_PX).fetch() } as ImageFetchResult
+        val bitmap = (result.image as BitmapImage).bitmap
+
+        assertEquals(SCREEN_PREVIEW_EDGE_PX, maxOf(bitmap.width, bitmap.height))
     }
 
     private fun viewerItem(uri: String) =
