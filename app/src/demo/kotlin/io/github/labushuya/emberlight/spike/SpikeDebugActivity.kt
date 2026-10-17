@@ -8,7 +8,7 @@ import io.github.labushuya.emberlight.share.server.spike.SpikeServerService
 import java.io.File
 
 /**
- * Nur Debug-Build (ADR 0012, Spike). Auswertung der adb-Extras, danach sofort `finish()`:
+ * Nur Debug- und Benchmark-Build, Demo-Source-Set (ADR 0012, Spike). Auswertung der adb-Extras, danach sofort `finish()`:
  *
  * - `--ez emberlight.spike.server true --es emberlight.spike.token <Token> --ei emberlight.spike.port 0`: starten
  * - `--ez emberlight.spike.stop true`: stoppen

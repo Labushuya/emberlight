@@ -3,5 +3,11 @@
     <!-- Nur der Mess-Build ist profilierbar (ADR 0011). Debug und Release bleiben unberührt. -->
     <application>
         <profileable android:shell="true" />
+        <!-- Spike-Einstieg (ADR 0012), Demo-Source-Set wie im Debug-Build. -->
+        <activity
+            android:name=".spike.SpikeDebugActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay" />
     </application>
 </manifest>

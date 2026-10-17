@@ -40,8 +40,9 @@ dependencies {
     implementation(project(":feature:gallery"))
     implementation(project(":feature:space"))
     implementation(project(":core:media"))
-    // Spike-Server (ADR 0012) nur im Debug-Build. Der Release-Build enthält ihn nicht.
+    // Spike-Server (ADR 0012) nur in Debug und Benchmark (Mess-Build mit R8). Der Release-Build enthält ihn nicht.
     debugImplementation(project(":share:server"))
+    add("benchmarkImplementation", project(":share:server"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
