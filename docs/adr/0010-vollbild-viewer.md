@@ -386,3 +386,41 @@ Offen aus dieser Prüfung:
 - Die Frame-Ausreißer beim Öffnen (zwei Frames je Öffnen, 36 bis 60 ms) traten im Debug-Build auf. Im Benchmark-Build lag in fünf Zyklen nur ein Frame über 33 ms (35,4 ms, Abfrage nicht vollständig). Die Ursache ist nicht untersucht.
 - Vollendetes Predictive Back ist nicht belegt (siehe D).
 - Zoomstufen 2 und 6 Spalten sowie das Innendisplay bleiben wie in Korrektur 2 offen.
+
+## Zurück-Taste und Schärfe (Korrektur 4)
+
+Status: umgesetzt im Branch `fix/m2-viewer-zurueck-und-schaerfe`, noch nicht gemergt. Die Geräteprüfung (Honor Magic V2, Android 16, Demo-Modus) ist ausstehend: Während der Bereitschaftsfrist von 20 Minuten war kein Gerät angeschlossen. Der Abschnitt „Geräteprüfung Korrektur 4“ wird nach der Prüfung ergänzt.
+
+### Befunde
+
+- Zurück-Taste gedrückt halten und loslassen: Das Medium wird kleiner gezogen und springt zurück, statt zu schließen. Wischen nach unten bleibt unverändert.
+- Unschärfe beim Öffnen: Das Hero-Bild war das Raster-Vorschaubild, auf Bildschirmgröße skaliert. Es erschien verpixelt und wurde nach der Animation durch das Vollbild ersetzt.
+
+### Rückgeste: Semantik und Befund
+
+- Die Zuordnung in `ViewerOverlay` folgt der Android-Semantik. Endet der Flow normal (`onBackCompleted` in activity-compose 1.13.0, also `onBackInvoked`), schließt der Viewer, unabhängig vom Fortschritt. Ein Abbruch (`onBackCancelled`) wirft `CancellationException` und federt zurück. Eine Fortschritts-Schwelle gibt es in der Zuordnung nicht.
+- Die 3-Tasten-Navigation (Android 15 und neuer) zeigt bei langem Drücken die Vorschau. Die Geräteprüfung belegt, welche Ereignisfolge beim Loslassen tatsächlich eintrifft. Die Marken „Rückgeste Start“, „Rückgeste ohne Fortschritt“, „Rückgeste vollendet“ und „Rückgeste abgebrochen“ (Tag `EmberlightViewer`) halten sie fest.
+- Die Tests `ViewerBackGestureComposeTest` prüfen die Zuordnung über den echten `OnBackPressedDispatcher`: (a) started, Fortschritt 0, invoked: schließt. (a2) started ohne Fortschritt, invoked: schließt. (b) started, Fortschritt 0,6, invoked: schließt. (c) started, Fortschritt 0,4, cancelled: federt zurück. (d) einfacher Zurück-Druck ohne started: schließt. Alle fünf waren schon vor der Änderung grün. Ein Fehler in der Zuordnung ließ sich damit nicht reproduzieren.
+- Folgerung: Ein Abbruch beim Loslassen kann nur vom Framework kommen. Stimmt die Ereignisfolge am Gerät mit „vollendet“ überein, liegt der Fehler außerhalb dieser Zuordnung. Diese Frage bleibt offen, bis die Marken am Gerät vorliegen (siehe „Geräteprüfung Korrektur 4“).
+
+### Schärfe: Vorschau in Bildschirmgröße
+
+- Methode: Coil-Anfrage auf das Original (`MediaThumbnail` über die Content-URI) mit `size` 1440 Pixel in der langen Kante. Ab API 29 lädt der eigene Fetcher über `ContentResolver.loadThumbnail` in dieser Größe. Das System cached dabei selbst. Vor API 29 dekodiert Coil das Bild gesampelt auf dieselbe Größe.
+- Zeitpunkt: Die Anforderung startet beim Öffnen, parallel zur Hero-Animation. Die Nachbarn (±1) laden erst, wenn das gezeigte Element da ist. Ein Seitenwechsel bricht Ladevorgänge ab, die nicht mehr gebraucht werden.
+- Hero: Das Raster-Vorschaubild wird in 100 ms zur Bildschirm-Vorschau überblendet, auch mitten in der Animation. Die Seite nutzt sie als Platzhalter, vor dem Telephoto-Basisbild und den Kacheln. Videoseiten melden ihre Bereitschaft erst über die Bildschirm-Vorschau, der Rückfall des Overlays greift, wenn sie fehlt.
+- Auflösung 1440: Ein Querformat-Bild wird so auf dem Außendisplay (1060 × 2376) etwa auf die volle Breite gezeigt. Ein Hochformat-Bild ist auf 2376 Pixel Höhe hochskaliert, auf 1440 Pixel. Die Abweichung zur Displayschärfe ist damit gegenüber dem Vollbild sichtbar, aber nur bis zum Ende der Animation. Danach übernimmt das Telephoto-Basisbild.
+- Demo: Die Demo-Quelle rendert ihr Motiv für die Vorschau in derselben Größe (Extra `ScreenPreviewExtra`). Der Platzhalter der Demo-Seite ist die Vorschau in Bildschirmgröße, das Vollbild (1280 Pixel) folgt danach.
+
+### Cache-Abwägung
+
+- Disk-Cache aus (ADR 0008). Die Anfrage setzt `diskCachePolicy(DISABLED)` ausdrücklich. Eine Kopie privater Medien im App-Cache entsteht nicht.
+- Eigener Schlüssel `media-screen:<uri>`, getrennt vom Raster-Schlüssel. Der Store hält das gezeigte Element und seine Nachbarn (höchstens drei Bitmaps) und entfernt alle anderen Einträge aus dem Speicher-Cache. Die Raster-Thumbnails werden so nicht verdrängt. `release()` beim Schließen gibt alles frei.
+- Speichergröße: Eine Bildschirm-Vorschau im Querformat (1440 × 1080 × 4 Byte) ist etwa 6,2 MB groß, im Hochformat (1080 × 1440 × 4 Byte) gleich viel. Drei Bitmaps belegen damit höchstens etwa 19 MB, bevor der Store sie beim Seitenwechsel abgibt.
+
+### Messwerte
+
+Ausstehend. Gemessen werden die Ladezeiten der Vorschau (Marken „angefordert“ bis „bereit“), der Anteil „vor Ende der Animation“, die Frames (`dumpsys gfxinfo`) und der Speicher (`dumpsys meminfo` vor und nach 20-mal Öffnen) im Benchmark-Build. Ein Wert ohne Gerät ist nicht bekannt, deshalb steht hier keine Zahl.
+
+### Geräteprüfung Korrektur 4
+
+Ausstehend. Kein Gerät während der Bereitschaftsfrist. Offen sind: Szenarien A bis D, die Ereignisfolge der Rückgeste am Gerät (Marken „Rückgeste ...“) und die Frage, ob die 3-Tasten-Navigation beim Loslassen „vollendet“ meldet.
