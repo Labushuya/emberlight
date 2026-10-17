@@ -44,7 +44,14 @@ internal fun ExifInterface.toPhotoExif(): PhotoExif =
     )
 
 /** Bit 0 des Blitz-Feldes meldet, ob der Blitz ausgelöst hat. Fehlt das Feld, bleibt die Angabe leer. */
-internal fun flashFiredOrNull(flash: Int): Boolean? = if (flash < 0) null else (flash and FLASH_FIRED_BIT) == FLASH_FIRED_BIT
+internal fun flashFiredOrNull(flash: Int): Boolean? =
+    if (flash <
+        0
+    ) {
+        null
+    } else {
+        (flash and FLASH_FIRED_BIT) == FLASH_FIRED_BIT
+    }
 
 private fun String?.cleanText(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 

@@ -1,7 +1,7 @@
 package io.github.labushuya.emberlight.core.media.exif
 
 import android.content.Context
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.exifinterface.media.ExifInterface
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.labushuya.emberlight.core.media.di.IoDispatcher
@@ -34,7 +34,8 @@ internal class ContentResolverPhotoExifSource
     ) : PhotoExifSource {
         private val cache =
             object : LinkedHashMap<String, CachedExif>(INITIAL_CAPACITY, LOAD_FACTOR, true) {
-                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedExif>?): Boolean = size > MAX_CACHED
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedExif>?): Boolean =
+                    size > MAX_CACHED
             }
 
         override suspend fun read(uri: String): PhotoExif? {
@@ -47,7 +48,7 @@ internal class ContentResolverPhotoExifSource
         private fun readOrNull(uri: String): PhotoExif? =
             try {
                 context.contentResolver
-                    .openInputStream(Uri.parse(uri))
+                    .openInputStream(uri.toUri())
                     ?.use { ExifInterface(it).toPhotoExif() }
                     ?.takeUnless { it.isEmpty }
             } catch (_: IOException) {

@@ -55,5 +55,7 @@ class PhotoExifMappingTest {
     private fun readSample(): PhotoExif = ExifInterface(ByteArrayInputStream(sampleBytes())).toPhotoExif()
 
     private fun sampleBytes(): ByteArray =
-        checkNotNull(javaClass.getResourceAsStream("/exif/sample-exif.jpg")) { "Test-JPEG fehlt" }.use { it.readBytes() }
+        checkNotNull(
+            javaClass.getResourceAsStream("/exif/sample-exif.jpg"),
+        ) { "Test-JPEG fehlt" }.use { it.readBytes() }
 }
