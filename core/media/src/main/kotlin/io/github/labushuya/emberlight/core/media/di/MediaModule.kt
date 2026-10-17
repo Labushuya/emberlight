@@ -6,6 +6,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import io.github.labushuya.emberlight.core.media.MediaRepository
+import io.github.labushuya.emberlight.core.media.exif.ContentResolverPhotoExifSource
+import io.github.labushuya.emberlight.core.media.exif.PhotoExifSource
 import io.github.labushuya.emberlight.core.media.log.LogcatMediaLogger
 import io.github.labushuya.emberlight.core.media.log.MediaLogger
 import io.github.labushuya.emberlight.core.media.permission.ContextMediaPermissionChecker
@@ -32,6 +34,10 @@ internal abstract class MediaModule {
 
     @Binds
     abstract fun bindMediaLogger(impl: LogcatMediaLogger): MediaLogger
+
+    /** EXIF-Lesen für den Infobereich (ADR 0010). Liest nur über den ContentResolver, nie Ortsdaten. */
+    @Binds
+    abstract fun bindPhotoExifSource(impl: ContentResolverPhotoExifSource): PhotoExifSource
 }
 
 /** Stellt den IO-Dispatcher bereit. Tests ersetzen ihn über den Qualifier, siehe [IoDispatcher]. */
