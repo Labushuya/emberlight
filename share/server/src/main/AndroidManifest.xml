@@ -10,6 +10,8 @@
     <!-- connectedDevice verlangt mindestens eine dieser Berechtigungen (Doku). Gewählt: CHANGE_NETWORK_STATE (normal). -->
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Spike: CPU-Wakelock und WLAN-Lock, solange der Server läuft (WifiLock verlangt WAKE_LOCK). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application>
         <service

@@ -157,15 +157,19 @@ private suspend fun writeLimited(
 private class TooLargeUpload : IOException("Upload überschreitet das Limit.")
 
 /**
- * Body von `/health` im Spike: Prozess-ID, Startzeit des Servers und Laufzeit. Damit lässt sich ohne adb prüfen, ob
- * Prozess oder Server seit einer früheren Abfrage neu gestartet wurden. Eine negative Laufzeit (Uhrensprung) wird auf 0
- * gesetzt.
+ * Body von `/health` im Spike: Prozess-ID, Startzeit des Servers, Laufzeit und der Zustand der Sperren. Damit lässt sich
+ * ohne adb prüfen, ob Prozess oder Server seit einer früheren Abfrage neu gestartet wurden und ob CPU und WLAN wach
+ * gehalten werden. Eine negative Laufzeit (Uhrensprung) wird auf 0 gesetzt.
  */
 internal fun spikeHealthJson(
     pid: Int,
     startedAtEpochMs: Long,
     nowEpochMs: Long,
+    wakeLockHeld: Boolean = false,
+    wifiLockHeld: Boolean = false,
+    wifiLockMode: String = SpikeLocks.WIFI_MODE_NAME,
 ): String {
     val uptimeMs = (nowEpochMs - startedAtEpochMs).coerceAtLeast(0L)
-    return """{"status":"ok","pid":$pid,"startedAtEpochMs":$startedAtEpochMs,"uptimeMs":$uptimeMs}"""
+    return "{\"status\":\"ok\",\"pid\":$pid,\"startedAtEpochMs\":$startedAtEpochMs,\"uptimeMs\":$uptimeMs," +
+        "\"wakeLockHeld\":$wakeLockHeld,\"wifiLockHeld\":$wifiLockHeld,\"wifiLockMode\":\"$wifiLockMode\"}"
 }

@@ -1,5 +1,6 @@
 package io.github.labushuya.emberlight.share.server.spike
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.PendingIntent
@@ -8,8 +9,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.Process
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -38,16 +41,30 @@ import java.io.File
  */
 class SpikeServerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /** Zeitpunkt des letzten Serverstarts, für `/health`. Wird vor dem Bind gesetzt, nicht beim Stopp. */
     @Volatile
     private var startedAtEpochMs: Long = 0L
+
+    /** CPU- und WLAN-Sperre, solange der Server läuft. Entsteht beim ersten erfolgreichen Start. */
+    @Volatile
+    private var locks: SpikeLocks? = null
     private val server: LocalServer by lazy {
         KtorLocalServer(
             routes =
                 spikeRoutes(File(filesDir, SPIKE_DIR)) { bytes ->
                     Log.i(TAG, "Upload-Fortschritt: $bytes Byte")
                 },
-            health = { spikeHealthJson(Process.myPid(), startedAtEpochMs, System.currentTimeMillis()) },
+            health = {
+                val held = locks
+                spikeHealthJson(
+                    pid = Process.myPid(),
+                    startedAtEpochMs = startedAtEpochMs,
+                    nowEpochMs = System.currentTimeMillis(),
+                    wakeLockHeld = held?.cpuHeld ?: false,
+                    wifiLockHeld = held?.wifiHeld ?: false,
+                )
+            },
         )
     }
 
@@ -82,8 +99,11 @@ class SpikeServerService : Service() {
 
         scope.launch {
             try {
+                // Alte Spike-Dateien aus früheren Läufen entfernen. Der Server läuft hier nicht, also greift niemand zu.
+                File(filesDir, SPIKE_DIR).deleteRecursively()
                 startedAtEpochMs = System.currentTimeMillis()
                 val bound = server.start(ServerConfig(port = port, token = token))
+                acquireLocks()
                 Log.i(TAG, "Server läuft auf Port $bound")
                 updateNotification(bound)
             } catch (failure: Exception) {
@@ -95,6 +115,8 @@ class SpikeServerService : Service() {
     }
 
     override fun onDestroy() {
+        // Sperren zuerst lösen, damit sie auch bei abgebrochenem Stopp nicht hängen bleiben.
+        locks?.release()
         // Server zuerst sauber stoppen, dann den Scope beenden.
         scope.launch { server.stop() }.invokeOnCompletion { scope.cancel() }
         super.onDestroy()
@@ -102,10 +124,33 @@ class SpikeServerService : Service() {
 
     private fun stopServer() {
         scope.launch {
+            locks?.release()
             server.stop()
             ServiceCompat.stopForeground(this@SpikeServerService, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
+    }
+
+    /** Hält CPU-Wakelock und WLAN-Lock, bis der Server gestoppt wird. Ohne Timeout (Spike, Bildschirm-aus-Test). */
+    private fun acquireLocks() {
+        val current = locks ?: createLocks().also { locks = it }
+        current.acquire()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun createLocks(): SpikeLocks {
+        val power = getSystemService(PowerManager::class.java)
+        val wifi = applicationContext.getSystemService(WifiManager::class.java)
+        val wake = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply { setReferenceCounted(false) }
+        // WIFI_MODE_FULL_HIGH_PERF ist ab API 34 als veraltet markiert, ist aber der einzige Modus ohne die Bedingung
+        // "Bildschirm an" (LOW_LATENCY greift nur bei eingeschaltetem Bildschirm im Vordergrund). Spike-Entscheidung, siehe Bericht.
+        val wifiLock =
+            wifi
+                .createWifiLock(
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                    WIFI_LOCK_TAG,
+                ).apply { setReferenceCounted(false) }
+        return SpikeLocks(wake.asSpikeLock(), wifiLock.asSpikeLock())
     }
 
     private fun ensureForeground() {
@@ -186,6 +231,8 @@ class SpikeServerService : Service() {
         const val EXTRA_PORT = "emberlight.spike.port"
 
         private const val TAG = "EmberlightSpike"
+        private const val WAKE_LOCK_TAG = "emberlight:space-server"
+        private const val WIFI_LOCK_TAG = "emberlight:space-server-wifi"
         private const val CHANNEL_ID = "spike_server"
         private const val NOTIFICATION_ID = 4711
         private const val SPIKE_DIR = "spike"
@@ -204,3 +251,26 @@ class SpikeServerService : Service() {
                 .putExtra(EXTRA_PORT, port)
     }
 }
+
+/**
+ * Ohne Timeout mit Absicht: der Spike hält die Sperre bis zum Stopp des Servers (Bildschirm-aus-Test). Der Dienst im
+ * Vordergrund begrenzt die Laufzeit.
+ */
+@SuppressLint("WakelockTimeout")
+private fun PowerManager.WakeLock.asSpikeLock(): SpikeLock =
+    object : SpikeLock {
+        override val isHeld: Boolean get() = this@asSpikeLock.isHeld
+
+        override fun acquire() = this@asSpikeLock.acquire()
+
+        override fun release() = this@asSpikeLock.release()
+    }
+
+private fun WifiManager.WifiLock.asSpikeLock(): SpikeLock =
+    object : SpikeLock {
+        override val isHeld: Boolean get() = this@asSpikeLock.isHeld
+
+        override fun acquire() = this@asSpikeLock.acquire()
+
+        override fun release() = this@asSpikeLock.release()
+    }
