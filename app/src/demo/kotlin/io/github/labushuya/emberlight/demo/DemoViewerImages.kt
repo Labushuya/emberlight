@@ -36,26 +36,29 @@ internal val DemoViewerImageSource: ViewerImageSource = { item, _, _ ->
     remember(item.id) { DemoZoomableImageSource(item) }
 }
 
+/**
+ * Die Seite zeigt zuerst das Vorschaubild in Thumbnail-Größe, dasselbe Motiv wie die Kachel und die Hero-Animation. Erst wenn
+ * das Vollbild gerendert ist, ersetzt es das Vorschaubild. So bleibt nie eine leere Seite stehen (ADR 0010, Feinschliff).
+ */
 private class DemoZoomableImageSource(
     private val item: ViewerItem,
 ) : ZoomableImageSource {
     @Composable
     override fun resolve(canvasSize: Flow<Size>): ZoomableImageSource.ResolveResult {
+        val thumbnail: ImageBitmap? by
+            produceState<ImageBitmap?>(initialValue = null, key1 = item.id) {
+                value = withContext(Dispatchers.Default) { render(THUMBNAIL_LONG_EDGE) }
+            }
         val bitmap: ImageBitmap? by
             produceState<ImageBitmap?>(initialValue = null, key1 = item.id) {
-                value =
-                    withContext(Dispatchers.Default) {
-                        renderDemoBitmap(
-                            item.id,
-                            item.timestamp,
-                            item.width,
-                            item.height,
-                            FULL_LONG_EDGE,
-                        ).asImageBitmap()
-                    }
+                value = withContext(Dispatchers.Default) { render(FULL_LONG_EDGE) }
             }
         return ZoomableImageSource.ResolveResult(
             delegate = bitmap?.let { ZoomableImageSource.PainterDelegate(BitmapPainter(it)) },
+            placeholder = thumbnail?.let { BitmapPainter(it) },
         )
     }
+
+    private fun render(longEdge: Int): ImageBitmap =
+        renderDemoBitmap(item.id, item.timestamp, item.width, item.height, longEdge).asImageBitmap()
 }

@@ -306,3 +306,51 @@ Aus der Geräteprüfung (offen):
 - Immersiver Modus und Systemleisten: https://developer.android.com/training/system-ui/immersive
 - Maven-Artefakte und POMs von Telephoto 0.19.0 (Abhängigkeiten geprüft) und Media3 1.11.1 (Google Maven).
 - ADR 0006 (Screenshot-Tests), ADR 0007 (Medienzugriff), ADR 0008 (Vorschaubilder ohne Disk-Cache), ADR 0009 (Galerie-Reiter, Zoomstufe).
+
+## Feinschliff nach dem Gerätetest (Korrektur 3)
+
+Status: umgesetzt im Branch `fix/m2-viewer-feinschliff`. Geräteprüfung und Messwerte siehe unten (Abschnitt „Geräteprüfung Feinschliff“).
+
+### Befunde
+
+- Blip: Beim Öffnen wurde das Vorschaubild mit dem Ende der Animation entfernt, während die Seite ihr Bild noch nicht zeigte. Im Demo-Vollbild war die Seite bis zum Rendern leer. Beides ergab einen Frame ohne Inhalt, danach erschien das Bild erneut.
+- Fehlende Kachel beim Rückweg: `boundsInRoot()` liefert bei einer teilweise abgeschnittenen Kachel nur den sichtbaren Teil. Das Animationsziel wurde dadurch zum Fragment, also falsch oder zu klein. Das Raster prüfte die Sichtbarkeit zudem vor dem Layout und ohne die Leiste.
+- Ruckeln beim Schließen aus dem Zoom: `resetZoom(snap())` setzte das Bild hart zurück, bevor die Animation begann.
+
+### Übergabe Hero zur Seite
+
+- Das Vorschaubild bleibt gezeichnet, bis die Seite nachweislich ihr Bild zeigt. Quelle der Meldung: Telephoto `isImageDisplayed` bzw. `isPlaceholderDisplayed` (Standbild, Platzhalter), beim Video das geladene Standbild. Erst danach blendet es in 100 ms aus.
+- Rückfall: Meldet die Seite kein Bild, verschwindet das Vorschaubild nach 1 s. Ein Fehler der Seite bleibt damit nicht hängen.
+- Die Seite liegt während der Animation unter dem Vorschaubild, mit gleicher Geometrie und voller Deckkraft. So kann Telephoto ihren Platzhalter zeichnen und die Bereitschaft melden.
+- Das Fit-Rechteck ist für Hero und Seite dieselbe Berechnung (`fitRect`), auf ganze Pixel gerundet (`snapRect`). Telephoto legt die Seite mit Fließkomma aus. Die Abweichung ist damit höchstens ein halber Pixel.
+- Demo-Vollbild: Die Seite zeigt zuerst das Vorschaubild in Thumbnail-Größe (`renderDemoBitmap` mit `THUMBNAIL_LONG_EDGE`, identisch zur Kachel), dann das Vollbild.
+
+### Rückweg: Kachel sichtbar machen, dann messen
+
+- Vor dem Öffnen und vor dem Schließen sowie beim Seitenwechsel prüft `revealTile`, ob die Kachel vollständig unter der Kopfzeile und über der Leiste liegt. Wenn nicht, fordert das Raster ohne Animation an (`requestScrollToItem`) und wartet höchstens zwei Frames auf das Layout.
+- Die Grenzen gelten erst als aktuell, wenn die Kachel seit der Anforderung neu gelegt wurde (Zählerstand je Eintrag in `CellBounds`).
+- Kachelgrenzen werden ungeclippt gemessen (Position und Größe), nicht mit `boundsInRoot`.
+- Sichtfenster: Das Raster meldet seine Grenzen in Root-Koordinaten. Die Oberkante der Leiste merkt sich `NavigationChrome.bottomBarTopPx`, solange die Leiste sichtbar war, weil der Viewer sie ausblendet.
+- Ist die Kachel danach nicht sichtbar, blendet der Übergang zur Mitte aus (wie bisher ohne Kachel).
+
+### Schließen aus dem Zoom
+
+- Kein `resetZoom` mehr vor dem Schließen. Der Übergang startet am Inhalts-Rechteck, das Telephoto auf dem Bildschirm zeigt (`transformedContentBounds`, in Overlay-Koordinaten). Das Bild schrumpft aus dem, was man sieht, in die Kachel. Der Zustand des Zooms bleibt unberührt.
+- Dasselbe gilt für die Rückgeste: Der Fortschritt verkleinert aus dem gezoomten Zustand. Bricht der Nutzer ab, federt das Bild in den gezoomten Zustand zurück.
+- Ausnahme: Liefert Telephoto kein gültiges Rechteck, fällt der Zoom wie bisher zurück. Das ist ein Notfall ohne Startpunkt.
+- Einschränkung: Das Startbild ist das Vorschaubild (Speicher-Cache). Im starken Zoom ist es unschärfer als die gezoomte Seite. Die Schärfe stellt sich nach dem Ende des Ausblendens wieder her. Ein Startbild aus dem Subsampling wäre aufwendiger und ist nicht umgesetzt.
+
+### Bewusstes Verhalten: Wegwischen im Zoom schwenkt
+
+Im Zoom gehört die Geste dem Bild. Ein Wisch nach unten verschiebt das Bild, er schließt den Viewer nicht. Das ist gewollt: Im Zoom wird geschwenkt. Wegwischen schließt nur bei ungezoomtem Bild. Die Logik ist unverändert (`canStartDismiss`).
+
+### Debug-Marken
+
+- Nur im Debug-Build (`BuildConfig.DEBUG`, im Galerie-Modul aktiviert), Tag `EmberlightViewer`. Im Release und Benchmark entfällt der Aufruf.
+- Marken: `Hero-Animation Start`, `Hero-Animation Ende`, `Seite Bild angezeigt`, `Hero entfernt`, `Hero-Rückfall ohne Bild`, `Seite volle Qualität`, `Ziel-Grenzen aktuell`, `Ziel ohne Kachel`. Jede Zeile trägt die Medien-ID und den Zeitpunkt (ms, monoton).
+- Die Reihenfolge der Marken prüfen die Zustandstests.
+
+### Tests
+
+- Unit: `HeroHandoverGeometryTest` (gleiche Fit-Berechnung, Rundung, Start aus dem Zoom bei 1x, 2x, 4x und am Rand, monotoner Übergang), `CellBoundsTest` (Zählerstand, Entfernen, Sichtfenster, Sichtbarkeit unter Kopfzeile und über der Leiste), `ViewerOverlayStateTest` (Bereitschaft, Rückfall, Auswahl verwirft das Vorschaubild, Schließen sichert die Kachel vorher).
+- Geräteprüfung und Messung: siehe unten.

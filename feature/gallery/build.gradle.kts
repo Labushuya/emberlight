@@ -2,6 +2,13 @@ plugins {
     id("emberlight.android.feature")
 }
 
+// BuildConfig.DEBUG steuert die Debug-Marken des Viewers (ViewerTrace). Im Release entfällt der Aufruf.
+android {
+    buildFeatures {
+        buildConfig = true
+    }
+}
+
 dependencies {
     // Vorschaubilder (ADR 0008). Coil-Compose für AsyncImage, keine Netzwerk-Module.
     implementation(libs.coil.core)

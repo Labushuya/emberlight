@@ -70,7 +70,12 @@ internal fun ViewerVideoPage(
             }
 
             else -> {
-                ViewerPreview(item = item, onError = { stillFailed.value = true })
+                // Das Standbild meldet die Bereitschaft: Erst wenn es gezeichnet ist, darf das Vorschaubild der Animation gehen.
+                ViewerPreview(
+                    item = item,
+                    onError = { stillFailed.value = true },
+                    onReady = { overlay.pageShown(item.id) },
+                )
                 if (!attached) {
                     FilledIconButton(onClick = onPlay, modifier = Modifier.size(PLAY_BUTTON_SIZE)) {
                         Icon(

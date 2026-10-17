@@ -13,11 +13,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,6 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.labushuya.emberlight.feature.gallery.R
+import kotlinx.coroutines.flow.first
 import me.saket.telephoto.zoomable.EnabledZoomGestures
 import me.saket.telephoto.zoomable.ZoomableImage
 import me.saket.telephoto.zoomable.ZoomableImageSource
@@ -83,6 +86,15 @@ internal fun ViewerImagePage(
         currentOverlay.registerZoom(item.id, state.zoomableState)
         onDispose { currentOverlay.unregisterZoom(item.id) }
     }
+    // Bereit, sobald Telephoto das Bild oder den Platzhalter gezeichnet hat. Erst dann darf das Vorschaubild der Animation gehen.
+    LaunchedEffect(item.id, state) {
+        snapshotFlow { state.isImageDisplayed || state.isPlaceholderDisplayed }.first { it }
+        currentOverlay.pageShown(item.id)
+    }
+    LaunchedEffect(item.id, state) {
+        snapshotFlow { state.isImageDisplayedInFullQuality }.first { it }
+        ViewerTrace.mark("Seite volle Qualität", item.id)
+    }
     Box(
         modifier =
             modifier
@@ -105,7 +117,8 @@ internal fun ViewerImagePage(
                 gestures = EnabledZoomGestures.ZoomAndPan,
                 modifier = Modifier.fillMaxSize(),
                 state = state,
-                alpha = if (isSettled) 1f else 0f,
+                // Immer voll deckend. Der Platzhalter zeichnet schon während der Animation, damit die Seite ihre Bereitschaft meldet.
+                alpha = 1f,
                 onClick = { _ -> onTap() },
             )
         }
