@@ -309,7 +309,7 @@ Aus der Geräteprüfung (offen):
 
 ## Feinschliff nach dem Gerätetest (Korrektur 3)
 
-Status: umgesetzt im Branch `fix/m2-viewer-feinschliff`. Geräteprüfung und Messwerte siehe unten (Abschnitt „Geräteprüfung Feinschliff“).
+Status: umgesetzt im Branch `fix/m2-viewer-feinschliff`, noch nicht gemergt. Die Geräteprüfung (Honor Magic V2, Demo-Modus, Messung vorher/nachher) ist ausstehend: Am Prüftag war kein Gerät per adb verbunden. Der Merge folgt erst nach einer bestandenen Prüfung. Ergebnisse dann in „Geräteprüfung Feinschliff“.
 
 ### Befunde
 
@@ -355,4 +355,4 @@ Im Zoom gehört die Geste dem Bild. Ein Wisch nach unten verschiebt das Bild, er
 
 - Unit: `HeroHandoverGeometryTest` (gleiche Fit-Berechnung, Rundung, Start aus dem Zoom bei 1x, 2x, 4x und am Rand, monotoner Übergang), `CellBoundsTest` (Zählerstand, Entfernen, Sichtfenster, Sichtbarkeit unter Kopfzeile und über der Leiste), `ViewerOverlayStateTest` (Bereitschaft, Rückfall, Auswahl verwirft das Vorschaubild, Schließen sichert die Kachel vorher).
 - Compose (Robolectric): `ViewerHeroHandoverComposeTest` (Vorschaubild endet nach der Telephoto-Meldung, Rückfall ohne Bild, Schließen aus dem Zoom lässt den Zoom stehen und übergibt das Inhalts-Rechteck).
-- Geräteprüfung und Messung: siehe unten.
+- Geräteprüfung und Messung: ausstehend (kein Gerät verbunden, siehe Status oben). Die Tabelle mit Messwerten vorher/nachher folgt mit dem Ergebnis.
