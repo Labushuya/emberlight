@@ -78,6 +78,12 @@ internal class ViewerOverlayState(
     var infoFraction: Float by mutableFloatStateOf(0f)
         private set
 
+    /**
+     * Der Infobereich ist offen oder fährt noch ein bzw. aus. Solange er sichtbar ist, gehört das Ziehen nach unten ihm und nicht
+     * dem Wegwischen. Erst im Ruhezustand zu darf ein neues Ziehen wegwischen (ADR 0010, Infobereich).
+     */
+    val infoVisible: Boolean get() = infoOpen || infoFraction > 0f
+
     /** Höhe des Overlays in Pixeln und Ursprung in Root-Koordinaten. Die Oberfläche setzt sie beim Layout. */
     var heightPx: Float by mutableFloatStateOf(1f)
 
@@ -186,6 +192,8 @@ internal class ViewerOverlayState(
     /** Der Nutzer beginnt zu ziehen. Eine laufende Feder endet, das Bild bleibt an seiner Stelle. */
     fun dragStarted() {
         if (phase != OverlayPhase.OPEN && phase != OverlayPhase.SETTLING) return
+        // Der Infobereich bekommt das Ziehen, solange er offen ist oder einfährt. Sonst würde der Viewer schließen (ADR 0010).
+        if (infoVisible) return
         job?.cancel()
         phase = nextPhase(phase, OverlayEvent.DragStarted)
         retireHeroIfReady()
@@ -254,10 +262,10 @@ internal class ViewerOverlayState(
         infoJob?.cancel()
         infoJob =
             scope.launch {
-                animate(infoFraction, if (open) 1f else 0f, animationSpec = SETTLE_SPRING) { value, _ ->
-                    infoFraction =
-                        value
-                }
+                val target = if (open) 1f else 0f
+                animate(infoFraction, target, animationSpec = SETTLE_SPRING) { value, _ -> infoFraction = value }
+                // Der Ruhezustand ist garantiert exakt, auch wenn die Feder knapp daneben endet.
+                infoFraction = target
             }
     }
 
@@ -276,7 +284,7 @@ internal class ViewerOverlayState(
      * es keinen Blick: die Rückgeste verhält sich wie bisher.
      */
     fun backStarted() {
-        if (infoOpen) return
+        if (infoVisible) return
         if (phase != OverlayPhase.OPEN) return
         val id = shown.value ?: return
         if (isZoomed(id)) return
@@ -313,7 +321,7 @@ internal class ViewerOverlayState(
      * Schrumpf aus dem sichtbaren Ausschnitt. Ein Fortschritt schaltet den Kurzen Blick ab, der Schrumpf folgt dem Fortschritt.
      */
     fun backProgressed(fraction: Float) {
-        if (infoOpen) return
+        if (infoVisible) return
         val next = nextPhase(phase, OverlayEvent.BackProgressed)
         if (next == phase && next != OverlayPhase.BACK) return
         val id = shown.value
@@ -354,6 +362,9 @@ internal class ViewerOverlayState(
                     launch { animate(progress, 1f, animationSpec = SETTLE_SPRING) { value, _ -> progress = value } }
                     launch { animate(peek, 0f, animationSpec = tween(PEEK_MS)) { value, _ -> peek = value } }
                 }
+                // Ruhezustand garantiert, auch wenn die Feder knapp daneben endet.
+                progress = 1f
+                peek = 0f
                 phase = nextPhase(phase, OverlayEvent.SettleFinished)
                 // Die Seite ist wieder sichtbar, derselbe Zoom liegt darunter. Der Rückweg aus dem Zoom endet hier.
                 zoomFrom = null
@@ -452,11 +463,23 @@ internal class ViewerOverlayState(
         closeAnimated()
     }
 
+    /**
+     * Federt das Bild in die Ruhelage. Fortschritt und Kurzer Blick federn mit: Hat ein Ziehen den Rückfederlauf einer
+     * abgebrochenen Rückgeste unterbrochen, bliebe das Bild sonst auf der Blick-Stufe stehen (ADR 0010).
+     */
     private fun settleAnimated() {
         job?.cancel()
         job =
             scope.launch {
-                animate(dragY, 0f, animationSpec = SETTLE_SPRING) { value, _ -> dragY = value }
+                coroutineScope {
+                    launch { animate(dragY, 0f, animationSpec = SETTLE_SPRING) { value, _ -> dragY = value } }
+                    launch { animate(progress, 1f, animationSpec = SETTLE_SPRING) { value, _ -> progress = value } }
+                    launch { animate(peek, 0f, animationSpec = tween(PEEK_MS)) { value, _ -> peek = value } }
+                }
+                // Ruhezustand garantiert, auch wenn die Feder knapp daneben endet.
+                dragY = 0f
+                progress = 1f
+                peek = 0f
                 phase = nextPhase(phase, OverlayEvent.SettleFinished)
                 retireHeroIfReady()
             }
@@ -492,6 +515,11 @@ internal class ViewerOverlayState(
                         ) { value, _ -> infoFraction = value }
                     }
                 }
+                // Geschlossen heißt Ruhezustand: alle Zwischenwerte garantiert zurück, sonst bliebe ein Rest im nächsten Öffnen.
+                progress = 0f
+                dragY = 0f
+                peek = 0f
+                infoFraction = 0f
                 shown.value = null
                 zoomFrom = null
                 infoOpen = false

@@ -564,7 +564,30 @@ Benchmark-Build des Branches, Demo an. `gfxinfo reset`, dann fünfmal Öffnen, I
 
 Einschätzung: P99 liegt im Band, der Janky-Anteil über dem früheren Wert. Eine Einzelmessung mit fünf Zyklen, keine Wiederholung. Ob jeder der fünf Zyklen den Bereich tatsächlich öffnete, ist nicht je Zyklus geprüft.
 
+### Fehler I-Rest: Ursache und Fix
+
+Reproduziert als Compose-Test (`ViewerInfoGestureComposeTest`), vor dem Fix rot. Die Tests liegen in der Testdatei, die Ergebnisse stehen unten.
+
+- (a) Wischen nach unten auf dem Infobereich, Inhalt oben: Der scrollbare Inhalt verbraucht die Zeigerbewegung auch am Anschlag (Überrollen). Die Seite darunter sieht sie als verbraucht und beendet die Geste. Der Bereich bleibt offen. Das bestätigt die Vermutung oben.
+- (b) Hängender Zustand: Bricht ein Ziehen den Rückfederlauf einer abgebrochenen Rückgeste ab (`dragStarted` während `backCancelled`), bleibt der Fortschritt bei 0,80 stehen. Das ist die Blick-Stufe: ca. 85 % Größe, Versatz zur Kachel, Phase OPEN. `settleAnimated` setzte nur den Versatz zurück. Das entspricht dem Gerätebefund.
+- Gestenpriorität: Während der Infobereich einfährt (nicht mehr offen, Stand noch über 0), wertete ein neues Ziehen nach unten das Wegwischen aus. Der Viewer schloss, obwohl der Bereich noch nicht zu war.
+- Nicht reproduziert: der Ablauf „Bereich offen, dann Wischen auf dem Bild“ allein. Er blieb in Robolectric und am Gerät (schnell, langsam, kurzer Zug) korrekt. Welches Ereignis am Gerät die Rückgeste in den Blick schickt, ist nicht belegt.
+
+Fix:
+
+- Der Infobereich übernimmt das Ziehen nach unten selbst (`sheetDragToClose`). Er übernimmt eine Bewegung nur, wenn der Inhalt nicht gescrollt ist (`ScrollState.value == 0`). Gescrollt scrollt der Inhalt zuerst. Gelesen wird die rohe Bewegung (`positionChangeIgnoreConsumed`), weil der Inhalt sie am Anschlag verbraucht. Übernommene Ereignisse verbraucht der Bereich, damit die Seite sie nicht doppelt wertet. Im Infobereich ist das Überrollen abgeschaltet (`LocalOverscrollFactory`).
+- Gestenpriorität: Solange der Infobereich offen ist oder einfährt (`infoVisible`), gehört ein Ziehen nach unten ihm. Wegwischen beginnt erst im Ruhezustand „zu“. Rückgeste und Kurzer Blick starten bei sichtbarem Bereich nicht.
+- Keine Übergänge ohne Endzustand: Das Federn in die Ausgangslage bewegt Versatz, Fortschritt und Blick gemeinsam und setzt sie am Ende garantiert auf Ruhe. Dasselbe gilt für das Ende der Rückfeder, das Schließen und den Infobereich.
+
+Tests (`ViewerInfoGestureComposeTest`, Robolectric):
+
+- Wischen nach unten auf dem Infobereich mit Inhalt oben schließt ihn, der Viewer bleibt offen.
+- Wischen nach unten auf dem Bild bei offenem Infobereich schließt nur ihn, Bild in Normalposition, nach 4 s unverändert.
+- Abbruch der Rückgeste, dann Ziehen während der Feder: Bild in Normalposition.
+- Neues Ziehen nach unten während des Einfahrens: Der Viewer bleibt offen, der Bereich zu. Danach schließt ein Ziehen das Wegwischen.
+- Langsames Wischen auf dem Bild bei offenem Bereich: wie oben.
+
 ### Offene Punkte
 
-- Fehler I-Rest (oben): Wischen nach unten auf dem Infobereich schließt nicht, und der Schließweg vom Bild lässt das Bild im verkleinerten Zustand hängen. Der Merge ist deshalb nicht erfolgt.
+- Auslöser der Rückgeste am Gerät bei offenem Infobereich: nicht belegt. Die Ursache im Zustand ist behoben. Ob es am Gerät noch einen anderen Auslöser gibt, zeigt die Prüfung unten.
 - Echtes Halten der Zurück-Taste: vom Nutzer zu testen (Kurzer Blick, Stufe und Abbruch bei langem Druck).
