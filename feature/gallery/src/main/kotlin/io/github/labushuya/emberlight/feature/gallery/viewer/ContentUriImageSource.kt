@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
@@ -38,6 +39,7 @@ import me.saket.telephoto.zoomable.ZoomableImageSource
 internal class ContentUriImageSource(
     private val uri: String,
     private val previewKey: String?,
+    private val screen: ImageBitmap?,
     private val onFailed: () -> Unit,
     private val settled: State<Boolean>,
 ) : ZoomableImageSource {
@@ -45,11 +47,13 @@ internal class ContentUriImageSource(
     override fun resolve(canvasSize: Flow<Size>): ZoomableImageSource.ResolveResult {
         val context = LocalContext.current
         val preview = remember(previewKey, context) { previewOf(context, previewKey) }
+        // Die Vorschau in Bildschirmgröße ist der Platzhalter, sobald sie da ist. Sonst bleibt das Raster-Vorschaubild.
+        val placeholder = screen?.let { BitmapPainter(it) } ?: preview?.painter
         val source by produceState<SubSamplingImageSource?>(initialValue = null, key1 = uri) {
             val readable = withContext(Dispatchers.IO) { isDecodableImage(context, uri) }
             val created =
                 if (readable) {
-                    SubSamplingImageSource.contentUriOrNull(uri.toUri(), preview?.bitmap)
+                    SubSamplingImageSource.contentUriOrNull(uri.toUri(), screen ?: preview?.bitmap)
                 } else {
                     null
                 }
@@ -67,7 +71,7 @@ internal class ContentUriImageSource(
                 } else {
                     null
                 },
-            placeholder = preview?.painter,
+            placeholder = placeholder,
         )
     }
 

@@ -23,6 +23,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -45,16 +46,17 @@ import me.saket.telephoto.zoomable.rememberZoomableState
 typealias ViewerImageSource = @Composable (
     item: ViewerItem,
     settled: State<Boolean>,
+    screen: ImageBitmap?,
     onFailed: () -> Unit,
 ) -> ZoomableImageSource
 
 /**
  * Standardquelle der Galerie: das Original über die Content-URI (ADR 0010). Das hochauflösende Bild wartet, bis das Overlay
- * offen steht. Bis dahin zeigt die Seite das Vorschaubild aus dem Speicher-Cache.
+ * offen steht. Bis dahin zeigt die Seite die Vorschau in Bildschirmgröße, sonst das Vorschaubild aus dem Speicher-Cache.
  */
-internal val ContentUriImageSources: ViewerImageSource = { item, settled, onFailed ->
-    remember(item.uri, item.previewKey, settled) {
-        ContentUriImageSource(item.uri, item.previewKey, onFailed, settled)
+internal val ContentUriImageSources: ViewerImageSource = { item, settled, screen, onFailed ->
+    remember(item.uri, item.previewKey, settled, screen) {
+        ContentUriImageSource(item.uri, item.previewKey, screen, onFailed, settled)
     }
 }
 
@@ -75,6 +77,7 @@ internal fun ViewerImagePage(
     settled: Boolean,
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
+    screen: ImageBitmap? = null,
     state: ZoomableImageState = rememberZoomableImageState(rememberZoomableState()),
 ) {
     val failed = remember(item.id) { mutableStateOf(false) }
@@ -111,10 +114,10 @@ internal fun ViewerImagePage(
         } else {
             if (!isSettled) {
                 // Scheitert nur die Vorschau, bleibt das Original die Quelle. Schlägt auch das fehl, meldet die Quelle den Fehler.
-                ViewerPreview(item = item, onError = {})
+                ViewerPreview(item = item, onError = {}, screen = screen)
             }
             ZoomableImage(
-                image = imageSource(item, settledState) { failed.value = true },
+                image = imageSource(item, settledState, screen) { failed.value = true },
                 contentDescription = contentDescription,
                 gestures = EnabledZoomGestures.ZoomAndPan,
                 modifier = Modifier.fillMaxSize(),

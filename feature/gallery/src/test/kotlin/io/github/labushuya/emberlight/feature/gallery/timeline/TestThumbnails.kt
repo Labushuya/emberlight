@@ -29,6 +29,8 @@ internal object TestThumbnails {
 
     /** Setzt den Singleton-Loader für alle Bilder dieses Tests. Nach dem Test mit [reset] zurücksetzen. */
     fun install(items: List<MediaItem>) {
+        // Ein früherer Test kann den Singleton schon erzeugt haben. `setSafe` verlangt davor ein Zurücksetzen.
+        SingletonImageLoader.reset()
         SingletonImageLoader.setSafe { context -> loader(context, items) }
     }
 

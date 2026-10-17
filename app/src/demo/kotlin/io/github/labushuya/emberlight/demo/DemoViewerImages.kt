@@ -30,18 +30,21 @@ internal class DemoViewerImageContribution
 
 /**
  * Vollbild eines synthetischen Eintrags: dasselbe Motiv wie das Vorschaubild, in [FULL_LONG_EDGE] Pixel. Das Bild entsteht im
- * Speicher und wird einmal je Seite gezeichnet. Solange es fehlt, bleibt die Seite leer; die Vorschau trägt bis zum Öffnen.
+ * Speicher und wird einmal je Seite gezeichnet. Solange es fehlt, trägt der Platzhalter: die Vorschau in Bildschirmgröße, sonst
+ * das Vorschaubild.
  */
-internal val DemoViewerImageSource: ViewerImageSource = { item, _, _ ->
-    remember(item.id) { DemoZoomableImageSource(item) }
+internal val DemoViewerImageSource: ViewerImageSource = { item, _, screen, _ ->
+    remember(item.id, screen) { DemoZoomableImageSource(item, screen) }
 }
 
 /**
- * Die Seite zeigt zuerst das Vorschaubild in Thumbnail-Größe, dasselbe Motiv wie die Kachel und die Hero-Animation. Erst wenn
- * das Vollbild gerendert ist, ersetzt es das Vorschaubild. So bleibt nie eine leere Seite stehen (ADR 0010, Feinschliff).
+ * Die Seite zeigt zuerst die Vorschau in Bildschirmgröße (wie das System für echte Medien), sonst das Vorschaubild in
+ * Thumbnail-Größe. Erst wenn das Vollbild gerendert ist, ersetzt es den Platzhalter. So bleibt nie eine leere Seite stehen
+ * (ADR 0010, Feinschliff). Die Vorschau in Bildschirmgröße ist ein Platzhalter, keine Quelle: sie wird nie abgebildet.
  */
 private class DemoZoomableImageSource(
     private val item: ViewerItem,
+    private val screen: ImageBitmap?,
 ) : ZoomableImageSource {
     @Composable
     override fun resolve(canvasSize: Flow<Size>): ZoomableImageSource.ResolveResult {
@@ -53,9 +56,10 @@ private class DemoZoomableImageSource(
             produceState<ImageBitmap?>(initialValue = null, key1 = item.id) {
                 value = withContext(Dispatchers.Default) { render(FULL_LONG_EDGE) }
             }
+        val placeholder = screen ?: thumbnail
         return ZoomableImageSource.ResolveResult(
             delegate = bitmap?.let { ZoomableImageSource.PainterDelegate(BitmapPainter(it)) },
-            placeholder = thumbnail?.let { BitmapPainter(it) },
+            placeholder = placeholder?.let { BitmapPainter(it) },
         )
     }
 

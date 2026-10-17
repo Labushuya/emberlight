@@ -16,10 +16,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -32,6 +34,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -50,6 +53,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
+import coil3.imageLoader
 import io.github.labushuya.emberlight.feature.gallery.R
 import io.github.labushuya.emberlight.feature.gallery.timeline.TimelineFormats
 import io.github.labushuya.emberlight.feature.gallery.timeline.formatDuration
@@ -104,6 +108,15 @@ internal fun ViewerOverlay(
     val heroBitmap = remember(itemId, item.previewKey) { cachedPreviewBitmap(context, item.previewKey) }
     val aspect = remember(itemId, item.previewKey, item.width, item.height) { heroAspect(context, item, heroBitmap) }
 
+    // Vorschau in Bildschirmgröße (ADR 0010, Korrektur 4): Sie lädt beim Öffnen, überblendet das Vorschaubild im Hero und ist
+    // der Platzhalter der Seiten. Der Store gehört dem Overlay und gibt beim Schließen alles frei.
+    val scope = rememberCoroutineScope()
+    val screens = remember(scope, context) { ScreenPreviews(scope, context.imageLoader, context) }
+    DisposableEffect(screens) { onDispose { screens.release() } }
+    val screenShown = screens.bitmapOf(item.uri) != null
+    LaunchedEffect(index, items, screenShown) { screens.focus(items, index) }
+    val hasHero = heroBitmap != null || screenShown
+
     val pagerState = rememberPagerState(initialPage = index, pageCount = { items.size })
     val latestOverlay by rememberUpdatedState(overlay)
     val latestPlayback by rememberUpdatedState(playback)
@@ -139,12 +152,21 @@ internal fun ViewerOverlay(
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { playback.onStopped() }
 
-    // Die System-Rückgeste steuert dieselbe Ansicht wie das Ziehen: Abbrechen federt zurück, Vollenden schließt (ADR 0010).
+    // Die System-Rückgeste steuert dieselbe Ansicht wie das Ziehen. Ein Flow, der normal endet, ist ein Vollenden und schließt
+    // immer, unabhängig vom Fortschritt. Nur `CancellationException` ist ein Abbruch und federt zurück (ADR 0010).
     PredictiveBackHandler { progress ->
+        var sawProgress = false
         try {
-            progress.collect { event -> latestOverlay.backProgressed(event.progress) }
+            progress.collect { event ->
+                if (!sawProgress) ViewerTrace.mark("Rückgeste Start", latestOverlay.shownId)
+                sawProgress = true
+                latestOverlay.backProgressed(event.progress)
+            }
+            if (!sawProgress) ViewerTrace.mark("Rückgeste ohne Fortschritt", latestOverlay.shownId)
+            ViewerTrace.mark("Rückgeste vollendet", latestOverlay.shownId)
             latestOverlay.backCommitted()
         } catch (e: CancellationException) {
+            ViewerTrace.mark("Rückgeste abgebrochen", latestOverlay.shownId)
             latestOverlay.backCancelled()
         }
     }
@@ -188,7 +210,7 @@ internal fun ViewerOverlay(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .graphicsLayer { pagerTransform(overlay, heroBitmap != null) },
+                    .graphicsLayer { pagerTransform(overlay, hasHero) },
             key = { page -> items[page].id },
             beyondViewportPageCount = 1,
             pageSpacing = PAGE_SPACING,
@@ -197,13 +219,15 @@ internal fun ViewerOverlay(
             val pageLabel = mediaLabel(pageItem, dates)
             when (pageItem.type) {
                 ViewerMediaType.IMAGE -> {
+                    val pageSource: ViewerImageSource = imageSource ?: contributions.imageSourceFor(pageItem)
                     ViewerImagePage(
                         item = pageItem,
                         contentDescription = pageLabel,
-                        imageSource = imageSource ?: contributions.imageSourceFor(pageItem),
+                        imageSource = pageSource,
                         overlay = overlay,
                         settled = settled,
                         onTap = { chromeVisible = !chromeVisible },
+                        screen = screens.bitmapOf(pageItem.uri),
                     )
                 }
 
@@ -219,12 +243,13 @@ internal fun ViewerOverlay(
                         settled = settled,
                         onPlay = { playback.onPlayPressed(pageItem.id, pageItem.uri) },
                         onTap = { chromeVisible = !chromeVisible },
+                        screen = screens.bitmapOf(pageItem.uri),
                     )
                 }
             }
         }
 
-        HeroLayer(overlay = overlay, bitmap = heroBitmap)
+        HeroLayer(overlay = overlay, bitmap = heroBitmap, screens = screens, item = item)
 
         AnimatedVisibility(
             visible = chromeShown,
@@ -351,46 +376,73 @@ private fun androidx.compose.ui.graphics.GraphicsLayerScope.pagerTransform(
         }
 }
 
-/** Zeichnet das Bild der Hero-Animation über dem Pager. Ohne Bitmap, Kachel oder Maß bleibt die Ebene leer. */
+/**
+ * Zeichnet die Bilder der Hero-Animation über dem Pager: das Raster-Vorschaubild und, sobald sie da ist, die Vorschau in
+ * Bildschirmgröße. Die Bildschirm-Vorschau überblendet das Vorschaubild in [ScreenPreviews.mix] (ADR 0010, Korrektur 4).
+ * Ohne Bild, Kachel oder Maß bleibt die Ebene leer. Gelesen werden nur Zustandswerte in der Zeichenphase.
+ */
 @Composable
 private fun HeroLayer(
     overlay: ViewerOverlayState,
     bitmap: ImageBitmap?,
+    screens: ScreenPreviews,
+    item: ViewerItem,
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val image = bitmap ?: return@Canvas
+        val screen = screens.bitmapOf(item.uri)
+        if (bitmap == null && screen == null) return@Canvas
         if (overlay.phase == OverlayPhase.CLOSED || overlay.heroAlpha <= 0f) return@Canvas
         val fit = overlay.fit
         if (fit.width <= 0f || fit.height <= 0f) return@Canvas
         val localTile = overlay.heroTile?.translate(-overlay.originInRoot)
         val tile = localTile ?: fallbackTile(fit)
-        val tileAspect = if (tile.height > 0f) tile.width / tile.height else 1f
-        val crop = cropSourceRect(image.width, image.height, tileAspect)
-        val full = Rect(0f, 0f, image.width.toFloat(), image.height.toFloat())
-        val frame = heroFrameOf(overlay, tile, fit, crop, full)
-        // Ganze Pixel an allen Kanten, wie das Fit-Rechteck der Seite (siehe fitInside).
-        val dst =
-            snapRect(
-                transformRect(
-                    rect = frame.dst,
-                    pivot = Offset(size.width / 2f, size.height / 2f),
-                    scale = dragScale(overlay.dragY, overlay.heightPx),
-                    dy = overlay.dragY,
-                ),
-            )
-        val src = snapRect(frame.src)
         // Ohne Kachel blendet die Animation nur ein, daher folgt die Deckkraft dem Fortschritt. Das Ausblenden nach der
         // Bereitschaft der Seite steuert die Deckkraft des Vorschaubildes.
         val fade = if (localTile == null) overlay.progress.coerceIn(0f, 1f) else 1f
-        drawImage(
-            image = image,
-            srcOffset = IntOffset(src.left.toInt(), src.top.toInt()),
-            srcSize = IntSize(src.width.toInt().coerceAtLeast(1), src.height.toInt().coerceAtLeast(1)),
-            dstOffset = IntOffset(dst.left.toInt(), dst.top.toInt()),
-            dstSize = IntSize(dst.width.toInt().coerceAtLeast(1), dst.height.toInt().coerceAtLeast(1)),
-            alpha = fade * overlay.heroAlpha,
-        )
+        val base = fade * overlay.heroAlpha
+        val mix = screens.mix.coerceIn(0f, 1f)
+        if (bitmap != null) {
+            drawHeroImage(overlay, bitmap, tile, fit, if (screen == null) base else base * (1f - mix))
+        }
+        if (screen != null) {
+            drawHeroImage(overlay, screen, tile, fit, base * mix)
+            screens.markHeroUse(item.id, item.uri)
+        }
     }
+}
+
+/** Zeichnet ein Bild der Hero-Animation mit [alpha] von der Kachel zum Vollbild, siehe [heroFrameOf]. */
+private fun DrawScope.drawHeroImage(
+    overlay: ViewerOverlayState,
+    image: ImageBitmap,
+    tile: Rect,
+    fit: Rect,
+    alpha: Float,
+) {
+    if (alpha <= 0f) return
+    val tileAspect = if (tile.height > 0f) tile.width / tile.height else 1f
+    val crop = cropSourceRect(image.width, image.height, tileAspect)
+    val full = Rect(0f, 0f, image.width.toFloat(), image.height.toFloat())
+    val frame = heroFrameOf(overlay, tile, fit, crop, full)
+    // Ganze Pixel an allen Kanten, wie das Fit-Rechteck der Seite (siehe fitInside).
+    val dst =
+        snapRect(
+            transformRect(
+                rect = frame.dst,
+                pivot = Offset(size.width / 2f, size.height / 2f),
+                scale = dragScale(overlay.dragY, overlay.heightPx),
+                dy = overlay.dragY,
+            ),
+        )
+    val src = snapRect(frame.src)
+    drawImage(
+        image = image,
+        srcOffset = IntOffset(src.left.toInt(), src.top.toInt()),
+        srcSize = IntSize(src.width.toInt().coerceAtLeast(1), src.height.toInt().coerceAtLeast(1)),
+        dstOffset = IntOffset(dst.left.toInt(), dst.top.toInt()),
+        dstSize = IntSize(dst.width.toInt().coerceAtLeast(1), dst.height.toInt().coerceAtLeast(1)),
+        alpha = alpha,
+    )
 }
 
 /**
