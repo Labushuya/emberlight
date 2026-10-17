@@ -319,7 +319,8 @@ Status: umgesetzt im Branch `fix/m2-viewer-feinschliff`. Geräteprüfung und Mes
 
 ### Übergabe Hero zur Seite
 
-- Das Vorschaubild bleibt gezeichnet, bis die Seite nachweislich ihr Bild zeigt. Quelle der Meldung: Telephoto `isImageDisplayed` bzw. `isPlaceholderDisplayed` (Standbild, Platzhalter), beim Video das geladene Standbild. Erst danach blendet es in 100 ms aus.
+- Das Vorschaubild bleibt gezeichnet, bis die Seite nachweislich ihr Bild zeigt. Quelle der Meldung bei Fotos: Telephoto `isImageDisplayed`, also der Zustand, in dem das Bild selbst (nicht der Platzhalter) gezeichnet wurde. Beim Video das geladene Standbild. Erst danach blendet es in 100 ms aus.
+- Warum nicht `isPlaceholderDisplayed`: Telephoto meldet den Platzhalter auch dann als gezeichnet, wenn es keinen gibt (leerer `EmptyPainter`). Der Test `ViewerHeroHandoverComposeTest` hat das belegt. Mit dieser Meldung wäre die Animation auf einer leeren Seite geendet.
 - Rückfall: Meldet die Seite kein Bild, verschwindet das Vorschaubild nach 1 s. Ein Fehler der Seite bleibt damit nicht hängen.
 - Die Seite liegt während der Animation unter dem Vorschaubild, mit gleicher Geometrie und voller Deckkraft. So kann Telephoto ihren Platzhalter zeichnen und die Bereitschaft melden.
 - Das Fit-Rechteck ist für Hero und Seite dieselbe Berechnung (`fitRect`), auf ganze Pixel gerundet (`snapRect`). Telephoto legt die Seite mit Fließkomma aus. Die Abweichung ist damit höchstens ein halber Pixel.
@@ -353,4 +354,5 @@ Im Zoom gehört die Geste dem Bild. Ein Wisch nach unten verschiebt das Bild, er
 ### Tests
 
 - Unit: `HeroHandoverGeometryTest` (gleiche Fit-Berechnung, Rundung, Start aus dem Zoom bei 1x, 2x, 4x und am Rand, monotoner Übergang), `CellBoundsTest` (Zählerstand, Entfernen, Sichtfenster, Sichtbarkeit unter Kopfzeile und über der Leiste), `ViewerOverlayStateTest` (Bereitschaft, Rückfall, Auswahl verwirft das Vorschaubild, Schließen sichert die Kachel vorher).
+- Compose (Robolectric): `ViewerHeroHandoverComposeTest` (Vorschaubild endet nach der Telephoto-Meldung, Rückfall ohne Bild, Schließen aus dem Zoom lässt den Zoom stehen und übergibt das Inhalts-Rechteck).
 - Geräteprüfung und Messung: siehe unten.
