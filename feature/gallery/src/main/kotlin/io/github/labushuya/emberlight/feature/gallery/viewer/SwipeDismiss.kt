@@ -21,10 +21,10 @@ internal const val DISMISS_FRACTION = 0.15f
 /** Mindestanteil der Höhe für den Schnellschluss über die Geschwindigkeit. Verhindert Fehlschließen bei kleinen Zuckern. */
 internal const val FLING_MIN_FRACTION = 0.05f
 
-/** Geschwindigkeit nach unten (dp je Sekunde), ab der ein Wisch schließt, auch unter der Schwelle. */
+/** Geschwindigkeit (dp je Sekunde), ab der eine Wischbewegung als schnell gilt. */
 internal const val FLING_DP_PER_SECOND = 600f
 
-/** Verhältnis der Achsen: Eine Bewegung gilt als vertikal, wenn sie mehr als so viel mal stärker nach unten geht. */
+/** Verhältnis der Achsen: Eine Bewegung gilt als vertikal, wenn sie mehr als so viel mal stärker vertikal als horizontal geht. */
 internal const val AXIS_RATIO = 1.5f
 
 /** Größte Verkleinerung beim Wegwischen (10 %). */
@@ -33,21 +33,31 @@ internal const val SHRINK_MAX = 0.1f
 /** Zoomstufe, unterhalb derer das Bild als ungezoomt gilt (Telephoto liefert ungefähr 0). */
 internal const val ZOOM_EPSILON = 0.001f
 
+/** Anteil der Höhe, den der Infobereich offen einnimmt (ca. 60 %). Das Bild bleibt oben sichtbar (ADR 0010, Infobereich). */
+internal const val INFO_PANEL_FRACTION = 0.6f
+
+/** Ab diesem Anteil rastet der Infobereich beim Loslassen offen ein, sonst zu. */
+internal const val INFO_SNAP_FRACTION = 0.5f
+
 /** Entscheidung über eine Geste, sobald sie den Schwellwert der Bedienung überschreitet. */
 internal enum class DragIntent {
     /** Noch zu kurz, um zu entscheiden. */
     PENDING,
 
-    /** Überwiegend nach unten: der Viewer folgt dem Finger. */
+    /** Überwiegend nach unten: Wegwischen, oder Schließen des Infobereichs, wenn er offen ist. */
     DISMISS,
 
-    /** Horizontal oder nach oben: das Wischen bleibt beim Pager oder der Zoom-Geste. */
+    /** Überwiegend nach oben: der Infobereich öffnet sich (ADR 0010, Infobereich). */
+    INFO,
+
+    /** Horizontal oder unentschieden: das Wischen bleibt beim Pager. */
     PASS,
 }
 
 /**
  * Achsenerkennung. Entscheidet erst, wenn die Gesamtbewegung den [slopPx] überschreitet. Überwiegend vertikal nach unten
- * (`dy > 0` und `|dy| > AXIS_RATIO * |dx|`) startet das Wegwischen. Alles andere geht an den Pager.
+ * (`dy > 0` und `|dy| > AXIS_RATIO * |dx|`) ist Wegwischen, überwiegend vertikal nach oben ist der Infobereich. Horizontale
+ * Bewegungen gehen an den Pager.
  */
 internal fun dragIntent(
     totalX: Float,
@@ -55,7 +65,8 @@ internal fun dragIntent(
     slopPx: Float,
 ): DragIntent {
     if (hypot(totalX, totalY) < slopPx) return DragIntent.PENDING
-    return if (totalY > 0f && abs(totalY) > AXIS_RATIO * abs(totalX)) DragIntent.DISMISS else DragIntent.PASS
+    if (abs(totalY) <= AXIS_RATIO * abs(totalX)) return DragIntent.PASS
+    return if (totalY > 0f) DragIntent.DISMISS else DragIntent.INFO
 }
 
 /** Anteil des Wegziehens an der Höhe, zwischen 0 und 1. Nur Bewegungen nach unten zählen. */
@@ -86,16 +97,36 @@ internal fun shouldDismiss(
     return offsetPx >= heightPx * FLING_MIN_FRACTION && velocityYPerSecond >= flingPerSecond
 }
 
-/** Wegwischen beginnt nur, wenn das Bild nicht gezoomt ist. Gezoomt gehört die Geste dem Bild (Verschieben). */
+/**
+ * Infobereich offen oder zu nach dem Loslassen. Eine schnelle Bewegung entscheidet die Richtung: nach oben öffnet, nach unten
+ * schließt. Sonst zählt der Stand, ab [INFO_SNAP_FRACTION] rastet er offen ein.
+ */
+internal fun infoSheetOpens(
+    fraction: Float,
+    velocityYPerSecond: Float,
+    flingPerSecond: Float,
+): Boolean =
+    when {
+        velocityYPerSecond <= -flingPerSecond -> true
+        velocityYPerSecond >= flingPerSecond -> false
+        else -> fraction >= INFO_SNAP_FRACTION
+    }
+
+/** Wegwischen und Infobereich beginnen nur, wenn das Bild nicht gezoomt ist. Gezoomt gehört die Geste dem Bild (Verschieben). */
 internal fun canStartDismiss(zoomFraction: Float?): Boolean = (zoomFraction ?: 0f) <= ZOOM_EPSILON
 
 /**
- * Wegwischen nach unten für eine Seite. Greift nur bei überwiegend vertikaler Bewegung nach unten und nur, wenn [canStart]
- * `true` liefert. Erkennt die Achse erst, wenn die Bewegung den Schwellwert überschreitet. Horizontale Wischbewegungen,
- * Antippen und Zoom bleiben bei ihren Gesten: Ein Kind, das die Bewegung verbraucht, beendet das Wegwischen.
+ * Vertikale Wischgesten einer Seite (ADR 0010, Kurzer Blick und Infobereich).
+ *
+ * - Infobereich geschlossen, ungezoomt: nach unten wegwischen, nach oben den Infobereich öffnen.
+ * - Infobereich offen: nach unten schließt er, nach oben geschieht nichts.
+ * - Gezoomt oder horizontal: die Geste gehört dem Bild bzw. dem Pager.
+ *
+ * Die Achse wird erst erkannt, wenn die Bewegung den Schwellwert überschreitet. Ein Kind, das die Bewegung verbraucht, beendet
+ * die Geste, damit Antippen, Doppeltipp und Telephoto unberührt bleiben.
  */
 @Composable
-internal fun Modifier.swipeDownToDismiss(
+internal fun Modifier.verticalSwipe(
     overlay: ViewerOverlayState,
     canStart: () -> Boolean,
 ): Modifier {
@@ -111,6 +142,8 @@ internal fun Modifier.swipeDownToDismiss(
             var totalX = 0f
             var totalY = 0f
             var intent = DragIntent.PENDING
+            // Bewegt die Geste den Infobereich (statt das Wegwischen)? Gilt ab der Entscheidung.
+            var onSheet = false
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Main)
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -124,18 +157,35 @@ internal fun Modifier.swipeDownToDismiss(
                             totalX += delta.x
                             totalY += delta.y
                             intent = dragIntent(totalX, totalY, slop)
-                            if (intent == DragIntent.DISMISS) {
-                                overlay.dragStarted()
-                                overlay.dragBy(totalY)
+                            when (intent) {
+                                DragIntent.DISMISS -> {
+                                    onSheet = overlay.infoOpen
+                                    if (onSheet) overlay.infoDragStarted() else overlay.dragStarted()
+                                }
+
+                                // Nach oben öffnet der Infobereich. Ist er schon offen, bleibt die Geste beim Pager.
+                                DragIntent.INFO -> {
+                                    if (overlay.infoOpen) {
+                                        intent = DragIntent.PASS
+                                    } else {
+                                        onSheet = true
+                                        overlay.infoDragStarted()
+                                    }
+                                }
+
+                                DragIntent.PENDING, DragIntent.PASS -> {}
+                            }
+                            if (intent == DragIntent.DISMISS || intent == DragIntent.INFO) {
+                                if (onSheet) overlay.infoDragBy(totalY) else overlay.dragBy(totalY)
                                 tracker.addPosition(change.uptimeMillis, change.position)
                                 change.consume()
                             }
                         }
                     }
 
-                    DragIntent.DISMISS -> {
+                    DragIntent.DISMISS, DragIntent.INFO -> {
                         if (change.isConsumed) break
-                        overlay.dragBy(delta.y)
+                        if (onSheet) overlay.infoDragBy(delta.y) else overlay.dragBy(delta.y)
                         tracker.addPosition(change.uptimeMillis, change.position)
                         change.consume()
                     }
@@ -144,8 +194,11 @@ internal fun Modifier.swipeDownToDismiss(
                     DragIntent.PASS -> {}
                 }
             }
-            if (intent == DragIntent.DISMISS) {
-                overlay.dragEnded(velocityYPerSecond = tracker.calculateVelocity().y, flingPerSecond = fling)
+            val velocity = tracker.calculateVelocity().y
+            if (onSheet) {
+                overlay.infoDragEnded(velocity, fling)
+            } else if (intent == DragIntent.DISMISS) {
+                overlay.dragEnded(velocityYPerSecond = velocity, flingPerSecond = fling)
             }
         }
     }

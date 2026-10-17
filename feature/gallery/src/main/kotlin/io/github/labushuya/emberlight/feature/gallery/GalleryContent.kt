@@ -26,6 +26,7 @@ import io.github.labushuya.emberlight.feature.gallery.timeline.MediaBrowserState
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGrid
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaGridState
 import io.github.labushuya.emberlight.feature.gallery.timeline.MediaStateBody
+import io.github.labushuya.emberlight.feature.gallery.viewer.ExifLookup
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerPlaybackViewModel
 import java.time.ZoneId
 
@@ -59,6 +60,7 @@ internal fun GalleryContent(
     playback: ViewerPlaybackViewModel,
     modifier: Modifier = Modifier,
     zone: ZoneId = ZoneId.systemDefault(),
+    exif: ExifLookup = ExifLookup.None,
     photosGridState: LazyGridState = rememberLazyGridState(),
     albumsGridState: LazyGridState = rememberLazyGridState(),
 ) {
@@ -69,6 +71,7 @@ internal fun GalleryContent(
         gridState = photosGridState,
         playback = playback,
         zone = zone,
+        exif = exif,
         modifier = modifier.fillMaxSize(),
     ) { browser, gridModifier ->
         GalleryScaffold(

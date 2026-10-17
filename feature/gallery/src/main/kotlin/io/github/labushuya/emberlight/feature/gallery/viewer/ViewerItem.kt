@@ -3,6 +3,7 @@ package io.github.labushuya.emberlight.feature.gallery.viewer
 import androidx.compose.runtime.Immutable
 import io.github.labushuya.emberlight.core.media.model.MediaItem
 import io.github.labushuya.emberlight.core.media.model.MediaType
+import io.github.labushuya.emberlight.core.media.model.TimestampSource
 import io.github.labushuya.emberlight.core.media.thumbnail.MediaThumbnail
 
 /** Art eines Elements im Vollbild. Eigene Enum, damit der Viewer nicht vom MediaStore-Modell abhängt (ADR 0010). */
@@ -30,6 +31,8 @@ data class ViewerItem(
     val height: Int?,
     val durationMs: Long?,
     val previewKey: String?,
+    /** Angaben für den Infobereich. Ohne Angaben bleibt er bei Datum und Auflösung. */
+    val details: MediaDetails = MediaDetails(),
 )
 
 /** Abbildung eines Galerie-Eintrags. Das Vorschaubild hat denselben Cache-Schlüssel wie in der Zelle des Rasters. */
@@ -46,5 +49,14 @@ internal fun MediaItem.toViewerItem(): ViewerItem =
         width = width,
         height = height,
         durationMs = durationMs,
+        details =
+            MediaDetails(
+                displayName = displayName,
+                mimeType = mimeType,
+                sizeBytes = sizeBytes,
+                albumName = bucketName,
+                folder = relativePath?.trimEnd('/')?.takeIf { it.isNotEmpty() },
+                dateEstimated = timestampSource != TimestampSource.DATE_TAKEN,
+            ),
         previewKey = MediaThumbnail(uri = uri, type = type).memoryCacheKey,
     )

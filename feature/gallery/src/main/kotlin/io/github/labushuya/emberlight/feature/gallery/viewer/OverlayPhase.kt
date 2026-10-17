@@ -7,6 +7,8 @@ package io.github.labushuya.emberlight.feature.gallery.viewer
  * - [CLOSED]: Nichts zu sehen, das Raster ist frei.
  * - [OPENING]: Die Hero-Animation läuft von der Kachel zum Vollbild.
  * - [OPEN]: Der Pager ist sichtbar, das Raster darunter nicht gezeichnet.
+ * - [PEEKING]: Kurzer Blick. Die Rückgeste hält ohne Fortschritt (Tastenhalten). Das Bild steht auf der Blick-Stufe, die
+ *   Kachel ist hervorgehoben (ADR 0010, Kurzer Blick).
  * - [DRAGGING]: Der Nutzer zieht nach unten (Wegwischen).
  * - [BACK]: Die System-Rückgeste zeigt ihren Fortschritt.
  * - [SETTLING]: Das Bild federt in die Ausgangslage zurück (abgebrochenes Ziehen oder abgebrochene Rückgeste).
@@ -16,6 +18,7 @@ internal enum class OverlayPhase {
     CLOSED,
     OPENING,
     OPEN,
+    PEEKING,
     DRAGGING,
     BACK,
     SETTLING,
@@ -26,7 +29,8 @@ internal enum class OverlayPhase {
     val visible: Boolean get() = this != CLOSED
 
     /** Zeigt der Pager das Bild (und nicht die Hero-Animation)? */
-    val pagerShown: Boolean get() = this == OPEN || this == DRAGGING || this == BACK || this == SETTLING
+    val pagerShown: Boolean
+        get() = this == OPEN || this == PEEKING || this == DRAGGING || this == BACK || this == SETTLING
 
     /** Läuft die Hero-Animation und zeichnet das Bild selbst? */
     val heroShown: Boolean get() = this == OPENING || this == CLOSING
@@ -39,6 +43,9 @@ internal sealed interface OverlayEvent {
 
     /** Die Hero-Animation des Öffnens ist fertig. */
     data object OpenFinished : OverlayEvent
+
+    /** Die System-Rückgeste hat begonnen. Ohne Fortschritt tritt der Kurze Blick ein (siehe [OverlayPhase.PEEKING]). */
+    data object BackStarted : OverlayEvent
 
     /** Der Nutzer beginnt zu ziehen. */
     data object DragStarted : OverlayEvent
@@ -84,6 +91,10 @@ internal fun nextPhase(
             if (phase == OverlayPhase.OPENING) OverlayPhase.OPEN else phase
         }
 
+        OverlayEvent.BackStarted -> {
+            if (phase == OverlayPhase.OPEN) OverlayPhase.PEEKING else phase
+        }
+
         OverlayEvent.DragStarted -> {
             if (phase == OverlayPhase.OPEN ||
                 phase == OverlayPhase.SETTLING
@@ -104,17 +115,23 @@ internal fun nextPhase(
 
         OverlayEvent.BackProgressed -> {
             when (phase) {
-                OverlayPhase.OPEN, OverlayPhase.BACK -> OverlayPhase.BACK
+                OverlayPhase.OPEN, OverlayPhase.PEEKING, OverlayPhase.BACK -> OverlayPhase.BACK
                 else -> phase
             }
         }
 
         OverlayEvent.BackCancelled -> {
-            if (phase == OverlayPhase.BACK) OverlayPhase.SETTLING else phase
+            when (phase) {
+                OverlayPhase.BACK, OverlayPhase.PEEKING -> OverlayPhase.SETTLING
+                else -> phase
+            }
         }
 
         OverlayEvent.BackCommitted -> {
-            if (phase == OverlayPhase.BACK) OverlayPhase.CLOSING else phase
+            when (phase) {
+                OverlayPhase.BACK, OverlayPhase.PEEKING -> OverlayPhase.CLOSING
+                else -> phase
+            }
         }
 
         OverlayEvent.CloseRequested -> {

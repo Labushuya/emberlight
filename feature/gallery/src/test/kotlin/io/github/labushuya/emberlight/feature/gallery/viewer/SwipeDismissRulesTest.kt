@@ -26,8 +26,8 @@ class SwipeDismissRulesTest {
     }
 
     @Test
-    fun anUpwardMovementIsNotADismiss() {
-        assertEquals(DragIntent.PASS, dragIntent(totalX = 0f, totalY = -60f, slopPx = 8f))
+    fun anUpwardMovementOpensTheInfoSheetNotADismiss() {
+        assertEquals(DragIntent.INFO, dragIntent(totalX = 0f, totalY = -60f, slopPx = 8f))
     }
 
     @Test
