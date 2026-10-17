@@ -564,7 +564,7 @@ Benchmark-Build des Branches, Demo an. `gfxinfo reset`, dann fünfmal Öffnen, I
 
 Einschätzung: P99 liegt im Band, der Janky-Anteil über dem früheren Wert. Eine Einzelmessung mit fünf Zyklen, keine Wiederholung. Ob jeder der fünf Zyklen den Bereich tatsächlich öffnete, ist nicht je Zyklus geprüft.
 
-### Fehler I-Rest: Ursache und Fix
+### Fehler I-Rest: Ursache und Fix (behoben)
 
 Reproduziert als Compose-Test (`ViewerInfoGestureComposeTest`), vor dem Fix rot. Die Tests liegen in der Testdatei, die Ergebnisse stehen unten.
 
@@ -591,3 +591,66 @@ Tests (`ViewerInfoGestureComposeTest`, Robolectric):
 
 - Auslöser der Rückgeste am Gerät bei offenem Infobereich: nicht belegt. Die Ursache im Zustand ist behoben. Ob es am Gerät noch einen anderen Auslöser gibt, zeigt die Prüfung unten.
 - Echtes Halten der Zurück-Taste: vom Nutzer zu testen (Kurzer Blick, Stufe und Abbruch bei langem Druck).
+
+## Gesten-Schwellen in dp (Korrektur 5)
+
+Status: umgesetzt im Commit `5a962cf` (Branch `feat/m2-kurzer-blick-und-infobereich`). Die Geräteprüfung ist unten festgehalten.
+
+### Befund
+
+Auf dem Außendisplay (1060 × 2376 px, 480 dpi, 792 dp hoch) brauchte der Infobereich einen Zug von etwa 237 dp oder 600 dp/s, das Wegwischen rund 119 dp. Die Schwellen hingen an der Höhe des Bildschirms. Auf hohen Geräten war das für einen kurzen Wisch zu viel.
+
+### Werte
+
+Alle vertikalen Schwellen sind feste dp-Werte in `ViewerGestureDp` und gelten auf jedem Gerät gleich. Umrechnung in Pixel über `GesturePx.of(density)`.
+
+| Schwelle | Wert | Quelle und Begründung |
+|---|---|---|
+| Infobereich öffnen oder schließen (Weg) | 56 dp | Material 3 `BottomSheetDefaults.PositionalThreshold` |
+| Infobereich Schnellschluss (Geschwindigkeit) | 200 dp/s | Abweichung, siehe unten |
+| Infobereich Mindestweg für Schnellschluss | 12 dp | Eigene Setzung gegen Zucken |
+| Wegwischen (Weg) | 96 dp | Eigene Setzung |
+| Wegwischen Schnellschluss (Geschwindigkeit) | 400 dp/s | Eigene Setzung |
+| Wegwischen Mindestweg für Schnellschluss | 24 dp | Eigene Setzung gegen Fehlschließen |
+
+Abweichungen:
+
+- Die Geschwindigkeit des Infobereichs liegt mit 200 dp/s über dem Material-3-Wert `BottomSheetDefaults.VelocityThreshold` von 125 dp/s. Mit 125 dp/s würde ein langsamer Zug schon als Flick gelten. Der Viewer soll die Geste bewusst auslösen. Der Wert ist eine Setzung, keine Messung.
+- Wegwischen (96 dp, 400 dp/s, 24 dp) hat keine Entsprechung bei Material 3. Die Werte sind Setzungen auf Grundlage der Geräteprüfung.
+- Die Material-3-Werte sind aus der Vorgabe übernommen. Im Quelltext der Bibliothek wurden sie in diesem Lauf nicht nachgeprüft.
+
+### Geräteprüfung (17.10.2026)
+
+Gerät und Ablauf wie im Abschnitt „Geräteprüfung Kurzer Blick und Infobereich“. Demo-Modus per Intent, am Ende aus. Fotos nur vom Außendisplay, nur mit Demo-Badge und mit Fokus auf unserer App.
+
+- F1 (automatischer Flick nach oben, 180 px in 80 ms per `input swipe`): Der Infobereich öffnete nicht. Ein langsamer Zug (240 px in 800 ms) öffnete korrekt. Der Nutzer hat schnelle Flicks mit dem Finger getestet (Öffnen, Schließen, Wegwischen) und bestätigt: deutlich besser, funktioniert. Entscheidung: F1 gilt als Artefakt der adb-Eingabe mit 80 ms und ist durch die Finger-Prüfung des Nutzers bestanden.
+- F2 (Infobereich per Zug nach oben öffnen, 240 px in 300 ms, dann auf dem Bereich nach unten 180 px in 180 ms): bestanden. Der Bereich ist zu, der Viewer bleibt offen (Foto belegt).
+- F3 (langsamer Zug nach oben 80 dp in 800 ms, dann auf dem Bereich nach unten 80 dp in 800 ms): bestanden. Offen, danach zu (Fotos belegt).
+- F4 (zu kurzer langsamer Zug 15 dp in 600 ms): bestanden. Das Bild federt zurück, der Zustand ist unverändert (Foto belegt).
+- F5 (Bereich offen, Zug nach unten auf dem Bild 180 px in 180 ms): bestanden. Der Bereich ist zu, das Bild steht normal, nach 1 s und nach 4 s unverändert (Fotos belegt).
+- F6 (ohne Bereich): Kurzer langsamer Zug 30 dp in 600 ms federt zurück (bestanden). Wegwischen 360 px in 200 ms nach unten schließt in die Rasterkachel 1. Log: `Ziel-Grenzen aktuell id=1` (bestanden).
+- F7 (horizontales Blättern, Doppeltipp-Zoom, Zug nach oben): Das Blättern wechselt auf Medium 2. Gezoomt öffnet der Zug nach oben keinen Infobereich, das Bild schwenkt (bestanden).
+- Mitzug (`input motionevent` DOWN an der Bildmitte, drei MOVE je 120 px nach oben, Foto nach dem dritten MOVE, dann UP): Der Infobereich folgt dem Finger teilweise. Nach dem Loslassen rastet er offen ein (bestanden).
+
+Nicht am Gerät geprüft: die Rückgeste bei offenem Infobereich. Die Zurück-Taste mit langem Druck bleibt offen für den Nutzer.
+
+### Messung (Benchmark-Build, Demo an)
+
+Zwei Läufe à fünf Zyklen (Öffnen, Infobereich auf, Infobereich zu, Viewer zu), jeweils mit `gfxinfo reset`.
+
+| Messgröße | Lauf 1 | Lauf 2 |
+|---|---|---|
+| Frames | 820 | 824 |
+| Janky (neu) | 2,44 % (20) | 2,18 % (18) |
+| Janky (legacy) | 25,00 % (205) | 27,91 % (230) |
+| P50 | 7 ms | 7 ms |
+| P90 | 12 ms | 12 ms |
+| P95 | 15 ms | 15 ms |
+| P99 | 27 ms | 24 ms |
+| Missed Vsync | 0 | 0 |
+
+Einordnung: Die Werte liegen unter der früheren Einzelmessung (P99 29 ms, Missed Vsync 1). Der Janky-Anteil (legacy) ist hoch. Der Wert ist nicht mit der früheren Messung vergleichbar, weil die Zählung und die Zyklen abweichen. Pro Zyklus wurde nur der Endzustand per Foto geprüft, nicht jeder Zwischenschritt.
+
+### Fehler I-Rest
+
+Behoben, siehe „Fehler I-Rest: Ursache und Fix (behoben)“ oben. Die Gerätebefunde F2 bis F5 bestätigen den Fix am Gerät.
