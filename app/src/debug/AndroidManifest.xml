@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Nur im Debug-Build (ADR 0012): Spike-Einstieg per adb-Intent. Ohne sichtbare Oberfläche, beendet sich sofort. -->
+    <application>
+        <activity
+            android:name=".spike.SpikeDebugActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+    </application>
+</manifest>

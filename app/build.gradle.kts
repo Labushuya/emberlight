@@ -40,6 +40,8 @@ dependencies {
     implementation(project(":feature:gallery"))
     implementation(project(":feature:space"))
     implementation(project(":core:media"))
+    // Spike-Server (ADR 0012) nur im Debug-Build. Der Release-Build enthält ihn nicht.
+    debugImplementation(project(":share:server"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="spike_server_channel_name">Spike-Server</string>
+    <string name="spike_server_running_title">Spike-Server läuft</string>
+    <string name="spike_server_starting">Startet …</string>
+    <string name="spike_server_port">Port %1$d</string>
+    <string name="spike_server_stop">Stopp</string>
+</resources>
