@@ -3,6 +3,7 @@ package io.github.labushuya.emberlight.feature.gallery.viewer
 import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.unit.Density
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
@@ -79,10 +80,10 @@ class ViewerOverlayStateTest {
             val state = openState(this)
 
             state.dragStarted()
-            state.dragBy(100f)
+            state.dragBy(60f)
             assertEquals(OverlayPhase.DRAGGING, state.phase)
-            // 100 von 1000 Pixeln sind 10 %, unter der Schwelle von 15 %.
-            state.dragEnded(velocityYPerSecond = 0f, flingPerSecond = FLING)
+            // 60 dp liegen unter der Schwelle von 96 dp (1 dp = 1 px in diesen Tests).
+            state.dragEnded(velocityYPerSecond = 0f, thresholds = THRESHOLDS)
             assertEquals(OverlayPhase.SETTLING, state.phase)
 
             advanceUntilIdle()
@@ -98,7 +99,7 @@ class ViewerOverlayStateTest {
 
             state.dragStarted()
             state.dragBy(200f)
-            state.dragEnded(velocityYPerSecond = 0f, flingPerSecond = FLING)
+            state.dragEnded(velocityYPerSecond = 0f, thresholds = THRESHOLDS)
             assertEquals(OverlayPhase.CLOSING, state.phase)
 
             advanceUntilIdle()
@@ -113,7 +114,7 @@ class ViewerOverlayStateTest {
 
             state.dragStarted()
             state.dragBy(60f)
-            state.dragEnded(velocityYPerSecond = FLING + 1f, flingPerSecond = FLING)
+            state.dragEnded(velocityYPerSecond = FLING + 1f, thresholds = THRESHOLDS)
 
             assertEquals(OverlayPhase.CLOSING, state.phase)
         }
@@ -216,7 +217,7 @@ class ViewerOverlayStateTest {
         runTest(FakeFrameClock) {
             val state = openState(this)
 
-            state.dragEnded(velocityYPerSecond = 0f, flingPerSecond = FLING)
+            state.dragEnded(velocityYPerSecond = 0f, thresholds = THRESHOLDS)
 
             assertEquals(OverlayPhase.OPEN, state.phase)
         }
@@ -361,6 +362,9 @@ class ViewerOverlayStateTest {
 
     private companion object {
         const val EPS = 0.001f
+
+        /** Schwellen in dp, bei einer Dichte von 1 also gleich den Pixeln. */
+        val THRESHOLDS = GesturePx.of(Density(1f))
         const val BEFORE_FALLBACK_MS = 500L
         const val HEIGHT = 1000f
         const val FLING = 600f

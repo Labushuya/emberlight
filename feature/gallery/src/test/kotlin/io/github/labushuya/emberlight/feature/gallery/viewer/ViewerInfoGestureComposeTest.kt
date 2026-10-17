@@ -146,7 +146,8 @@ class ViewerInfoGestureComposeTest {
 
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.dispatchOnBackCancelled() }
         composeRule.onRoot().performTouchInput {
-            swipeDown(startY = height * IMAGE_START, endY = height * SMALL_END, durationMillis = FAST_SWIPE_MS)
+            // Langsam und kurz: Ein schneller Zug von 10 % der Höhe wäre nach den dp-Schwellen ein Wegwischen (ADR 0010).
+            swipeDown(startY = height * IMAGE_START, endY = height * SMALL_END, durationMillis = SLOW_SWIPE_MS)
         }
 
         composeRule.mainClock.autoAdvance = true
