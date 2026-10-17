@@ -118,10 +118,10 @@ private fun EmberlightScaffold(
                 ) {
                     NavigationBar(
                         // Die Oberkante merkt sich der Zustand: Beim Rückweg aus dem Viewer braucht das Raster die Grenze (ADR 0010).
+                        // Ausblenden misst die Leiste auf Höhe 0 (Top 0). Diese Werte werden nicht übernommen, sonst gälte jede Kachel als unsichtbar.
                         modifier =
                             Modifier.onGloballyPositioned { coords ->
-                                chrome.bottomBarTopPx =
-                                    coords.boundsInRoot().top
+                                if (!chrome.hidden) chrome.bottomBarTopPx = coords.boundsInRoot().top
                             },
                     ) {
                         TopLevelDestination.entries.forEach { destination ->
