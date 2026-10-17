@@ -507,3 +507,64 @@ Status: umgesetzt im Branch `feat/m2-kurzer-blick-und-infobereich`. Geräteprüf
 ### Gerätebefunde und Messwerte
 
 Siehe Abschnitt „Geräteprüfung Kurzer Blick und Infobereich“.
+
+## Geräteprüfung Kurzer Blick und Infobereich (17.10.2026)
+
+Gerät: Honor Magic V2, Android 16, Außendisplay (displayId 0, physische ID 4630946324137792644, 1060 × 2376). Debug-Build des Branches für I, II, III, Benchmark-Build für V. Demo-Modus per `--ez emberlight.demo true`, am Ende in beiden Apps aus und gestoppt. Fotos nur vom Außendisplay, nur wenn die Demo-App dort im Fokus war (`topResumedActivity`, Fokus auf Display 0 geprüft). Alle Fotos zeigten die Demo-App mit DEMO-Badge. Logcat nur mit PID und Tag `EmberlightViewer`.
+
+### Bereits belegt aus dem vorigen Lauf
+
+- Der Infobereich öffnet mit korrekten Demo-Daten.
+- Horizontales Wischen wechselt das Medium, der Bereich zeigt dann die neuen Angaben.
+- Zurück schließt zuerst den Bereich.
+- Kurzer Druck: Blick-Marken korrekt.
+
+### Szenario I-Rest: Infobereich offen, Wischen nach unten und Zurück
+
+Ergebnis: nicht bestanden.
+
+- Wischen nach unten auf dem Infobereich (Kopfzeile, oberer Rand und Inhalt, je langsam und schnell, vier Varianten) schloss den Bereich nicht. Fotos davor und danach identisch.
+- Wischen nach unten vom Bildbereich oberhalb des Bereichs schloss den Infobereich. Danach blieb der Viewer offen, das Bild aber verkleinert und seitlich versetzt stehen (ca. 85 % Größe, schwarzer Rand), auch nach 4 s unverändert. Erwartet wäre das volle Vollbild. Der Zustand hängt.
+- Zurück bei offenem Infobereich: schließt nur den Bereich, der Viewer bleibt offen (Foto davor und danach, belegt).
+- Befund offen: Warum das Wischen auf dem Bereich nicht greift, ist nicht geklärt. Das Aufwärtswischen mit derselben Eingabe funktioniert. Vermutung, nicht belegt: Der verschachtelte Scroll des Bereichs verbraucht den Zug vor der Schließlogik.
+
+### Szenario II: Doppeltipp-Zoom
+
+Ergebnis: bestanden.
+
+- Gezoomt: Wischen nach oben öffnet keinen Infobereich, das Bild schwenkt (Foto belegt).
+- Gezoomt: Wischen nach unten schließt den Viewer nicht (Foto belegt).
+
+### Szenario III: ohne Bereich und Zoom, Wegwischen nach unten
+
+Ergebnis: bestanden.
+
+- Unter der Schwelle: das Bild federt in die Vollbild-Lage zurück (Foto identisch zum frischen Viewer).
+- Über der Schwelle: Der Viewer schließt in die Rasterkachel 1 (Foto belegt). Log: `Ziel-Grenzen aktuell id=1`.
+
+### Szenario IV: echtes Halten
+
+Ergebnis: nicht geprüft, vom Nutzer zu testen.
+
+- `input keyevent --duration <ms> 4` existiert auf diesem Gerät, die Taste wurde damit nicht gehalten geprüft, weil der Befehl innerhalb des Viewers nur die Taste simuliert. Ein Halten am Bildschirm wurde nicht erzeugt. Kein Gerät-Hack.
+
+### Szenario V: Messung Benchmark-Build
+
+Benchmark-Build des Branches, Demo an. `gfxinfo reset`, dann fünfmal Öffnen, Infobereich auf (Wischen nach oben), Infobereich zu (Zurück), Viewer zu (Zurück). 763 Frames.
+
+| Messgröße | Wert | ADR-Vergleich |
+|---|---|---|
+| Janky (neu) | 3,28 % (25) | ca. 2,3 % |
+| Janky (legacy) | 4,33 % (33) | |
+| P50 | 8 ms | |
+| P90 | 13 ms | |
+| P95 | 18 ms | |
+| P99 | 29 ms | 26 bis 34 ms |
+| Missed Vsync | 1 | |
+
+Einschätzung: P99 liegt im Band, der Janky-Anteil über dem früheren Wert. Eine Einzelmessung mit fünf Zyklen, keine Wiederholung. Ob jeder der fünf Zyklen den Bereich tatsächlich öffnete, ist nicht je Zyklus geprüft.
+
+### Offene Punkte
+
+- Fehler I-Rest (oben): Wischen nach unten auf dem Infobereich schließt nicht, und der Schließweg vom Bild lässt das Bild im verkleinerten Zustand hängen. Der Merge ist deshalb nicht erfolgt.
+- Echtes Halten der Zurück-Taste: vom Nutzer zu testen (Kurzer Blick, Stufe und Abbruch bei langem Druck).
