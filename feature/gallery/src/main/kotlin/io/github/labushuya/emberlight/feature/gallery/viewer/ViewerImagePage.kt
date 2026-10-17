@@ -86,9 +86,11 @@ internal fun ViewerImagePage(
         currentOverlay.registerZoom(item.id, state.zoomableState)
         onDispose { currentOverlay.unregisterZoom(item.id) }
     }
-    // Bereit, sobald Telephoto das Bild oder den Platzhalter gezeichnet hat. Erst dann darf das Vorschaubild der Animation gehen.
+    // Bereit, sobald Telephoto das Bild gezeichnet hat. Erst dann darf das Vorschaubild der Animation gehen. Der Platzhalter
+    // zählt nicht: Telephoto meldet ihn auch dann als gezeichnet, wenn es gar keinen gibt (leerer Platzhalter). Eine leere Seite
+    // gälte sonst als bereit, und die Animation endete auf einem leeren Frame.
     LaunchedEffect(item.id, state) {
-        snapshotFlow { state.isImageDisplayed || state.isPlaceholderDisplayed }.first { it }
+        snapshotFlow { state.isImageDisplayed }.first { it }
         currentOverlay.pageShown(item.id)
     }
     LaunchedEffect(item.id, state) {
