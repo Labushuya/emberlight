@@ -57,6 +57,7 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
 - Nach jedem Meilenstein: bauen, testen, kurz in `docs/KONZEPT.md` nachtragen, wenn sich eine Entscheidung geändert hat.
 - UI-Änderungen brauchen aktualisierte Screenshot-Goldens im selben PR.
 - Coverage-Untergrenze: 70 % Zeilen (Kover, in CI erzwungen); nicht ohne begründete ADR senken.
+- Gemergte Branches und vom Assistenten angelegte Test-Branches dürfen ohne Rückfrage gelöscht werden (Freigabe 17.10.2026). Tags, `main` und fremde Branches nie ohne Rückfrage.
 
 ## Meilensteine
 
@@ -69,6 +70,7 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
    - Gäste-Webseite mit Upload, Download und Uploader-Anzeige
    - getrennter Space-Speicher, Ablauf erzwingen
    - Schutz gegen Manipulation (Details als ADR)
+   - GPS-Entfernung beim Upload
    - Nachhalten mit Erinnerung und automatischer Löschung
    - gezielte Übernahme ausgewählter Medien in `Pictures/Emberlight/<Space>`
 4. **Eigenes WLAN**: LocalOnlyHotspot, WLAN-QR-Code plus Beitritts-URL, Hinweise für Gäste ohne Internet, Fallbacks bei Geräten ohne Unterstützung.

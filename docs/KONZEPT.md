@@ -29,13 +29,20 @@ Eine Android-App aus zwei Teilen:
 
 Für den Nutzer: Space öffnen → QR-Code zeigen → fertig. Die App wählt den Weg, der Nutzer kann ihn überschreiben.
 
+### Verschlüsselung
+
+- Standard: In fremden, geteilten WLANs nutzt die App ihr eigenes WLAN (LocalOnlyHotspot, WPA2). Dort ist der Verkehr verschlüsselt.
+- App-zu-App-Verbindungen sind immer verschlüsselt, mit Zertifikats-Pinning über den QR-Code.
+- Im eigenen bzw. vertrauten WLAN ist für Browser-Gäste HTTP mit Zugangsschlüssel möglich. Ohne Cloud gibt es für Browser-Gäste keine Verschlüsselung ohne Browser-Warnung, da nur selbstsignierte Zertifikate möglich sind.
+- Der Nutzer kann den Weg überschreiben. Die App weist dann auf das Risiko hin.
+
 ### Gäste ohne App
 
 - Die App betreibt einen eingebetteten HTTP-Server. Gäste scannen den QR-Code, wählen einen Anzeigenamen und landen auf einer Webseite, auf der sie hochladen, ansehen und herunterladen können.
 - Die Gäste-Seite zeigt alle Medien mit Uploader und Zeitpunkt. Herunterladen geschieht über den Download des Browsers; so gelangen Medien für Gäste auf das Gerät (siehe Trennung unter Spaces).
 - Hinweis für iPhone-Gäste: Browser-Downloads landen dort zuerst in der App „Dateien“, nicht direkt in der Fotos-App. Die Gäste-Seite soll das erklären.
 - Die Gäste-Seite übernimmt die Gestaltung des Spaces (Name, Titelbild, Farbe).
-- Nach Ablauf ist die Gäste-Seite nicht mehr erreichbar (offen: F).
+- Nach Ablauf ist die Gäste-Seite nicht mehr erreichbar. Browser-Gäste kommen danach technisch an nichts mehr (siehe Ende und Nachhalten).
 - Nutzer mit emberlight treten dem Space nativ bei (QR-Scan in der App).
 
 ### Spaces
@@ -54,6 +61,7 @@ Eigenschaften eines Space: Name, Titelbild, Akzentfarbe, Laufzeit/Ablaufzeitpunk
 
 - Während der Laufzeit darf jeder Teilnehmer alle Medien sehen und herunterladen sowie eigene hochladen.
 - Die bisherigen Schalter „Hochladen/Herunterladen ja/nein“ pro Space entfallen.
+- Teilnehmer dürfen eigene Uploads zurückziehen. Der Gastgeber darf beliebige Medien entfernen.
 - Feinere Rechte und Moderation bleiben „später“.
 
 #### Trennung von Space und Galerie (harte Grenze)
@@ -74,6 +82,7 @@ Grundsätze; Details folgen als ADR in Meilenstein 3.
 - Kein Überschreiben fremder Dateien.
 - Größenlimits.
 - Zugangsschlüssel pro Teilnehmer. Mit dem Space werden sie ungültig.
+- GPS-Standortdaten werden beim Hochladen in einen Space standardmäßig entfernt (EXIF-Ortsdaten). Das ist pro Upload oder in den Einstellungen abschaltbar.
 
 #### Speicher
 
@@ -86,9 +95,10 @@ Grundsätze; Details folgen als ADR in Meilenstein 3.
 
 - Bei Ablauf oder vorzeitigem Beenden durch den Gastgeber schließt der Server sofort. Alle Zugangsschlüssel werden ungültig.
 - Die Space-Medien bleiben für die gewählte Nachhaltefrist im Space-Speicher: sofort löschen, 1 Tag, 1 Woche oder eigene Angabe. Die Frist wird beim Anlegen festgelegt und ist jederzeit änderbar (verlängern oder verkürzen).
-- In der Nachhaltezeit wählt man aus, was in die eigene Galerie übernommen wird. Vorauswahl: nichts. Schaltflächen „Alle auswählen“ und „Nichts auswählen“.
-- Vor Fristende kommt eine Erinnerung, damit der Nutzer mitbekommt, dass das Nachhalten ausläuft und er handeln sollte. Danach wird automatisch gelöscht.
-- Offen: ob das Nachhalten auch für App-Teilnehmer gilt (F), ob ohne Reaktion gelöscht wird (G), Form der Erinnerung (H).
+- Das Nachhalten gilt nur beim Gastgeber. Teilnehmer laden während der Laufzeit selbst herunter, was sie behalten wollen. Browser-Gäste kommen nach Ablauf technisch an nichts mehr.
+- In der Nachhaltezeit wählt der Gastgeber aus, was in die eigene Galerie übernommen wird. Vorauswahl: nichts. Schaltflächen „Alle auswählen“ und „Nichts auswählen“.
+- Vor Fristende kommt eine Erinnerung, damit der Gastgeber mitbekommt, dass das Nachhalten ausläuft und er handeln sollte. Die Erinnerung ist eine Benachrichtigung mit den Aktionen „Ansehen / Verlängern / Jetzt löschen“. Zusätzlich erscheint ein Hinweis-Punkt am App-Symbol und ein Hinweis beim Öffnen der App. Android-„Bubbles“ werden nicht genutzt.
+- Reagiert niemand auf die Erinnerung, wird zum Fristende trotzdem automatisch gelöscht.
 
 #### Gastgeber-Handy als Verteiler
 
@@ -133,12 +143,6 @@ Details und Messwerte stehen in den ADRs 0006 bis 0011.
 
 ## Offene Punkte
 
-- **F) Nachhalten bei App-Teilnehmern.** Gilt das Nachhalten nur beim Gastgeber oder auch bei App-Teilnehmern? Dafür müssten App-Teilnehmer während des Space alle Medien vorab in den getrennten Speicher laden, was Speicher kostet. Browser-Gäste kommen nach Ablauf technisch an nichts mehr. Vorschlag: Nachhalten nur beim Gastgeber. Teilnehmer laden während der Laufzeit selbst herunter, was sie behalten wollen.
-- **G) Löschung ohne Reaktion.** Wird ohne Reaktion auf die Erinnerung zum Fristende trotzdem gelöscht? Vorschlag: ja.
-- **H) Form der Erinnerung.** Vorschlag: Benachrichtigung mit Aktionen „Ansehen / Verlängern / Jetzt löschen“, Hinweis-Punkt am App-Symbol und Hinweis beim Öffnen der App. Android-„Bubbles“ sind für Unterhaltungen gedacht und dafür ungeeignet.
-- **I) Standortdaten beim Hochladen.** Sollen GPS-Daten beim Hochladen standardmäßig entfernt werden, abschaltbar? Vorschlag: ja.
-- **J) Fremdes WLAN.** Im eigenen WLAN der App schützt WPA2. In einem fremden, geteilten WLAN wäre HTTP mit Token mitlesbar. Für Browser-Gäste gibt es ohne Cloud keine Verschlüsselung ohne Browser-Warnung, weil nur selbstsignierte Zertifikate möglich sind. Bisher: Für das MVP reicht HTTP plus Token, TLS mit selbstsigniertem Zertifikat (Fingerprint im QR-Code) später prüfen. Vorschlag: In fremden WLANs standardmäßig das eigene WLAN der App (WPA2) nutzen. App-zu-App-Verbindungen immer verschlüsselt, mit Zertifikats-Pinning über den QR-Code.
-- **K) Zurückziehen und Entfernen.** Dürfen Teilnehmer eigene Uploads zurückziehen und der Gastgeber beliebige Medien entfernen? Vorschlag: ja, beides.
 - Kompatibilität mit dem LocalSend-Protokoll: Interessant, aber kein MVP-Ziel.
 - Moderne Galerie-Funktionen wie semantische Suche oder Gesichtsgruppierung, nur On-Device: nach dem MVP.
 - Design-Richtung der App: Der Banner (`docs/banner.png`) gibt die Stimmung vor (dunkel, warme Glut, Funken), ist aber noch kein festes Design-System. Das Basis-Theme steht (ADR 0003), das Design-System entsteht ab Meilenstein 2.
@@ -146,3 +150,5 @@ Details und Messwerte stehen in den ADRs 0006 bis 0011.
 ## Änderungsnotiz
 
 Änderungen am 16.10.2026: Space-Speicher getrennt von der Galerie, Rechte-Schalter entfallen, Nachhalten mit Frist.
+
+17.10.2026: Fragen F–K entschieden. Nachhalten nur beim Gastgeber, Löschung auch ohne Reaktion, Erinnerung als Benachrichtigung mit Aktionen, GPS-Daten beim Upload standardmäßig entfernt, eigenes WLAN der App in fremden Netzen, Zurückziehen eigener Uploads und Entfernen durch den Gastgeber.
