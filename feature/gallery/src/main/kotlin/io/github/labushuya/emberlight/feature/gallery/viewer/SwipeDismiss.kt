@@ -13,23 +13,64 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.hypot
 
-/** Anteil der Höhe, ab dem ein Loslassen den Viewer schließt (ca. 15 %). */
-internal const val DISMISS_FRACTION = 0.15f
+/**
+ * Feste Schwellen der vertikalen Gesten in dp (ADR 0010, Gesten-Schwellen in dp). Sie hängen nicht an der Höhe des Geräts, sondern
+ * gelten gleich auf jedem Gerät. Umgerechnet in Pixel wird über [GesturePx.of].
+ */
+internal object ViewerGestureDp {
+    /** Infobereich: Weg in dp, ab dem er beim Loslassen einrastet. Gleich dem Positionsschwellwert von Material 3 (56 dp). */
+    const val INFO_OPEN_DP = 56f
 
-/** Mindestanteil der Höhe für den Schnellschluss über die Geschwindigkeit. Verhindert Fehlschließen bei kleinen Zuckern. */
-internal const val FLING_MIN_FRACTION = 0.05f
+    /** Infobereich: Geschwindigkeit in dp/s für den Schnellschluss. Darunter gilt der Weg allein. */
+    const val INFO_FLING_DP_PER_SECOND = 200f
 
-/** Geschwindigkeit (dp je Sekunde), ab der eine Wischbewegung als schnell gilt. */
-internal const val FLING_DP_PER_SECOND = 600f
+    /** Infobereich: Mindestweg in dp, damit ein Schnellschluss zählt. Schützt vor Zucken. */
+    const val INFO_FLING_MIN_DP = 12f
+
+    /** Wegwischen: Weg in dp, ab dem ein Loslassen den Viewer schließt. */
+    const val DISMISS_DP = 96f
+
+    /** Wegwischen: Geschwindigkeit in dp/s für den Schnellschluss. */
+    const val DISMISS_FLING_DP_PER_SECOND = 400f
+
+    /** Wegwischen: Mindestweg in dp für den Schnellschluss. Verhindert Fehlschließen bei kleinen Zuckern. */
+    const val DISMISS_FLING_MIN_DP = 24f
+}
+
+/** Die Schwellen aus [ViewerGestureDp] in Pixel, für die Dichte des Geräts. Ohne Bezug zur Höhe des Bildschirms. */
+internal class GesturePx(
+    val infoOpenPx: Float,
+    val infoFlingPerSecond: Float,
+    val infoFlingMinPx: Float,
+    val dismissPx: Float,
+    val dismissFlingPerSecond: Float,
+    val dismissFlingMinPx: Float,
+) {
+    companion object {
+        /** Rechnet die dp-Schwellen für die Dichte [density] in Pixel um. */
+        fun of(density: Density): GesturePx =
+            with(density) {
+                GesturePx(
+                    infoOpenPx = ViewerGestureDp.INFO_OPEN_DP.dp.toPx(),
+                    infoFlingPerSecond = ViewerGestureDp.INFO_FLING_DP_PER_SECOND.dp.toPx(),
+                    infoFlingMinPx = ViewerGestureDp.INFO_FLING_MIN_DP.dp.toPx(),
+                    dismissPx = ViewerGestureDp.DISMISS_DP.dp.toPx(),
+                    dismissFlingPerSecond = ViewerGestureDp.DISMISS_FLING_DP_PER_SECOND.dp.toPx(),
+                    dismissFlingMinPx = ViewerGestureDp.DISMISS_FLING_MIN_DP.dp.toPx(),
+                )
+            }
+    }
+}
 
 /** Verhältnis der Achsen: Eine Bewegung gilt als vertikal, wenn sie mehr als so viel mal stärker vertikal als horizontal geht. */
 internal const val AXIS_RATIO = 1.5f
 
-/** Größte Verkleinerung beim Wegwischen (10 %). */
+/** Größte Verkleinerung beim Wegwischen (10 %). Rein optisch, die Schwelle hängt nicht daran. */
 internal const val SHRINK_MAX = 0.1f
 
 /** Zoomstufe, unterhalb derer das Bild als ungezoomt gilt (Telephoto liefert ungefähr 0). */
@@ -37,9 +78,6 @@ internal const val ZOOM_EPSILON = 0.001f
 
 /** Anteil der Höhe, den der Infobereich offen einnimmt (ca. 60 %). Das Bild bleibt oben sichtbar (ADR 0010, Infobereich). */
 internal const val INFO_PANEL_FRACTION = 0.6f
-
-/** Ab diesem Anteil rastet der Infobereich beim Loslassen offen ein, sonst zu. */
-internal const val INFO_SNAP_FRACTION = 0.5f
 
 /** Entscheidung über eine Geste, sobald sie den Schwellwert der Bedienung überschreitet. */
 internal enum class DragIntent {
@@ -84,34 +122,38 @@ internal fun dragScale(
 ): Float = 1f - SHRINK_MAX * dismissProgress(offsetPx, heightPx)
 
 /**
- * Schließen beim Loslassen? Ja, wenn die Bewegung nach unten die Schwelle (ca. 15 % der Höhe) erreicht. Ja auch bei einer
- * schnellen Bewegung nach unten, sofern sie mindestens [FLING_MIN_FRACTION] der Höhe zurückgelegt hat. Sonst federt der
- * Viewer zurück.
+ * Schließen beim Loslassen? Ja, wenn der Weg nach unten [GesturePx.dismissPx] erreicht. Ja auch bei einer schnellen Bewegung nach
+ * unten, sofern sie mindestens [GesturePx.dismissFlingMinPx] zurückgelegt hat. Sonst federt der Viewer zurück. Die Höhe des
+ * Bildschirms spielt keine Rolle: Dieselbe Strecke in dp schließt auf jedem Gerät.
  */
 internal fun shouldDismiss(
     offsetPx: Float,
     velocityYPerSecond: Float,
-    heightPx: Float,
-    flingPerSecond: Float,
+    thresholds: GesturePx,
 ): Boolean {
-    if (offsetPx <= 0f || heightPx <= 0f) return false
-    if (offsetPx >= heightPx * DISMISS_FRACTION) return true
-    return offsetPx >= heightPx * FLING_MIN_FRACTION && velocityYPerSecond >= flingPerSecond
+    if (offsetPx <= 0f) return false
+    if (offsetPx >= thresholds.dismissPx) return true
+    return offsetPx >= thresholds.dismissFlingMinPx && velocityYPerSecond >= thresholds.dismissFlingPerSecond
 }
 
 /**
- * Infobereich offen oder zu nach dem Loslassen. Eine schnelle Bewegung entscheidet die Richtung: nach oben öffnet, nach unten
- * schließt. Sonst zählt der Stand, ab [INFO_SNAP_FRACTION] rastet er offen ein.
+ * Infobereich offen oder zu nach dem Loslassen. [startOpen] ist der Stand beim Beginn der Geste, [travelUpPx] der Weg des
+ * Fingers seit dem Beginn nach oben (nach unten negativ). Ein schneller Zug mit Mindestweg entscheidet die Richtung. Sonst
+ * entscheidet der Weg: ab [GesturePx.infoOpenPx] nach oben öffnet, ab gleichem Weg nach unten schließt. Darunter federt er
+ * in den Ausgangsstand zurück.
  */
 internal fun infoSheetOpens(
-    fraction: Float,
+    startOpen: Boolean,
+    travelUpPx: Float,
     velocityYPerSecond: Float,
-    flingPerSecond: Float,
+    thresholds: GesturePx,
 ): Boolean =
     when {
-        velocityYPerSecond <= -flingPerSecond -> true
-        velocityYPerSecond >= flingPerSecond -> false
-        else -> fraction >= INFO_SNAP_FRACTION
+        velocityYPerSecond <= -thresholds.infoFlingPerSecond && travelUpPx >= thresholds.infoFlingMinPx -> true
+        velocityYPerSecond >= thresholds.infoFlingPerSecond && travelUpPx <= -thresholds.infoFlingMinPx -> false
+        travelUpPx >= thresholds.infoOpenPx -> true
+        travelUpPx <= -thresholds.infoOpenPx -> false
+        else -> startOpen
     }
 
 /** Wegwischen und Infobereich beginnen nur, wenn das Bild nicht gezoomt ist. Gezoomt gehört die Geste dem Bild (Verschieben). */
@@ -136,7 +178,7 @@ internal fun Modifier.verticalSwipe(
     val viewConfiguration = LocalViewConfiguration.current
     return pointerInput(overlay) {
         val slop = viewConfiguration.touchSlop
-        val fling = FLING_DP_PER_SECOND.dp.toPx()
+        val thresholds = GesturePx.of(this)
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             if (!currentCanStart()) return@awaitEachGesture
@@ -199,9 +241,9 @@ internal fun Modifier.verticalSwipe(
             }
             val velocity = tracker.calculateVelocity().y
             if (onSheet) {
-                overlay.infoDragEnded(velocity, fling)
+                overlay.infoDragEnded(velocity, thresholds)
             } else if (intent == DragIntent.DISMISS) {
-                overlay.dragEnded(velocityYPerSecond = velocity, flingPerSecond = fling)
+                overlay.dragEnded(velocity, thresholds)
             }
         }
     }
@@ -224,7 +266,7 @@ internal fun Modifier.sheetDragToClose(
     val viewConfiguration = LocalViewConfiguration.current
     return pointerInput(overlay) {
         val slop = viewConfiguration.touchSlop
-        val fling = FLING_DP_PER_SECOND.dp.toPx()
+        val thresholds = GesturePx.of(this)
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             if (overlay.phase != OverlayPhase.OPEN || !overlay.infoVisible) return@awaitEachGesture
@@ -265,7 +307,7 @@ internal fun Modifier.sheetDragToClose(
                 tracker.addPosition(change.uptimeMillis, change.position)
                 change.consume()
             }
-            if (taken) overlay.infoDragEnded(tracker.calculateVelocity().y, fling)
+            if (taken) overlay.infoDragEnded(tracker.calculateVelocity().y, thresholds)
         }
     }
 }

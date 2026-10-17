@@ -78,6 +78,12 @@ internal class ViewerOverlayState(
     var infoFraction: Float by mutableFloatStateOf(0f)
         private set
 
+    /** Stand des Infobereichs beim Beginn des laufenden Ziehens. */
+    private var infoDragStartOpen = false
+
+    /** Weg des Fingers seit Beginn des Ziehens am Infobereich, nach unten positiv. Ungeklemmt, für die Schwelle. */
+    private var infoTravelPx = 0f
+
     /**
      * Der Infobereich ist offen oder fährt noch ein bzw. aus. Solange er sichtbar ist, gehört das Ziehen nach unten ihm und nicht
      * dem Wegwischen. Erst im Ruhezustand zu darf ein neues Ziehen wegwischen (ADR 0010, Infobereich).
@@ -208,10 +214,10 @@ internal class ViewerOverlayState(
     /** Loslassen: schließen über der Schwelle oder über die Geschwindigkeit, sonst federt das Bild zurück. */
     fun dragEnded(
         velocityYPerSecond: Float,
-        flingPerSecond: Float,
+        thresholds: GesturePx,
     ) {
         if (phase != OverlayPhase.DRAGGING) return
-        val dismiss = shouldDismiss(dragY, velocityYPerSecond, heightPx, flingPerSecond)
+        val dismiss = shouldDismiss(dragY, velocityYPerSecond, thresholds)
         phase = nextPhase(phase, OverlayEvent.DragEnded(dismiss = dismiss))
         if (dismiss) {
             closeAnimated()
@@ -220,25 +226,31 @@ internal class ViewerOverlayState(
         }
     }
 
-    /** Der Infobereich wird gezogen. Nur im Ruhezustand des Bildes, sonst ohne Wirkung. */
+    /** Der Infobereich wird gezogen. Nur im Ruhezustand des Bildes, sonst ohne Wirkung. Merkt den Stand für die Entscheidung. */
     fun infoDragStarted() {
         if (phase != OverlayPhase.OPEN) return
         infoJob?.cancel()
+        infoDragStartOpen = infoOpen
+        infoTravelPx = 0f
     }
 
-    /** Folgt dem Finger um [deltaY] Pixel (nach oben negativ). Der Stand ist 0 bis 1. */
+    /** Folgt dem Finger um [deltaY] Pixel (nach unten positiv). Der Stand ist 0 bis 1. */
     fun infoDragBy(deltaY: Float) {
         if (phase != OverlayPhase.OPEN) return
+        infoTravelPx += deltaY
         infoFraction = (infoFraction - deltaY / panelHeightPx()).coerceIn(0f, 1f)
     }
 
-    /** Loslassen des Infobereichs: rastet offen oder zu, je nach Stand und Geschwindigkeit (ADR 0010, Infobereich). */
+    /**
+     * Loslassen des Infobereichs: rastet offen oder zu, je nach Weg des Fingers seit Beginn und Geschwindigkeit (ADR 0010,
+     * Infobereich, Gesten-Schwellen in dp).
+     */
     fun infoDragEnded(
         velocityYPerSecond: Float,
-        flingPerSecond: Float,
+        thresholds: GesturePx,
     ) {
         if (phase != OverlayPhase.OPEN) return
-        setInfo(infoSheetOpens(infoFraction, velocityYPerSecond, flingPerSecond))
+        setInfo(infoSheetOpens(infoDragStartOpen, -infoTravelPx, velocityYPerSecond, thresholds))
     }
 
     /** Öffnet den Infobereich, etwa über die Bedienungshilfen. Nur im Ruhezustand des Bildes. */

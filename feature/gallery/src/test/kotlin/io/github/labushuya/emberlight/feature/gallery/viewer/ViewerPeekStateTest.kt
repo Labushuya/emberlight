@@ -2,6 +2,7 @@ package io.github.labushuya.emberlight.feature.gallery.viewer
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.unit.Density
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -158,37 +159,39 @@ class ViewerPeekStateTest {
         runTest(FakeFrameClock) {
             val state = overlay(this, shown = 1L)
 
+            // 40 dp nach oben, langsam: unter der Schwelle von 56 dp, also federt der Bereich zurück.
             state.infoDragStarted()
-            state.infoDragBy(-240f)
-            assertEquals(0.4f, state.infoFraction, EPS)
-            state.infoDragEnded(velocityYPerSecond = 0f, flingPerSecond = FLING)
+            state.infoDragBy(-40f)
+            assertEquals(40f / (HEIGHT * INFO_PANEL_FRACTION), state.infoFraction, EPS)
+            state.infoDragEnded(velocityYPerSecond = 0f, thresholds = THRESHOLDS)
             advanceUntilIdle()
             assertFalse(state.infoOpen)
             assertEquals(0f, state.infoFraction, EPS)
 
+            // 50 dp nach oben, aber schnell: der Schnellschluss öffnet.
             state.infoDragStarted()
             state.infoDragBy(-50f)
-            state.infoDragEnded(velocityYPerSecond = -700f, flingPerSecond = FLING)
+            state.infoDragEnded(velocityYPerSecond = -700f, thresholds = THRESHOLDS)
             advanceUntilIdle()
             assertTrue(state.infoOpen)
             assertEquals(1f, state.infoFraction, EPS)
         }
 
     @Test
-    fun aDragToHalfwayRestsOpen() =
+    fun aDragPastTheInfoThresholdRestsOpen() =
         runTest(FakeFrameClock) {
             val state = overlay(this, shown = 1L)
 
             state.infoDragStarted()
             state.infoDragBy(-300f)
-            state.infoDragEnded(velocityYPerSecond = 0f, flingPerSecond = FLING)
+            state.infoDragEnded(velocityYPerSecond = 0f, thresholds = THRESHOLDS)
             advanceUntilIdle()
 
             assertTrue(state.infoOpen)
         }
 
     @Test
-    fun aDownwardFlingClosesAnOpenSheetEvenFromAboveHalf() =
+    fun aDownwardFlingClosesAnOpenSheet() =
         runTest(FakeFrameClock) {
             val state = overlay(this, shown = 1L)
             state.openInfo()
@@ -196,7 +199,7 @@ class ViewerPeekStateTest {
 
             state.infoDragStarted()
             state.infoDragBy(120f)
-            state.infoDragEnded(velocityYPerSecond = 700f, flingPerSecond = FLING)
+            state.infoDragEnded(velocityYPerSecond = 700f, thresholds = THRESHOLDS)
             advanceUntilIdle()
 
             assertFalse(state.infoOpen)
@@ -245,6 +248,9 @@ class ViewerPeekStateTest {
     private companion object {
         const val EPS = 0.001f
         const val HEIGHT = 1000f
+
+        /** Schwellen in dp, bei einer Dichte von 1 also gleich den Pixeln. */
+        val THRESHOLDS = GesturePx.of(Density(1f))
         const val FLING = 600f
     }
 }
