@@ -309,7 +309,7 @@ Aus der Geräteprüfung (offen):
 
 ## Feinschliff nach dem Gerätetest (Korrektur 3)
 
-Status: umgesetzt im Branch `fix/m2-viewer-feinschliff`, noch nicht gemergt. Die Geräteprüfung (Honor Magic V2, Demo-Modus, Messung vorher/nachher) ist ausstehend: Am Prüftag war kein Gerät per adb verbunden. Der Merge folgt erst nach einer bestandenen Prüfung. Ergebnisse dann in „Geräteprüfung Feinschliff“.
+Status: umgesetzt im Branch `fix/m2-viewer-feinschliff`. Die Geräteprüfung (Honor Magic V2, Demo-Modus, Messung vorher/nachher) ist gelaufen, Ergebnisse unter „Geräteprüfung Feinschliff“. Ein Fehler aus der Prüfung ist behoben (Commit `88bff5d`).
 
 ### Befunde
 
@@ -355,4 +355,34 @@ Im Zoom gehört die Geste dem Bild. Ein Wisch nach unten verschiebt das Bild, er
 
 - Unit: `HeroHandoverGeometryTest` (gleiche Fit-Berechnung, Rundung, Start aus dem Zoom bei 1x, 2x, 4x und am Rand, monotoner Übergang), `CellBoundsTest` (Zählerstand, Entfernen, Sichtfenster, Sichtbarkeit unter Kopfzeile und über der Leiste), `ViewerOverlayStateTest` (Bereitschaft, Rückfall, Auswahl verwirft das Vorschaubild, Schließen sichert die Kachel vorher).
 - Compose (Robolectric): `ViewerHeroHandoverComposeTest` (Vorschaubild endet nach der Telephoto-Meldung, Rückfall ohne Bild, Schließen aus dem Zoom lässt den Zoom stehen und übergibt das Inhalts-Rechteck).
-- Geräteprüfung und Messung: ausstehend (kein Gerät verbunden, siehe Status oben). Die Tabelle mit Messwerten vorher/nachher folgt mit dem Ergebnis.
+### Geräteprüfung Feinschliff
+
+Gerät: Honor Magic V2, Android 16, Außendisplay 1060 × 2376, aktive Bildrate 60 Hz. Debug-Build und Benchmark-Build des Branches, Demo-Modus. Jedes Foto nur vom fokussierten Display mit DEMO-Badge.
+
+**Fehler aus der Prüfung, behoben (`88bff5d`):** Beim Schließen meldete `Ziel ohne Kachel` zunächst 10 von 10 Mal. Ursache: Die Navigationsleiste maß beim Ausblenden ihre Oberkante auf 0. Diese Grenze wurde als Sichtgrenze übernommen, dadurch galt jede Kachel als nicht sichtbar und die Animation fiel auf die Mitte zurück. Die Oberkante wird jetzt nur noch gemessen, solange die Leiste sichtbar ist (`EmberlightApp`). Nach dem Fix: 10 von 10 `Ziel-Grenzen aktuell`.
+
+Szenarien (Debug-Build nach dem Fix, Tag `EmberlightViewer`):
+
+- **A, 10× Öffnen und Schließen** (Kacheln 1 bis 10, inklusive Randkacheln und Video). Je Öffnen: Start, Seite Bild, Ende, entfernt, ohne Lücke. Zeitdifferenzen über alle zehn Zyklen: Start bis Seite Bild 41 bis 157 ms, Seite Bild bis Ende 218 bis 335 ms, Ende bis entfernt 106 bis 132 ms (Ausblenden 100 ms). Schließen: 10× `Ziel-Grenzen aktuell`, Fallback 0. Frames: Beim Öffnen liegen die ersten zwei Frames je Öffnen bei 35 bis 60 ms. Das ist über 2× Budget. Im Debug-Build traten 27 solche Frames in 713 abgefragten Frames auf, davon 20 im Öffnen-Übergang.
+- **B, 5× zwei bis drei Seiten wischen, dann Zurück.** Die Startkacheln lagen in der untersten sichtbaren Reihe. Ergebnis: `Ziel-Grenzen aktuell` 5 von 5, Fallback 0. Die Zielkachel entspricht jeweils der gewischten Seite (Start 15, nach zwei Wischen 17; Start 32, nach drei Wischen 35; Start 43, nach drei Wischen 46). Foto während des Schließens: Die Kachel 67 fliegt in ihre Position unterhalb der Kopfzeile, die Nummer ist lesbar. Foto nach dem Schließen: Kachel 52 steht direkt unter der Kopfzeile.
+- **C, 3× Doppeltipp-Zoom, einmal zusätzlich Schwenken am Rand, dann Zurück.** Ergebnis: `Ziel-Grenzen aktuell` 3 von 3, Fallback 0. Foto während des Schließens (Kachel 52): Das Bild schrumpft aus dem sichtbaren Ausschnitt in die Kachel, ohne Sprung. Die Frame-Ausreißer liegen nur beim Öffnen (zwei Frames je Öffnen, 44 bis 56 ms, Debug-Build).
+- **D, Wegwischen und Predictive Back.** Wisch unter der Schwelle (etwa 200 px): Der Viewer bleibt offen, keine Schließen-Marke. Wisch über der Schwelle (etwa 1000 px): Der Viewer schließt mit `Ziel-Grenzen aktuell`. Predictive Back per `motionevent` vom Rand (240 px, Abbruch): Der Viewer bleibt offen (Foto), keine Schließen-Marke. Ein vollendeter Predictive-Back-Schluss ist damit nicht belegt und bleibt offen.
+
+Messung im Benchmark-Build, fünf Öffnen-und-Schließen-Zyklen, `gfxinfo reset` vorher. Die Galerie zeigte in dieser Messung 6 Spalten, vorher waren es 4. Die Werte sind deshalb nur bedingt vergleichbar.
+
+| Messgröße | vorher | nachher |
+|---|---|---|
+| Janky frames | 2,07 % | 2,49 % |
+| P50 / P90 / P95 / P99 | 8 / 12 / 15 / 30 ms | 8 / 13 / 16 / 28 ms |
+| Missed Vsync | 0 | 0 |
+| Frames gesamt | 484 | 482 |
+
+Bildrate des aktiven Displays: 60 Hz.
+
+Messmethode: `dumpsys gfxinfo framestats` liefert nur die letzten zehn Frames. Für den Verlauf wurde deshalb alle 0,1 s abgefragt und nach Vsync-Zeitstempel zusammengeführt. Die Zeitstempel stimmen mit den Log-Marken überein (gleiche Monotonuhr).
+
+Offen aus dieser Prüfung:
+
+- Die Frame-Ausreißer beim Öffnen (zwei Frames je Öffnen, 36 bis 60 ms) traten im Debug-Build auf. Im Benchmark-Build lag in fünf Zyklen nur ein Frame über 33 ms (35,4 ms, Abfrage nicht vollständig). Die Ursache ist nicht untersucht.
+- Vollendetes Predictive Back ist nicht belegt (siehe D).
+- Zoomstufen 2 und 6 Spalten sowie das Innendisplay bleiben wie in Korrektur 2 offen.
