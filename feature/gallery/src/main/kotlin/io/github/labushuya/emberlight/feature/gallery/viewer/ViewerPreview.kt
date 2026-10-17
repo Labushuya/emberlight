@@ -21,13 +21,15 @@ import io.github.labushuya.emberlight.core.media.thumbnail.MediaThumbnail
 
 /**
  * Vorschaubild einer Seite, solange das Original nicht bereit ist. Es liegt im Fit-Rechteck der Seite, dort also, wo das
- * Vollbild es zeigt. [onError] meldet, wenn das Bild nicht lädt.
+ * Vollbild es zeigt. [onError] meldet, wenn das Bild nicht lädt. [onReady] meldet, wenn das Bild geladen und damit gezeichnet
+ * werden kann (Bereitschaft für die Hero-Animation, ADR 0010).
  */
 @Composable
 internal fun ViewerPreview(
     item: ViewerItem,
     onError: () -> Unit,
     modifier: Modifier = Modifier,
+    onReady: () -> Unit = {},
 ) {
     val context = LocalPlatformContext.current
     val request =
@@ -45,6 +47,7 @@ internal fun ViewerPreview(
             contentDescription = null,
             contentScale = ContentScale.Fit,
             onError = { _ -> onError() },
+            onSuccess = { _ -> onReady() },
             modifier = Modifier.fillMaxSize(),
         )
     }

@@ -57,7 +57,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.ZoneId
-import kotlin.math.roundToInt
 
 /** Abstand zwischen zwei Seiten. */
 private val PAGE_SPACING = 16.dp
@@ -305,14 +304,17 @@ private fun heroAspect(
     return previewAspect(context, item)
 }
 
-/** Größtes Rechteck mit [aspect] in einem Bereich der Größe [width] mal [height], zentriert. Ohne Verhältnis: der ganze Bereich. */
+/**
+ * Fit-Rechteck des Bildes im Overlay: dieselbe Berechnung wie für das Vorschaubild der Hero-Animation ([fitRect]), auf ganze
+ * Pixel gerundet ([snapRect]). Ohne Verhältnis: der ganze Bereich.
+ */
 private fun fitInside(
     width: Float,
     height: Float,
     aspect: Float?,
 ): Rect {
     val bounds = Rect(Offset.Zero, Size(width, height))
-    return if (aspect == null) bounds else fitRect(bounds, aspect)
+    return if (aspect == null) bounds else snapRect(fitRect(bounds, aspect))
 }
 
 /** Schrumpf-Transformation des Pagers: Der Pager wird so gelegt, dass das Fit-Bild zur Hero-Position passt. */
@@ -334,10 +336,16 @@ private fun androidx.compose.ui.graphics.GraphicsLayerScope.pagerTransform(
     translationY = (1f - k) * (tileCenter.y - fitCenter.y) + overlay.dragY
     alpha =
         when {
-            phase.pagerShown -> 1f
+            // Der Rückweg aus dem Zoom zeichnet das vorhandene Vorschaubild. Die Seite bleibt darunter unsichtbar.
+            overlay.zoomFrom != null -> 0f
 
-            // Während der Hero-Animation zeichnet das Bild die Ebene darüber, die Seite bleibt unsichtbar.
-            phase.heroShown && hasHero -> 0f
+            // Im Schließen zeichnet das Vorschaubild die Ebene. Die Seite bleibt unsichtbar.
+            phase == OverlayPhase.CLOSING && hasHero -> 0f
+
+            // Liegt das Vorschaubild darüber, liegt die Seite mit gleicher Geometrie darunter. So meldet sie, wann ihr Bild steht.
+            hasHero && overlay.heroAlpha > 0f -> 1f
+
+            phase.pagerShown -> 1f
 
             else -> k
         }
@@ -351,7 +359,7 @@ private fun HeroLayer(
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val image = bitmap ?: return@Canvas
-        if (!overlay.phase.heroShown) return@Canvas
+        if (overlay.phase == OverlayPhase.CLOSED || overlay.heroAlpha <= 0f) return@Canvas
         val fit = overlay.fit
         if (fit.width <= 0f || fit.height <= 0f) return@Canvas
         val localTile = overlay.heroTile?.translate(-overlay.originInRoot)
@@ -359,33 +367,45 @@ private fun HeroLayer(
         val tileAspect = if (tile.height > 0f) tile.width / tile.height else 1f
         val crop = cropSourceRect(image.width, image.height, tileAspect)
         val full = Rect(0f, 0f, image.width.toFloat(), image.height.toFloat())
-        val frame = heroFrame(overlay.progress, tile, fit, crop, full)
+        val frame = heroFrameOf(overlay, tile, fit, crop, full)
+        // Ganze Pixel an allen Kanten, wie das Fit-Rechteck der Seite (siehe fitInside).
         val dst =
-            transformRect(
-                rect = frame.dst,
-                pivot = Offset(size.width / 2f, size.height / 2f),
-                scale = dragScale(overlay.dragY, overlay.heightPx),
-                dy = overlay.dragY,
+            snapRect(
+                transformRect(
+                    rect = frame.dst,
+                    pivot = Offset(size.width / 2f, size.height / 2f),
+                    scale = dragScale(overlay.dragY, overlay.heightPx),
+                    dy = overlay.dragY,
+                ),
             )
-        // Ohne Kachel blendet die Animation nur ein, daher folgt die Deckkraft dem Fortschritt.
-        val alpha = if (localTile == null) overlay.progress.coerceIn(0f, 1f) else 1f
+        val src = snapRect(frame.src)
+        // Ohne Kachel blendet die Animation nur ein, daher folgt die Deckkraft dem Fortschritt. Das Ausblenden nach der
+        // Bereitschaft der Seite steuert die Deckkraft des Vorschaubildes.
+        val fade = if (localTile == null) overlay.progress.coerceIn(0f, 1f) else 1f
         drawImage(
             image = image,
-            srcOffset = IntOffset(frame.src.left.roundToInt(), frame.src.top.roundToInt()),
-            srcSize =
-                IntSize(
-                    frame.src.width
-                        .roundToInt()
-                        .coerceAtLeast(1),
-                    frame.src.height
-                        .roundToInt()
-                        .coerceAtLeast(1),
-                ),
-            dstOffset = IntOffset(dst.left.roundToInt(), dst.top.roundToInt()),
-            dstSize = IntSize(dst.width.roundToInt().coerceAtLeast(1), dst.height.roundToInt().coerceAtLeast(1)),
-            alpha = alpha,
+            srcOffset = IntOffset(src.left.toInt(), src.top.toInt()),
+            srcSize = IntSize(src.width.toInt().coerceAtLeast(1), src.height.toInt().coerceAtLeast(1)),
+            dstOffset = IntOffset(dst.left.toInt(), dst.top.toInt()),
+            dstSize = IntSize(dst.width.toInt().coerceAtLeast(1), dst.height.toInt().coerceAtLeast(1)),
+            alpha = fade * overlay.heroAlpha,
         )
     }
+}
+
+/**
+ * Rahmen der Hero-Animation zum Stand des Overlays. Startet der Viewer aus dem Zoom, beginnt er am sichtbaren Inhalts-Rechteck
+ * ([ViewerOverlayState.zoomFrom]) und läuft zur Kachel. Sonst gilt der übliche Verlauf von der Kachel zum Vollbild.
+ */
+private fun heroFrameOf(
+    overlay: ViewerOverlayState,
+    tile: Rect,
+    fit: Rect,
+    crop: Rect,
+    full: Rect,
+): HeroFrame {
+    val zoomFrom = overlay.zoomFrom ?: return heroFrame(overlay.progress, tile, fit, crop, full)
+    return lerpFrame(1f - overlay.progress, HeroFrame(dst = zoomFrom, src = full), HeroFrame(dst = tile, src = crop))
 }
 
 /** Beschreibung eines Elements für Screenreader, wie im Raster: „Foto vom …“ bzw. „Video, 0:42, vom …“. */

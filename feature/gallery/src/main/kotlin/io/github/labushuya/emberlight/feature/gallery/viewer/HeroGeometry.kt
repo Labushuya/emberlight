@@ -2,6 +2,7 @@ package io.github.labushuya.emberlight.feature.gallery.viewer
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import kotlin.math.roundToInt
 
 /*
  * Geometrie der Hero-Animation (ADR 0010). Reine Funktionen ohne Android: Ziel- und Quellrechteck, Zuschnitt und die
@@ -92,6 +93,36 @@ internal fun heroFrame(
     val k = t.coerceIn(0f, 1f)
     return HeroFrame(dst = lerpRect(tile, fit, k), src = lerpRect(crop, full, k))
 }
+
+/**
+ * Zwischenstand zwischen zwei Rahmen: Ziel und Ausschnitt gleichzeitig, beide linear in [u] (0 = [from], 1 = [to]). Das ist
+ * dieselbe Interpolation wie [heroFrame], nur mit einem frei gewählten Startrahmen. Der Schließen-Übergang aus dem Zoom
+ * startet so vom sichtbaren Inhalts-Rechteck (ADR 0010, Feinschliff).
+ */
+internal fun lerpFrame(
+    u: Float,
+    from: HeroFrame,
+    to: HeroFrame,
+): HeroFrame {
+    val k = u.coerceIn(0f, 1f)
+    return HeroFrame(dst = lerpRect(from.dst, to.dst, k), src = lerpRect(from.src, to.src, k))
+}
+
+/**
+ * Rechteck auf ganze Pixel gerundet, Kante für Kante. Hero-Animation und Seite rechnen mit demselben Rechteck: Beide runden
+ * auf diese Weise, damit es an den Kanten keinen Versatz gibt.
+ */
+internal fun snapRect(rect: Rect): Rect =
+    Rect(
+        left = rect.left.roundToInt().toFloat(),
+        top = rect.top.roundToInt().toFloat(),
+        right = rect.right.roundToInt().toFloat(),
+        bottom = rect.bottom.roundToInt().toFloat(),
+    )
+
+/** Sind alle vier Kanten endlich und das Rechteck nicht leer? Telephoto liefert ohne Layout ungültige Werte. */
+internal fun Rect.isUsable(): Boolean =
+    left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite() && width > 0f && height > 0f
 
 /**
  * Wendet Zieh- bzw. Rückgeste auf ein Rechteck an: Skalierung um [pivot] und danach Verschiebung um [dy]. [scale] ist 1 ohne

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
@@ -21,6 +22,7 @@ import io.github.labushuya.emberlight.core.design.motion.EmberlightMotion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.saket.telephoto.zoomable.ZoomableState
 
@@ -31,6 +33,8 @@ import me.saket.telephoto.zoomable.ZoomableState
  *
  * [shown] trägt die ID des gezeigten Elements, `null` heißt geschlossen. Die Galerie hält es über `rememberSaveable`, damit es
  * Drehen und Falten übersteht. [cellRect] liefert die Grenzen der sichtbaren Kachel in Root-Koordinaten (ohne Beobachtung).
+ * [beforeClose] bringt die Kachel vor dem Öffnen bzw. Schließen in den sichtbaren Bereich und liefert ihre aktuellen Grenzen
+ * (`null`, wenn sie nicht sichtbar wird). Der Aufrufer setzt es bei jeder Komposition neu.
  */
 @Stable
 internal class ViewerOverlayState(
@@ -38,6 +42,9 @@ internal class ViewerOverlayState(
     private val shown: MutableState<Long?>,
     private val cellRect: (Long) -> Rect?,
 ) {
+    /** Sicherung vor Öffnen und Schließen: Kachel sichtbar machen, Grenzen nach dem Layout liefern. */
+    var beforeClose: suspend (Long) -> Rect? = { id -> cellRect(id) }
+
     /** Die gezeigte Medien-ID, `null` wenn geschlossen. */
     val shownId: Long? get() = shown.value
 
@@ -61,16 +68,39 @@ internal class ViewerOverlayState(
     /** Ursprung des Overlays in Root-Koordinaten. */
     var originInRoot: Offset = Offset.Zero
 
-    /** Ziel der Hero-Animation in Root-Koordinaten. `null`: ohne Kachel, die Animation blendet zur Mitte aus. */
+    /** Ziel der Hero-Animation in Overlay-Koordinaten. `null`: ohne Kachel, die Animation blendet zur Mitte aus. */
     var heroTile: Rect? by mutableStateOf(null)
         private set
 
-    /** Die Zoomzustände der Bildseiten, damit ein gezoomtes Bild vor dem Schließen auf ungezoomt zurückfällt. */
+    /**
+     * Deckkraft des Vorschaubildes über dem Pager. Es bleibt sichtbar, bis die Seite das Bild nachweislich zeigt (ADR 0010,
+     * Feinschliff). Dann blendet es kurz aus. `0` heißt: nicht vorhanden.
+     */
+    var heroAlpha: Float by mutableFloatStateOf(if (shown.value != null) 0f else 1f)
+        private set
+
+    /**
+     * Startrechteck des Rückwegs aus dem Zoom: das auf dem Bildschirm sichtbare Inhalts-Rechteck. `null` ohne Zoom. Solange es
+     * gesetzt ist, zeichnet das Vorschaubild die Animation, der Pager bleibt unsichtbar.
+     */
+    var zoomFrom: Rect? by mutableStateOf(null)
+        private set
+
+    /** Die Zoomzustände der Bildseiten, damit der Rückweg aus dem Zoom das Inhalts-Rechteck liest. */
     private val zoomStates = HashMap<Long, ZoomableState>()
 
-    private var job: Job? = null
+    /** Element, dessen Vorschaubild die Animation gezeichnet hat. Ein anderes Element verwirft das Vorschaubild. */
+    private var openedId: Long? = null
 
-    /** Registriert den Zoomzustand einer Bildseite, [onDispose] meldet die Abmeldung. */
+    /** ID der Seite, die ihr Bild nachweislich zeigt. */
+    private var pageReadyId: Long? = null
+
+    private var job: Job? = null
+    private var fallbackJob: Job? = null
+    private var fadeJob: Job? = null
+    private var fading = false
+
+    /** Registriert den Zoomzustand einer Bildseite. */
     fun registerZoom(
         id: Long,
         zoom: ZoomableState,
@@ -82,12 +112,22 @@ internal class ViewerOverlayState(
         zoomStates.remove(id)
     }
 
-    /** Öffnet das Element [id]. Die Hero-Animation startet an dessen Kachel. */
-    fun open(id: Long) {
+    /**
+     * Öffnet das Element [id]. Die Hero-Animation startet an [tile], der Kachel des Elements. Ohne Kachel blendet sie nur ein.
+     */
+    fun open(
+        id: Long,
+        tile: Rect? = cellRect(id),
+    ) {
         if (phase != OverlayPhase.CLOSED) return
         shown.value = id
-        heroTile = cellRect(id)
+        openedId = id
+        pageReadyId = null
+        fading = false
+        heroAlpha = 1f
+        heroTile = tile
         phase = nextPhase(phase, OverlayEvent.Open)
+        ViewerTrace.mark("Hero-Animation Start", id)
         job?.cancel()
         job =
             scope.launch {
@@ -95,7 +135,20 @@ internal class ViewerOverlayState(
                 dragY = 0f
                 animate(0f, 1f, animationSpec = heroSpec()) { value, _ -> progress = value }
                 phase = nextPhase(phase, OverlayEvent.OpenFinished)
+                ViewerTrace.mark("Hero-Animation Ende", id)
+                if (pageReadyId == id) fadeHeroOut(id) else armHeroFallback(id)
             }
+    }
+
+    /**
+     * Die Seite [id] zeigt ihr Bild im Fit-Rechteck, also das Vorschaubild oder das Vollbild. Erst dann darf das Vorschaubild
+     * der Animation verschwinden. Ohne diese Meldung bleibt es bis zur Rückfallzeit.
+     */
+    fun pageShown(id: Long) {
+        if (id != shown.value || pageReadyId == id) return
+        pageReadyId = id
+        ViewerTrace.mark("Seite Bild angezeigt", id)
+        retireHeroIfReady()
     }
 
     /** Der Nutzer beginnt zu ziehen. Eine laufende Feder endet, das Bild bleibt an seiner Stelle. */
@@ -103,6 +156,7 @@ internal class ViewerOverlayState(
         if (phase != OverlayPhase.OPEN && phase != OverlayPhase.SETTLING) return
         job?.cancel()
         phase = nextPhase(phase, OverlayEvent.DragStarted)
+        retireHeroIfReady()
     }
 
     /** Folgt dem Finger um [delta] Pixel. Nach oben geht es nicht über die Ausgangslage hinaus. */
@@ -126,14 +180,19 @@ internal class ViewerOverlayState(
         }
     }
 
-    /** Die System-Rückgeste meldet [fraction] (0 bis 1). Das Bild schrumpft in Richtung Kachel. */
+    /**
+     * Die System-Rückgeste meldet [fraction] (0 bis 1). Das Bild schrumpft in Richtung Kachel. Ist das Bild gezoomt, startet
+     * der Schrumpf aus dem sichtbaren Ausschnitt.
+     */
     fun backProgressed(fraction: Float) {
         val next = nextPhase(phase, OverlayEvent.BackProgressed)
         if (next == phase && next != OverlayPhase.BACK) return
+        if (phase == OverlayPhase.OPEN) captureZoomStart()
         job?.cancel()
         phase = next
         progress = 1f - fraction.coerceIn(0f, 1f)
         dragY = 0f
+        retireHeroIfReady()
     }
 
     /** Die Rückgeste wurde abgebrochen: Das Bild federt zurück zum Vollbild. */
@@ -145,6 +204,9 @@ internal class ViewerOverlayState(
             scope.launch {
                 animate(progress, 1f, animationSpec = SETTLE_SPRING) { value, _ -> progress = value }
                 phase = nextPhase(phase, OverlayEvent.SettleFinished)
+                // Die Seite ist wieder sichtbar, derselbe Zoom liegt darunter. Der Rückweg aus dem Zoom endet hier.
+                zoomFrom = null
+                retireHeroIfReady()
             }
     }
 
@@ -161,15 +223,21 @@ internal class ViewerOverlayState(
 
     /** Wählt das gezeigte Element, etwa nach einem Seitenwechsel. Ohne Wirkung, wenn geschlossen. */
     fun select(id: Long) {
-        if (shown.value != null) shown.value = id
+        if (shown.value == null) return
+        shown.value = id
+        // Ein anderes Element bekommt nicht das Vorschaubild des geöffneten.
+        if (id != openedId) dropHero()
     }
 
     /** Schließt ohne Animation, etwa wenn es nichts mehr zu zeigen gibt. */
     fun forceClose() {
+        cancelHeroJobs()
         job?.cancel()
         shown.value = null
         progress = 0f
         dragY = 0f
+        zoomFrom = null
+        heroAlpha = 0f
         phase = OverlayPhase.CLOSED
     }
 
@@ -177,6 +245,7 @@ internal class ViewerOverlayState(
     fun close() {
         val next = nextPhase(phase, OverlayEvent.CloseRequested)
         if (next == phase) return
+        if (phase == OverlayPhase.OPEN) captureZoomStart()
         phase = next
         closeAnimated()
     }
@@ -187,29 +256,104 @@ internal class ViewerOverlayState(
             scope.launch {
                 animate(dragY, 0f, animationSpec = SETTLE_SPRING) { value, _ -> dragY = value }
                 phase = nextPhase(phase, OverlayEvent.SettleFinished)
+                retireHeroIfReady()
             }
     }
 
     /**
-     * Schließt: Ein gezoomtes Bild fällt zuerst ohne Animation auf ungezoomt zurück. Dann läuft die Hero-Animation vom aktuellen
-     * Stand (Zieh-Versatz, Schrumpf, Fortschritt) zurück zur Kachel des aktuellen Elements.
+     * Schließt: Die Kachel wird vorher sichtbar gemacht ([beforeClose]), dann läuft die Hero-Animation vom aktuellen Stand
+     * zurück zur Kachel. Aus dem Zoom startet sie am sichtbaren Inhalts-Rechteck, ohne vorheriges Zurücksetzen des Zooms.
      */
     private fun closeAnimated() {
         job?.cancel()
+        cancelHeroJobs()
+        // Während des Schließens deckt das Vorschaubild die Seite ab, damit der Übergang nicht von der Seite unterbrochen wird.
+        heroAlpha = 1f
         job =
             scope.launch {
                 val id = shown.value
-                heroTile = id?.let(cellRect)
-                id?.let { zoomStates[it] }?.let { zoom ->
-                    if ((zoom.zoomFraction ?: 0f) > ZOOM_EPSILON) zoom.resetZoom(snap())
-                }
+                // Ohne gültiges Inhalts-Rechteck gibt es keinen Startpunkt im Zoom. Dann fällt das Bild wie bisher zurück.
+                if (zoomFrom == null && id != null && isZoomed(id)) zoomStates[id]?.resetZoom(snap())
+                val tile = if (id != null) beforeClose(id) else null
+                heroTile = tile
+                if (id != null) ViewerTrace.mark(if (tile != null) "Ziel-Grenzen aktuell" else "Ziel ohne Kachel", id)
                 coroutineScope {
                     launch { animate(progress, 0f, animationSpec = heroSpec()) { value, _ -> progress = value } }
                     launch { animate(dragY, 0f, animationSpec = heroSpec()) { value, _ -> dragY = value } }
                 }
                 shown.value = null
+                zoomFrom = null
+                heroAlpha = 0f
                 phase = nextPhase(phase, OverlayEvent.CloseFinished)
             }
+    }
+
+    /**
+     * Merkt sich, wo der sichtbare Zoom beginnt. Ohne Zoom bleibt es beim Ablauf ab dem Vollbild.
+     *
+     * `transformedContentBounds` ist in Telephoto 0.19.0 als veraltet markiert, liefert aber das Inhalts-Rechteck in
+     * Komponenten-Koordinaten, also Overlay-Koordinaten (die Seite füllt das Overlay). Die Ersatz-API arbeitet mit
+     * Koordinatenräumen, die hier nicht gebraucht werden. Beim Aktualisieren von Telephoto prüfen (ADR 0010).
+     */
+    @Suppress("DEPRECATION")
+    private fun captureZoomStart() {
+        val id = shown.value ?: return
+        zoomFrom = if (isZoomed(id)) zoomStates[id]?.transformedContentBounds?.takeIf { it.isUsable() } else null
+        if (zoomFrom != null) {
+            // Das Vorschaubild übernimmt die Animation, die Seite ist ab jetzt nicht mehr sichtbar.
+            cancelHeroJobs()
+            heroAlpha = 1f
+        }
+    }
+
+    private fun isZoomed(id: Long): Boolean = (zoomStates[id]?.zoomFraction ?: 0f) > ZOOM_EPSILON
+
+    /** Blendet das Vorschaubild aus, sobald die Seite es zeigt und nichts anderes es braucht (Animation, Zoom-Rückweg). */
+    private fun retireHeroIfReady() {
+        val id = shown.value ?: return
+        if (pageReadyId != id || zoomFrom != null) return
+        if (phase != OverlayPhase.OPEN && phase != OverlayPhase.DRAGGING && phase != OverlayPhase.BACK &&
+            phase != OverlayPhase.SETTLING
+        ) {
+            return
+        }
+        fadeHeroOut(id)
+    }
+
+    /** Rückfall: Die Seite meldet nie ein Bild (Fehler, fehlendes Vorschaubild). Nach [HERO_FALLBACK_MS] verschwindet das Vorschaubild. */
+    private fun armHeroFallback(id: Long) {
+        fallbackJob?.cancel()
+        fallbackJob =
+            scope.launch {
+                delay(HERO_FALLBACK_MS)
+                if (pageReadyId != id) {
+                    ViewerTrace.mark("Hero-Rückfall ohne Bild", id)
+                    fadeHeroOut(id)
+                }
+            }
+    }
+
+    private fun fadeHeroOut(id: Long) {
+        if (fading || heroAlpha <= 0f || zoomFrom != null) return
+        fading = true
+        fallbackJob?.cancel()
+        fadeJob?.cancel()
+        fadeJob =
+            scope.launch {
+                animate(heroAlpha, 0f, animationSpec = tween(HERO_FADE_MS)) { value, _ -> heroAlpha = value }
+                ViewerTrace.mark("Hero entfernt", id)
+            }
+    }
+
+    private fun dropHero() {
+        cancelHeroJobs()
+        heroAlpha = 0f
+    }
+
+    private fun cancelHeroJobs() {
+        fallbackJob?.cancel()
+        fadeJob?.cancel()
+        fading = false
     }
 
     private fun heroSpec(): FiniteAnimationSpec<Float> = EmberlightMotion.heroSpec()
@@ -219,6 +363,12 @@ internal class ViewerOverlayState(
             spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
     }
 }
+
+/** Ausblenden des Vorschaubildes nach der Bereitschaft der Seite (ms). Kurz, damit es nicht wie ein Wechsel wirkt. */
+internal const val HERO_FADE_MS = 100
+
+/** Wie lange das Vorschaubild höchstens stehen bleibt, wenn die Seite kein Bild meldet (ms). */
+internal const val HERO_FALLBACK_MS = 1_000L
 
 /**
  * Overlay-Zustand der Galerie oder des Albums. Die gewählte ID bleibt über `rememberSaveable` erhalten. Nach einem Prozess-Tod
