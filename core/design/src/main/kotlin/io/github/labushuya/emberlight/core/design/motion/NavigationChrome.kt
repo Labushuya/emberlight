@@ -15,6 +15,13 @@ import androidx.compose.runtime.setValue
 @Stable
 class NavigationChrome {
     var hidden: Boolean by mutableStateOf(false)
+
+    /**
+     * Oberkante der unteren Leiste in Root-Koordinaten, zuletzt gemessen während sie sichtbar war. Solange der Viewer die Leiste
+     * ausgeblendet hat, bleibt der Wert erhalten: Nach dem Schließen rückt die Leiste wieder dorthin. `null`, wenn es keine
+     * untere Leiste gibt (breite Displays mit Rail). Kein State: Der Wert wird nur gelesen, wenn ein Übergang startet.
+     */
+    var bottomBarTopPx: Float? = null
 }
 
 /** Der Zustand der Navigation, den die App bereitstellt. Ohne App (Tests, Vorschauen) ist er `null`. */

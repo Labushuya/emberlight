@@ -24,9 +24,12 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -113,7 +116,14 @@ private fun EmberlightScaffold(
                     enter = expandVertically(EmberlightMotion.chromeSpec()) + fadeIn(EmberlightMotion.chromeSpec()),
                     exit = shrinkVertically(EmberlightMotion.chromeSpec()) + fadeOut(EmberlightMotion.chromeSpec()),
                 ) {
-                    NavigationBar {
+                    NavigationBar(
+                        // Die Oberkante merkt sich der Zustand: Beim Rückweg aus dem Viewer braucht das Raster die Grenze (ADR 0010).
+                        modifier =
+                            Modifier.onGloballyPositioned { coords ->
+                                chrome.bottomBarTopPx =
+                                    coords.boundsInRoot().top
+                            },
+                    ) {
                         TopLevelDestination.entries.forEach { destination ->
                             val selected = currentDestination.isTopLevel(destination)
                             NavigationBarItem(
@@ -127,6 +137,7 @@ private fun EmberlightScaffold(
                 }
             }
         } else {
+            SideEffect { chrome.bottomBarTopPx = null }
             Row(modifier = modifier) {
                 AnimatedVisibility(
                     visible = shown,

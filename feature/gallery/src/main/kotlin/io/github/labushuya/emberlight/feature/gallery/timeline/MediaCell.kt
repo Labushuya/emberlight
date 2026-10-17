@@ -21,10 +21,13 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -62,7 +65,7 @@ internal fun MediaCell(
         modifier =
             modifier
                 .aspectRatio(1f)
-                .onGloballyPositioned { coords -> cells.put(item.id, coords.boundsInRoot()) }
+                .onGloballyPositioned { coords -> cells.put(item.id, unclippedRootRect(coords)) }
                 .clip(MaterialTheme.shapes.extraSmall)
                 .clickable(onClick = onClick)
                 .semantics(mergeDescendants = true) { contentDescription = label },
@@ -73,6 +76,13 @@ internal fun MediaCell(
         }
     }
 }
+
+/**
+ * Ganze Kachel in Root-Koordinaten, ohne Abschnitt durch Kopfzeile oder Raster. `boundsInRoot` liefert dagegen nur den
+ * sichtbaren Teil einer teilweise abgeschnittenen Kachel (ADR 0010, Feinschliff). Die Hero-Animation braucht das ganze Rechteck.
+ */
+internal fun unclippedRootRect(coords: LayoutCoordinates): Rect =
+    Rect(coords.positionInRoot(), Size(coords.size.width.toFloat(), coords.size.height.toFloat()))
 
 @Composable
 private fun VideoBadge(
