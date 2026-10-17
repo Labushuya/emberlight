@@ -12,6 +12,7 @@ import org.gradle.api.JavaVersion
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalog
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
@@ -114,8 +115,18 @@ private fun Project.configureScreenshotTests() {
     dependencies.add("testImplementation", catalog.library("roborazzi"))
     dependencies.add("testImplementation", catalog.library("roborazzi-compose"))
     dependencies.add("testImplementation", catalog.library("roborazzi-junit-rule"))
+    val goldenDir = layout.projectDirectory.dir("src/test/screenshots")
     extensions.configure<RoborazziExtension> {
-        outputDir.set(layout.projectDirectory.dir("src/test/screenshots"))
+        outputDir.set(goldenDir)
+    }
+    // Goldens sind Eingaben der Testaufgaben. Ohne sie bliebe ein Test nach einer Golden-Änderung UP-TO-DATE und
+    // der Vergleich liefe nicht.
+    tasks.withType<Test>().configureEach {
+        it.inputs
+            .dir(goldenDir)
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+            .optional()
+            .withPropertyName("screenshotGoldens")
     }
 }
 

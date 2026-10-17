@@ -34,22 +34,49 @@ dependencies {
     testImplementation(libs.androidx.media3.test.utils.robolectric)
 }
 
-// Viewer-Goldens laufen in einem eigenen Prozess, getrennt vom Hauptlauf (ADR 0010). Im Gesamtlauf der Galerie-Tests
-// entstanden leere Aufnahmen. Gemeinsam in einem Prozess sind alle vier Klassen stabil. Die Ursache ist nicht geklärt
-// (ADR 0006, Befund), deshalb die Isolation.
+// Viewer-Goldens laufen getrennt vom Hauptlauf, jede Klasse in einem eigenen Prozess (`forkEvery = 1`, ADR 0010).
+// Im Gesamtlauf der Galerie-Tests entstehen leere Aufnahmen, gemeinsam in einem Prozess schlagen Klassen fehl. Die Ursache
+// ist nicht geklärt (ADR 0006, Befund), deshalb die Isolation.
 val viewerGoldenClasses = "**/viewer/Viewer*ScreenshotTest.class"
 // Die Android-Unit-Test-Tasks entstehen erst nach der Auswertung des Moduls.
+// Zwei Aufgaben mit gleichem Aufbau: `testViewerGoldens` verifiziert (von `check` und `verifyRoborazziDebug`
+// aufgerufen), `recordViewerGoldens` nimmt auf (von `recordRoborazziDebug` aufgerufen, siehe ADR 0006).
 afterEvaluate {
     val unitTestTask = tasks.named<Test>("testDebugUnitTest")
     unitTestTask.configure { exclude(viewerGoldenClasses) }
-    val viewerGoldenTest =
-        tasks.register<Test>("testViewerGoldens") {
-            group = "verification"
-            description = "Viewer-Goldens, alle Klassen in einem gemeinsamen eigenen Prozess (ADR 0010)."
-            testClassesDirs = unitTestTask.get().testClassesDirs
-            classpath = unitTestTask.get().classpath
-            include(viewerGoldenClasses)
-            systemProperties(unitTestTask.get().systemProperties)
-        }
-    tasks.named("check") { dependsOn(viewerGoldenTest) }
+
+    fun viewerGoldenTask(
+        taskName: String,
+        taskDescription: String,
+        record: Boolean,
+    ) = tasks.register<Test>(taskName) {
+        group = "verification"
+        description = taskDescription
+        testClassesDirs = unitTestTask.get().testClassesDirs
+        classpath = unitTestTask.get().classpath
+        include(viewerGoldenClasses)
+        forkEvery = 1
+        systemProperties(unitTestTask.get().systemProperties)
+        // Roborazzi setzt seine Schalter nur auf testDebugUnitTest. Ohne diese Zeilen liefen die Viewer-Goldens
+        // ohne Vergleich durch. Deshalb hier explizit: Verifikation, außer bei der Aufnahme.
+        systemProperty("roborazzi.test.record", record.toString())
+        systemProperty("roborazzi.test.verify", (!record).toString())
+    }
+
+    val verifyViewerGoldens =
+        viewerGoldenTask(
+            "testViewerGoldens",
+            "Viewer-Goldens verifizieren, je Klasse ein eigener Prozess (ADR 0010, ADR 0006).",
+            record = false,
+        )
+    val recordViewerGoldens =
+        viewerGoldenTask(
+            "recordViewerGoldens",
+            "Viewer-Goldens neu aufnehmen, je Klasse ein eigener Prozess. Läuft mit recordRoborazziDebug (ADR 0006).",
+            record = true,
+        )
+
+    tasks.named("check") { dependsOn(verifyViewerGoldens) }
+    tasks.named("verifyRoborazziDebug") { dependsOn(verifyViewerGoldens) }
+    tasks.named("recordRoborazziDebug") { dependsOn(recordViewerGoldens) }
 }
