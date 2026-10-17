@@ -1,5 +1,6 @@
 package io.github.labushuya.emberlight.feature.gallery.viewer
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
@@ -9,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.dp
@@ -158,8 +160,9 @@ internal fun Modifier.verticalSwipe(
                             totalY += delta.y
                             intent = dragIntent(totalX, totalY, slop)
                             when (intent) {
+                                // Solange der Infobereich offen ist oder einfährt, gehört das Ziehen ihm (ADR 0010).
                                 DragIntent.DISMISS -> {
-                                    onSheet = overlay.infoOpen
+                                    onSheet = overlay.infoVisible
                                     if (onSheet) overlay.infoDragStarted() else overlay.dragStarted()
                                 }
 
@@ -200,6 +203,69 @@ internal fun Modifier.verticalSwipe(
             } else if (intent == DragIntent.DISMISS) {
                 overlay.dragEnded(velocityYPerSecond = velocity, flingPerSecond = fling)
             }
+        }
+    }
+}
+
+/**
+ * Ziehen nach unten am Infobereich selbst (ADR 0010, Infobereich): Steht der Inhalt oben, zieht die Bewegung den Bereich mit und
+ * schließt ihn bei Schwelle oder Geschwindigkeit, sonst federt er zurück. Ist der Inhalt gescrollt, verbraucht er die Bewegung
+ * zuerst, und der Bereich bleibt stehen.
+ *
+ * Der Bereich übernimmt eine Bewegung erst, wenn der Inhalt sie nicht verbraucht hat. Die übernommenen Ereignisse verbraucht er,
+ * damit die Seite darunter sie nicht zusätzlich als Wegwischen wertet. Übernimmt der Bereich nicht, bleibt die Geste bei der
+ * Seite (Bild, Pager).
+ */
+@Composable
+internal fun Modifier.sheetDragToClose(
+    overlay: ViewerOverlayState,
+    scroll: ScrollState,
+): Modifier {
+    val viewConfiguration = LocalViewConfiguration.current
+    return pointerInput(overlay) {
+        val slop = viewConfiguration.touchSlop
+        val fling = FLING_DP_PER_SECOND.dp.toPx()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            if (overlay.phase != OverlayPhase.OPEN || !overlay.infoVisible) return@awaitEachGesture
+            val tracker = VelocityTracker()
+            var totalX = 0f
+            var totalY = 0f
+            var taken = false
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) break
+                // Der Inhalt verbraucht die Bewegung auch am Anschlag. Deshalb zählt die rohe Bewegung. Gescrollt, gehört die Geste
+                // dem Inhalt. Steht er oben, gehört eine Bewegung nach unten dem Bereich.
+                val delta = change.positionChangeIgnoreConsumed()
+                if (scroll.value > 0f) break
+                if (!taken) {
+                    totalX += delta.x
+                    totalY += delta.y
+                    when (dragIntent(totalX, totalY, slop)) {
+                        DragIntent.PENDING -> {
+                            continue
+                        }
+
+                        DragIntent.DISMISS -> {
+                            taken = true
+                            overlay.infoDragStarted()
+                            overlay.infoDragBy(totalY)
+                        }
+
+                        // Nach oben oder horizontal: nicht der Bereich, die Seite entscheidet.
+                        DragIntent.INFO, DragIntent.PASS -> {
+                            break
+                        }
+                    }
+                } else {
+                    overlay.infoDragBy(delta.y)
+                }
+                tracker.addPosition(change.uptimeMillis, change.position)
+                change.consume()
+            }
+            if (taken) overlay.infoDragEnded(tracker.calculateVelocity().y, fling)
         }
     }
 }

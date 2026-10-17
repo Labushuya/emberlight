@@ -1,6 +1,8 @@
 package io.github.labushuya.emberlight.feature.gallery.viewer
 
 import android.text.format.Formatter
+import androidx.compose.foundation.LocalOverscrollFactory
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -57,6 +60,7 @@ internal fun ViewerInfoSheet(
     item: ViewerItem,
     exif: PhotoExif?,
     modifier: Modifier = Modifier,
+    scroll: ScrollState = rememberScrollState(),
     zone: ZoneId = ZoneId.systemDefault(),
 ) {
     val context = LocalContext.current
@@ -72,7 +76,7 @@ internal fun ViewerInfoSheet(
         Column(
             modifier =
                 Modifier
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scroll)
                     .navigationBarsPadding()
                     .padding(horizontal = 24.dp, vertical = 16.dp),
         ) {
@@ -238,20 +242,27 @@ internal fun BoxScope.ViewerInfoLayer(
     exif: ExifLookup,
     zone: ZoneId,
 ) {
+    // Der Scroll-Zustand gehört dem Aufrufer, damit das Ziehen am Anschlag weiß, ob der Inhalt sich bewegen kann.
+    val scroll = rememberScrollState()
     val sheetShown by remember(overlay) { derivedStateOf { overlay.infoOpen || overlay.infoFraction > 0f } }
     if (!sheetShown) return
     val photoExif = rememberPhotoExif(item = item, open = overlay.infoOpen, lookup = exif)
-    ViewerInfoSheet(
-        item = item,
-        exif = photoExif,
-        modifier =
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxHeight(INFO_PANEL_FRACTION)
-                .graphicsLayer {
-                    // Der Bereich folgt dem Anteil: unten zu, am Boden offen. Er wird nicht mit dem Bild verschoben.
-                    translationY = (1f - overlay.infoFraction) * overlay.panelHeightPx()
-                },
-        zone = zone,
-    )
+    // Ohne Überrollen: Der Inhalt verbraucht sonst das Ziehen nach unten am Anschlag, und der Bereich ließe sich nicht schließen
+    // (ADR 0010, Infobereich). Das Ziehen am Anschlag übernimmt der Bereich selbst (siehe sheetDragToClose).
+    CompositionLocalProvider(LocalOverscrollFactory provides null) {
+        ViewerInfoSheet(
+            item = item,
+            exif = photoExif,
+            scroll = scroll,
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxHeight(INFO_PANEL_FRACTION)
+                    .graphicsLayer {
+                        // Der Bereich folgt dem Anteil: unten zu, am Boden offen. Er wird nicht mit dem Bild verschoben.
+                        translationY = (1f - overlay.infoFraction) * overlay.panelHeightPx()
+                    }.sheetDragToClose(overlay, scroll),
+            zone = zone,
+        )
+    }
 }
