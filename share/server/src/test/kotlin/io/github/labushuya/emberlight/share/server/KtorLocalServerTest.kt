@@ -22,7 +22,7 @@ class KtorLocalServerTest {
     @Test
     fun healthNeedsTheToken() =
         testApplication {
-            application { installEmberlightModule(token, {}) }
+            application { installEmberlightModule(token, routes = {}) }
             assertEquals(HttpStatusCode.Unauthorized, client.get("/health").status)
             assertEquals(
                 HttpStatusCode.Unauthorized,
@@ -36,7 +36,7 @@ class KtorLocalServerTest {
     @Test
     fun unknownRoutesAreProtectedToo() =
         testApplication {
-            application { installEmberlightModule(token, {}) }
+            application { installEmberlightModule(token, routes = {}) }
             // Ohne Token kein Hinweis, ob ein Pfad existiert: auch unbekannte Pfade liefern 401.
             assertEquals(HttpStatusCode.Unauthorized, client.get("/gibt-es-nicht").status)
             val withToken =

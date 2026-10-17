@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.Process
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -37,11 +38,16 @@ import java.io.File
  */
 class SpikeServerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /** Zeitpunkt des letzten Serverstarts, für `/health`. Wird vor dem Bind gesetzt, nicht beim Stopp. */
+    @Volatile
+    private var startedAtEpochMs: Long = 0L
     private val server: LocalServer by lazy {
         KtorLocalServer(
-            spikeRoutes(File(filesDir, SPIKE_DIR)) { bytes ->
-                Log.i(TAG, "Upload-Fortschritt: $bytes Byte")
-            },
+            routes =
+                spikeRoutes(File(filesDir, SPIKE_DIR)) { bytes ->
+                    Log.i(TAG, "Upload-Fortschritt: $bytes Byte")
+                },
+            health = { spikeHealthJson(Process.myPid(), startedAtEpochMs, System.currentTimeMillis()) },
         )
     }
 
@@ -76,6 +82,7 @@ class SpikeServerService : Service() {
 
         scope.launch {
             try {
+                startedAtEpochMs = System.currentTimeMillis()
                 val bound = server.start(ServerConfig(port = port, token = token))
                 Log.i(TAG, "Server läuft auf Port $bound")
                 updateNotification(bound)

@@ -34,7 +34,7 @@ class SpikeRoutesTest {
     fun uploadStoresTheFileAndReturnsItsId() =
         testApplication {
             val dir = tmp.root
-            application { installEmberlightModule(token, spikeRoutes(dir)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(dir)) }
 
             val response = upload(payload)
             assertEquals(HttpStatusCode.Created, response.status)
@@ -48,7 +48,7 @@ class SpikeRoutesTest {
     fun clientFileNameIsNeverUsedOnDisk() =
         testApplication {
             val dir = tmp.root
-            application { installEmberlightModule(token, spikeRoutes(dir)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(dir)) }
 
             upload(payload, fileName = "../../evil.txt")
             val names = dir.listFiles().orEmpty().map { it.name }
@@ -60,7 +60,7 @@ class SpikeRoutesTest {
     @Test
     fun downloadReturnsTheWholeFile() =
         testApplication {
-            application { installEmberlightModule(token, spikeRoutes(tmp.root)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(tmp.root)) }
             val id = idFrom(upload(payload).bodyAsText())
 
             val response = client.get("/spike/files/$id") { header(HttpHeaders.Authorization, auth) }
@@ -71,7 +71,7 @@ class SpikeRoutesTest {
     @Test
     fun rangeRequestReturnsPartialContent() =
         testApplication {
-            application { installEmberlightModule(token, spikeRoutes(tmp.root)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(tmp.root)) }
             val id = idFrom(upload(payload).bodyAsText())
 
             val response =
@@ -87,7 +87,7 @@ class SpikeRoutesTest {
     @Test
     fun openEndedRangeReturnsTheRest() =
         testApplication {
-            application { installEmberlightModule(token, spikeRoutes(tmp.root)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(tmp.root)) }
             val id = idFrom(upload(payload).bodyAsText())
 
             val response =
@@ -102,7 +102,7 @@ class SpikeRoutesTest {
     @Test
     fun unknownOrMalformedIdsAreNotFound() =
         testApplication {
-            application { installEmberlightModule(token, spikeRoutes(tmp.root)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(tmp.root)) }
             val unknown =
                 client.get("/spike/files/00000000-0000-0000-0000-000000000000") {
                     header(HttpHeaders.Authorization, auth)
@@ -119,7 +119,7 @@ class SpikeRoutesTest {
     fun uploadAboveLimitIsRejectedAndLeavesNoFile() =
         testApplication {
             val dir = tmp.root
-            application { installEmberlightModule(token, spikeRoutes(dir, maxUploadBytes = 10)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(dir, maxUploadBytes = 10)) }
 
             val response = upload(ByteArray(11) { 1 })
             assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
@@ -129,7 +129,7 @@ class SpikeRoutesTest {
     @Test
     fun uploadAtLimitIsAccepted() =
         testApplication {
-            application { installEmberlightModule(token, spikeRoutes(tmp.root, maxUploadBytes = 10)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(tmp.root, maxUploadBytes = 10)) }
             assertEquals(HttpStatusCode.Created, upload(ByteArray(10) { 1 }).status)
         }
 
@@ -137,7 +137,7 @@ class SpikeRoutesTest {
     fun oversizedContentLengthIsRejectedBeforeReading() =
         testApplication {
             val dir = tmp.root
-            application { installEmberlightModule(token, spikeRoutes(dir, maxUploadBytes = 10)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(dir, maxUploadBytes = 10)) }
 
             // 100 KiB liegen über 10 Byte plus 64 KiB Multipart-Rahmen: abgelehnt, bevor etwas geschrieben wird.
             val response = upload(ByteArray(100 * 1024) { 1 })
@@ -146,9 +146,51 @@ class SpikeRoutesTest {
         }
 
     @Test
+    fun uploadJustAboveFiftyMebibytesIsAccepted() =
+        testApplication {
+            val dir = tmp.root
+            application { installEmberlightModule(token, routes = spikeRoutes(dir)) }
+
+            // Ktor begrenzt Dateiteile standardmäßig auf 50 MiB (formFieldLimit). Der Spike muss knapp darüber gehen.
+            val bytes = ByteArray(FIFTY_MIB + 1024) { (it % 251).toByte() }
+            val response = upload(bytes)
+            assertEquals(HttpStatusCode.Created, response.status)
+            val stored = File(dir, "${idFrom(response.bodyAsText())}.bin")
+            assertEquals(bytes.size.toLong(), stored.length())
+        }
+
+    @Test
+    fun healthJsonContainsPidAndUptime() {
+        assertEquals(
+            """{"status":"ok","pid":4242,"startedAtEpochMs":1000,"uptimeMs":60000}""",
+            spikeHealthJson(pid = 4242, startedAtEpochMs = 1_000L, nowEpochMs = 61_000L),
+        )
+        // Uhrensprung rückwärts: Laufzeit nie negativ.
+        assertTrue(spikeHealthJson(pid = 1, startedAtEpochMs = 5_000L, nowEpochMs = 4_000L).contains("\"uptimeMs\":0"))
+    }
+
+    @Test
+    fun healthRouteServesTheProvidedBody() =
+        testApplication {
+            application {
+                installEmberlightModule(
+                    token,
+                    health = { spikeHealthJson(pid = 4242, startedAtEpochMs = 1_000L, nowEpochMs = 2_000L) },
+                    routes = {},
+                )
+            }
+            val response = client.get("/health") { header(HttpHeaders.Authorization, auth) }
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals(
+                """{"status":"ok","pid":4242,"startedAtEpochMs":1000,"uptimeMs":1000}""",
+                response.bodyAsText(),
+            )
+        }
+
+    @Test
     fun uploadWithoutFileIsBadRequest() =
         testApplication {
-            application { installEmberlightModule(token, spikeRoutes(tmp.root)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(tmp.root)) }
             val response =
                 client.submitFormWithBinaryData(
                     url = "/spike/upload",
@@ -161,7 +203,7 @@ class SpikeRoutesTest {
     fun progressReportsTheFinalSize() =
         testApplication {
             val reported = mutableListOf<Long>()
-            application { installEmberlightModule(token, spikeRoutes(tmp.root) { reported += it }) }
+            application { installEmberlightModule(token, routes = spikeRoutes(tmp.root) { reported += it }) }
             upload(payload)
             assertEquals(listOf(payload.size.toLong()), reported)
         }
@@ -169,7 +211,7 @@ class SpikeRoutesTest {
     @Test
     fun spikeRoutesStillNeedTheToken() =
         testApplication {
-            application { installEmberlightModule(token, spikeRoutes(tmp.root)) }
+            application { installEmberlightModule(token, routes = spikeRoutes(tmp.root)) }
             val response =
                 client.submitFormWithBinaryData(
                     url = "/spike/upload",
@@ -196,4 +238,8 @@ class SpikeRoutesTest {
 
     private fun idFrom(json: String): String =
         Regex(""""id":"([^"]+)"""").find(json)?.groupValues?.get(1) ?: error("Keine ID in der Antwort.")
+
+    private companion object {
+        const val FIFTY_MIB = 50 * 1024 * 1024
+    }
 }

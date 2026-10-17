@@ -47,7 +47,10 @@ fun spikeRoutes(
                 call.respond(HttpStatusCode.PayloadTooLarge)
                 return@post
             }
-            when (val outcome = storeFirstFile(call.receiveMultipart(), storageDir, maxUploadBytes, onProgress)) {
+            // formFieldLimit ist Ktors Grenze für den Multipart-Body (Standard 50 MiB, auch für Dateiteile). Sie muss zum
+            // Spike-Limit passen, sonst bricht ein größerer Upload ab, bevor storeFirstFile ihn zählt.
+            val multipart = call.receiveMultipart(formFieldLimit = maxUploadBytes + MULTIPART_OVERHEAD_BYTES)
+            when (val outcome = storeFirstFile(multipart, storageDir, maxUploadBytes, onProgress)) {
                 is StoreOutcome.Stored -> {
                     call.respondText(
                         """{"id":"${outcome.id}","size":${outcome.size}}""",
@@ -90,8 +93,8 @@ private sealed interface StoreOutcome {
 }
 
 /**
- * Schreibt die erste Datei des Formulars. Weitere Teile werden verworfen. Die Größe zählt der Code selbst, weil
- * `formFieldLimit` nur Formularfelder begrenzt, nicht Dateiteile.
+ * Schreibt die erste Datei des Formulars. Weitere Teile werden verworfen. Das Größenlimit für die Datei zählt der Code
+ * selbst. `formFieldLimit` am Aufruf begrenzt nur den Gesamtrahmen des Multipart-Bodys.
  */
 private suspend fun storeFirstFile(
     parts: MultiPartData,
@@ -152,3 +155,17 @@ private suspend fun writeLimited(
     }
 
 private class TooLargeUpload : IOException("Upload überschreitet das Limit.")
+
+/**
+ * Body von `/health` im Spike: Prozess-ID, Startzeit des Servers und Laufzeit. Damit lässt sich ohne adb prüfen, ob
+ * Prozess oder Server seit einer früheren Abfrage neu gestartet wurden. Eine negative Laufzeit (Uhrensprung) wird auf 0
+ * gesetzt.
+ */
+internal fun spikeHealthJson(
+    pid: Int,
+    startedAtEpochMs: Long,
+    nowEpochMs: Long,
+): String {
+    val uptimeMs = (nowEpochMs - startedAtEpochMs).coerceAtLeast(0L)
+    return """{"status":"ok","pid":$pid,"startedAtEpochMs":$startedAtEpochMs,"uptimeMs":$uptimeMs}"""
+}

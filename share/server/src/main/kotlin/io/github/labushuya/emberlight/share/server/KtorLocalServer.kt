@@ -29,6 +29,7 @@ import kotlinx.coroutines.sync.withLock
  */
 class KtorLocalServer(
     private val routes: Route.() -> Unit,
+    private val health: () -> String = { HEALTH_BODY },
 ) : LocalServer {
     private val lock = Mutex()
     private val mutableState = MutableStateFlow<ServerState>(ServerState.Stopped)
@@ -41,7 +42,7 @@ class KtorLocalServer(
             check(running == null) { "Server läuft bereits." }
             val server =
                 embeddedServer(CIO, port = config.port, host = BIND_HOST) {
-                    installEmberlightModule(config.token, routes)
+                    installEmberlightModule(config.token, health, routes)
                 }
             val port =
                 try {
@@ -75,11 +76,13 @@ class KtorLocalServer(
 }
 
 /**
- * Gemeinsame Konfiguration für Engine und Tests: Range-Antworten, Token-Prüfung auf allen Routen, `/health`.
+ * Gemeinsame Konfiguration für Engine und Tests: Range-Antworten, Token-Prüfung auf allen Routen, `/health` mit dem
+ * Body aus [health].
  * Die Token-Prüfung hängt am Root der Routing-Kette, damit kein Pfad daran vorbeikommt.
  */
 internal fun Application.installEmberlightModule(
     token: AccessToken,
+    health: () -> String = { HEALTH_BODY },
     routes: Route.() -> Unit,
 ) {
     install(PartialContent)
@@ -93,7 +96,7 @@ internal fun Application.installEmberlightModule(
             }
         }
         get("/health") {
-            call.respondText(HEALTH_BODY, ContentType.Application.Json)
+            call.respondText(health(), ContentType.Application.Json)
         }
         routes()
     }
@@ -106,4 +109,4 @@ internal fun bearerToken(header: String?): String? {
 }
 
 private const val BEARER_PREFIX = "Bearer "
-private const val HEALTH_BODY = """{"status":"ok"}"""
+internal const val HEALTH_BODY = """{"status":"ok"}"""
