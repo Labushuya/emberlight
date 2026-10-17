@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.feature.gallery.timeline
 
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -104,7 +105,11 @@ class GridTopEdgeTest {
         composeRule.waitForIdle()
 
         val top = tabRowBottom()
-        val cells = composeRule.onAllNodes(anyMediaCell()).fetchSemanticsNodes()
+        // Nur Kacheln zählen: Die Datumsbeschriftung der Schnell-Scrollleiste trägt ebenfalls „Photo from“, ist aber nicht klickbar.
+        val cells =
+            composeRule.onAllNodes(anyMediaCell()).fetchSemanticsNodes().filter {
+                it.config.contains(SemanticsActions.OnClick)
+            }
         val hidden = cells.filter { it.boundsInRoot.bottom <= top + TOLERANCE }
         val partlyUnder = cells.filter { it.boundsInRoot.top < top - TOLERANCE && it.boundsInRoot.bottom > top }
         assertTrue(
