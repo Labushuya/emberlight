@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
@@ -97,6 +99,9 @@ internal fun MediaGrid(
                 .fastScrollGrip(state = fastScroll, gripWidthPx = gripWidthPx, gripHeightPx = gripHeightPx),
     ) {
         GridProbeHolder.current?.let { probe -> SideEffect { probe.gridComposed() } }
+        // Sichtfenster des Rasters für die Hero-Animation: Kacheln außerhalb (unter Kopfzeile, Leiste) gelten als nicht sichtbar.
+        val cells = LocalCellBounds.current
+        DisposableEffect(cells) { onDispose { cells.setViewport(null) } }
         val widthPx = with(density) { maxWidth.toPx() }
         val columns = ZoomLevels.columnsFor(state.zoomLevel, maxWidth.value)
         val tilePx = ZoomLevels.tileWidth(widthPx, gapPx, columns)
@@ -154,6 +159,7 @@ internal fun MediaGrid(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .onGloballyPositioned { coords -> cells.setViewport(unclippedRootRect(coords)) }
                     .pinchZoom(
                         zoom = zoom,
                         gridState = gridState,
