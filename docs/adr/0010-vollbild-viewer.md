@@ -389,7 +389,7 @@ Offen aus dieser Prüfung:
 
 ## Zurück-Taste und Schärfe (Korrektur 4)
 
-Status: umgesetzt im Branch `fix/m2-viewer-zurueck-und-schaerfe`, noch nicht gemergt. Die Geräteprüfung (Honor Magic V2, Android 16, Demo-Modus) ist ausstehend: Während der Bereitschaftsfrist von 20 Minuten war kein Gerät angeschlossen. Der Abschnitt „Geräteprüfung Korrektur 4“ wird nach der Prüfung ergänzt.
+Status: umgesetzt im Branch `fix/m2-viewer-zurueck-und-schaerfe`, Geräteprüfung durchgeführt (Honor Magic V2, Android 16, Demo-Modus). Die Messwerte stehen unter „Messwerte“, der Befund zur Rückgeste unter „Geräteprüfung Korrektur 4“. Die Rückgeste bleibt offen (siehe dort).
 
 ### Befunde
 
@@ -419,8 +419,22 @@ Status: umgesetzt im Branch `fix/m2-viewer-zurueck-und-schaerfe`, noch nicht gem
 
 ### Messwerte
 
-Ausstehend. Gemessen werden die Ladezeiten der Vorschau (Marken „angefordert“ bis „bereit“), der Anteil „vor Ende der Animation“, die Frames (`dumpsys gfxinfo`) und der Speicher (`dumpsys meminfo` vor und nach 20-mal Öffnen) im Benchmark-Build. Ein Wert ohne Gerät ist nicht bekannt, deshalb steht hier keine Zahl.
+Gemessen am Gerät, Stand Branch `fix/m2-viewer-zurueck-und-schaerfe` (Commit 3827c16). Vorher zum Vergleich: Janky 2,49 %, P99 28 ms.
+
+- Szenario A (Debug-Build, 10 Öffnen/Schließen per Tippen, Log `EmberlightViewer`): Die Vorschau war nach 60 bis 94 ms bereit (Median 78 ms ab „Hero-Animation Start“). Sie wurde 73 bis 117 ms nach dem Start im Hero übernommen. Das Hero-Ende kam 342 bis 362 ms nach dem Start. Damit war die Übernahme in 10 von 10 Fällen 239 bis 285 ms vor Animationsende. Fallbacks: 0.
+- Szenario B (Debug-Build, Wisch nach unten): Ein langsamer Wisch über 150 px (unter der Schwelle von ca. 15 % der Höhe, also etwa 356 px) ließ den Viewer offen. Ein Wisch über 900 px schloss ihn.- Szenario C (Benchmark-Build, je 5 Öffnen/Schließen nach `gfxinfo reset`, zwei Läufe): Janky 2,26 % in beiden Läufen (legacy 3,29 % bzw. 2,06 %). P50 8 ms. P90 14 bzw. 13 ms, P95 17 bzw. 15 ms, P99 34 bzw. 26 ms. Missed Vsync 0 bzw. 0. Gegenüber dem Vorher (Janky 2,49 %, P99 28 ms) keine Verschlechterung des Jank-Anteils. Der P99-Wert schwankt zwischen den Läufen (26 und 34 ms).
+- Speicher (`dumpsys meminfo`, Benchmark-Build): Vor 20 Öffnen/Schließen TOTAL PSS 186 180 KB, Graphics 76 840 KB. Danach TOTAL PSS 203 511 KB, Graphics 81 140 KB. Das ergibt +17,3 MB PSS und +4,3 MB Graphics. Die Schwelle von 30 MB ist eingehalten. Ob der Wert nach weiteren Zyklen plateauiert, ist nicht gemessen.
 
 ### Geräteprüfung Korrektur 4
 
-Ausstehend. Kein Gerät während der Bereitschaftsfrist. Offen sind: Szenarien A bis D, die Ereignisfolge der Rückgeste am Gerät (Marken „Rückgeste ...“) und die Frage, ob die 3-Tasten-Navigation beim Loslassen „vollendet“ meldet.
+Navigation: `navigation_mode` = 103 (3-Tasten-Navigation laut Auftrag).
+
+Rückgeste durch den Nutzer, drei Versuche mit Haltedauer von etwa 1 s (Log `EmberlightViewer`):
+
+1. „Rückgeste Start“ 12:56:59,5, dann „Rückgeste abgebrochen“ 12:57:01,1 (1,6 s nach dem Start). Der Viewer blieb offen; der nächste Start war wieder Bild id=7.
+2. „Rückgeste Start“ 12:57:03,6, dann „Rückgeste vollendet“ 12:57:03,7 (66 ms nach dem Start), danach „Ziel-Grenzen aktuell“. Der Viewer schloss; das nächste Bild (id=8) öffnete sich um 12:57:06,1.
+3. „Rückgeste Start“ 12:57:07,5, dann „Rückgeste abgebrochen“ 12:57:09,2 (1,7 s nach dem Start). Der Log endet hier, der Viewer war offen.
+
+Die Marke „Rückgeste ohne Fortschritt“ und Fortschrittswerte erschienen bei den Nutzer-Versuchen nicht. Zwei von drei Haltevorgängen endeten mit „abgebrochen“, einer mit „vollendet“. Zum Vergleich: Bei 10 Schließen per Zurück-Taste (`adb shell input keyevent 4`) folgte jeweils „Rückgeste ohne Fortschritt“ und danach „Rückgeste vollendet“.
+
+Befund: Die 3-Tasten-Navigation meldet beim Loslassen nicht durchgängig „vollendet“. Ob das an der Haltedauer, am Zeitpunkt des Loslassens oder am Framework liegt, ist mit den vorliegenden Marken nicht entscheidbar. Die Zuordnung in `ViewerOverlay` ist unverändert. Ein Fix ist in diesem Auftrag nicht vorgesehen; die Entscheidung liegt beim Projekt. Offen bleibt: Haltedauer und Fortschritt je Versuch protokollieren, damit sich der Befund belegen oder widerlegen lässt.
