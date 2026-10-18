@@ -28,6 +28,8 @@ telephoto = "0.19.0"
 # EXIF lesen für den Infobereich (ADR 0010, Kurzer Blick und Infobereich). Stabil, keine Play-Services-Abhängigkeit.
 exifinterface = "1.4.2"
 media3 = "1.11.1"
+# Eingebetteter Server (Paket 3.0, ADR 0012). Ktor 3.6.0 ist laut Maven Central die neueste stabile Version.
+ktor = "3.6.0"
 
 [libraries]
 # Build-Logic (Classpath der Convention-Plugins)
@@ -86,6 +88,12 @@ roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi
 roborazzi-junit-rule = { group = "io.github.takahirom.roborazzi", name = "roborazzi-junit-rule", version.ref = "roborazzi" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
+
+# Eingebetteter Server (Paket 3.0, ADR 0012). Nur CIO, keine weitere Engine.
+ktor-server-core = { group = "io.ktor", name = "ktor-server-core", version.ref = "ktor" }
+ktor-server-cio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktor" }
+ktor-server-partial-content = { group = "io.ktor", name = "ktor-server-partial-content", version.ref = "ktor" }
+ktor-server-test-host = { group = "io.ktor", name = "ktor-server-test-host", version.ref = "ktor" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

@@ -50,5 +50,9 @@ gradlePlugin {
             id = "emberlight.hilt"
             implementationClass = "io.github.labushuya.emberlight.buildlogic.HiltConventionPlugin"
         }
+        register("serverIsolation") {
+            id = "emberlight.server.isolation"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.ServerIsolationConventionPlugin"
+        }
     }
 }
