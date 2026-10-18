@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Der Server öffnet einen Socket. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Ab targetSdk 37 ist lokaler Netzwerkzugriff eine Laufzeit-Berechtigung. Die Anfrage kommt mit der Oberfläche (Paket 3.3). -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- connectedDevice verlangt mindestens eine dieser Berechtigungen. Gewählt: CHANGE_NETWORK_STATE (normal, ADR 0012). -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <!-- Benachrichtigung des Dienstes. Die Laufzeit-Anfrage folgt in Paket 3.3. Lint meldet ohne diese Deklaration MissingPermission am notify-Aufruf, auch mit vorgelagerter checkSelfPermission-Prüfung (Probe 18.10.2026, ADR 0012). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- CPU-Wakelock und WLAN-Lock, solange der Server läuft (WifiLock verlangt WAKE_LOCK). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application>
+        <service
+            android:name=".SpaceServerService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+    </application>
+</manifest>

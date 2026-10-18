@@ -40,6 +40,8 @@ dependencies {
     implementation(project(":feature:gallery"))
     implementation(project(":feature:space"))
     implementation(project(":core:media"))
+    // Lokaler Server (ADR 0012). Ohne Aufrufer noch ohne Routen. Die Einbindung macht den Release-Build zur Prüfung von R8.
+    implementation(project(":share:server"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
