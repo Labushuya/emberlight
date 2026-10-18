@@ -2,41 +2,74 @@ package io.github.labushuya.emberlight.buildlogic
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.kotlin.dsl.register
 
 /**
- * Build-Sperre für `share:server` (ADR 0012): Der Server darf weder `core:media` noch die Galerie erreichen. Die
- * Trennung aus [docs/KONZEPT.md] bleibt damit auch im Build erzwungen. Der Task `checkServerIsolation` hängt in `check`.
+ * Build-Sperre für `share:server` (ADR 0012). Zwei Prüfungen hängen in `check`:
+ *
+ * - `checkServerIsolation`: Der Server darf über keine auflösbare Konfiguration (Compile, Runtime, Unit-Test,
+ *   AndroidTest, alle Varianten) ein verbotenes Modul erreichen. Verboten sind die Galerie (`:core:media`,
+ *   `:feature:*`) und die App.
+ * - `checkServerSources`: Der Quelltext des Servers (`src/`) enthält keine Medien- oder Speicherzugriffe der Galerie.
+ *
+ * Damit bleibt die Trennung aus [docs/KONZEPT.md] auch im Build erzwungen.
  */
 class ServerIsolationConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
-        // Die Varianten-Konfigurationen (debugRuntimeClasspath) legt AGP erst nach der Auswertung an.
+        // Die Varianten-Konfigurationen (debugRuntimeClasspath, debugUnitTestRuntimeClasspath …) legt AGP erst nach der
+        // Auswertung an. Dieser Hook läuft nach AGP, weil AGP vorher angewendet wird.
         target.afterEvaluate {
-            val resolvedPaths =
-                listOf("debugRuntimeClasspath", "releaseRuntimeClasspath").map { configName ->
-                    target.configurations.named(configName).map { configuration ->
-                        configuration.incoming.resolutionResult.allComponents
-                            .mapNotNull { (it.id as? ProjectComponentIdentifier)?.projectPath }
-                    }
-                }
+            val resolvable = target.configurations.filter { it.isCanBeResolved }
             val isolation =
                 target.tasks.register<CheckProjectIsolationTask>("checkServerIsolation") {
                     group = "verification"
                     description =
-                        "Bricht ab, wenn share:server über den aufgelösten Graphen core:media oder die Galerie erreicht."
+                        "Bricht ab, wenn share:server über eine auflösbare Konfiguration ein verbotenes Modul erreicht."
                     guardedProject.set(target.path)
-                    resolvedProjectPaths.set(
-                        resolvedPaths[0].zip(resolvedPaths[1]) { a, b -> (a + b).distinct().sorted() },
-                    )
+                    resolvedProjectPaths.set(target.provider { projectPathsOf(resolvable) })
                     forbiddenProjectPaths.set(FORBIDDEN_PROJECT_PATHS)
                     outputs.upToDateWhen { false }
                 }
-            target.tasks.named("check") { it.dependsOn(isolation) }
+            val sources =
+                target.tasks.register<CheckSourceIsolationTask>("checkServerSources") {
+                    group = "verification"
+                    description =
+                        "Bricht ab, wenn der Quelltext von share:server Medien- oder Speicherzugriffe der Galerie enthält."
+                    forbiddenTokens.set(FORBIDDEN_SOURCE_TOKENS)
+                    sourceFiles.from(target.fileTree("src"))
+                    baseDirectory.set(target.layout.projectDirectory)
+                }
+            target.tasks.named("check") { it.dependsOn(isolation, sources) }
         }
     }
 
-    private companion object {
-        val FORBIDDEN_PROJECT_PATHS: List<String> = listOf(":core:media", ":feature:gallery")
+    private fun projectPathsOf(configurations: Collection<Configuration>): List<String> =
+        configurations
+            .flatMap { configuration ->
+                configuration.incoming.resolutionResult.allComponents
+                    .mapNotNull { (it.id as? ProjectComponentIdentifier)?.projectPath }
+            }.distinct()
+            .sorted()
+
+    companion object {
+        /** Projekte, die share:server nie erreichen darf. `:feature:*` sind die Oberflächen-Module. */
+        val FORBIDDEN_PROJECT_PATHS: List<String> = listOf(":app", ":core:media", ":feature:*")
+
+        /** Tokens, die im Quelltext des Servers nicht vorkommen dürfen (Galerie- und Speicherzugriffe). */
+        val FORBIDDEN_SOURCE_TOKENS: List<String> =
+            listOf(
+                "MediaStore",
+                "ContentResolver",
+                "contentResolver",
+                "READ_MEDIA_",
+                "READ_EXTERNAL_STORAGE",
+                "WRITE_EXTERNAL_STORAGE",
+                "MANAGE_EXTERNAL_STORAGE",
+                "getExternalStorage",
+                "getExternalFilesDir",
+                "getExternalMediaDirs",
+            )
     }
 }

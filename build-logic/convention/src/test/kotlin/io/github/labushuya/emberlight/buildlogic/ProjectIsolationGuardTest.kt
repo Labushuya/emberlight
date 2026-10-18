@@ -38,4 +38,27 @@ class ProjectIsolationGuardTest {
         val resolved = listOf(":core:mediaplayer", ":core:media-extra")
         assertTrue(ProjectIsolationGuard.findViolations(resolved, forbidden).isEmpty())
     }
+
+    @Test
+    fun wildcardCoversAllProjectsUnderPrefix() {
+        val wildcard = listOf(":feature:*")
+        val resolved = listOf(":share:server", ":feature:space", ":feature:gallery")
+
+        assertEquals(
+            listOf(":feature:gallery", ":feature:space"),
+            ProjectIsolationGuard.findViolations(resolved, wildcard),
+        )
+    }
+
+    @Test
+    fun wildcardDoesNotMatchSimilarPrefixWithoutColon() {
+        // ":feature" allein und ":features:x" gehören nicht zu ":feature:*".
+        val resolved = listOf(":feature", ":features:x")
+        assertTrue(ProjectIsolationGuard.findViolations(resolved, listOf(":feature:*")).isEmpty())
+    }
+
+    @Test
+    fun appIsForbiddenAsExactPath() {
+        assertEquals(listOf(":app"), ProjectIsolationGuard.findViolations(listOf(":app"), listOf(":app")))
+    }
 }

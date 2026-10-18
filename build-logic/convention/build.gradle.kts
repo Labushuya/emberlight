@@ -22,6 +22,8 @@ dependencies {
     implementation(libs.roborazzi.gradle.plugin)
 
     testImplementation(libs.kotlin.test.junit)
+    // Negativtests der Build-Sperre laufen gegen ein Fixture-Projekt (ServerIsolationPluginTest).
+    testImplementation(gradleTestKit())
 }
 
 gradlePlugin {
