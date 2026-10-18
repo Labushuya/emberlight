@@ -108,6 +108,7 @@ Grundsätze; Details folgen als ADR in Meilenstein 3.
 #### Betrieb
 
 - Der Host-Dienst darf bei langen Events (Hochzeit, ganzer Abend) nicht nach einigen Stunden sterben. Foreground-Service-Typ so wählen, dass kein Zeitlimit greift (`dataSync` hat ab Android 15 ein 6-Stunden-Limit pro Tag, daher vermeiden).
+- Hintergrundbetrieb erfordert auf manchen Herstellern zusätzliche Freigaben. Auf einem Honor-Gerät (Android 16) reichte die Akku-Ausnahme allein nicht. Der Dienst erkennt Pausen durch das System und zeigt dann einen Hinweis mit Weg zur Einstellung. Die Einrichtung folgt in Paket 3.3. Siehe [ADR 0012](adr/0012-lokaler-server.md).
 
 ### Verteilung
 
@@ -152,3 +153,5 @@ Details und Messwerte stehen in den ADRs 0006 bis 0011.
 Änderungen am 16.10.2026: Space-Speicher getrennt von der Galerie, Rechte-Schalter entfallen, Nachhalten mit Frist.
 
 17.10.2026: Fragen F–K entschieden. Nachhalten nur beim Gastgeber, Löschung auch ohne Reaktion, Erinnerung als Benachrichtigung mit Aktionen, GPS-Daten beim Upload standardmäßig entfernt, eigenes WLAN der App in fremden Netzen, Zurückziehen eigener Uploads und Entfernen durch den Gastgeber.
+
+18.10.2026: Paket 3.0 abgeschlossen (Server-Basis, Foreground-Service, ADR 0012). Hintergrundbetrieb braucht auf manchen Herstellern zusätzliche Freigaben, eingetragen im Abschnitt Spaces, Betrieb.

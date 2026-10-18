@@ -1,6 +1,6 @@
-# ADR 0012: Lokaler Server (Machbarkeits-Spike Meilenstein 3)
+# ADR 0012: Lokaler Server (Meilenstein 3, Paket 3.0)
 
-Status: Entwurf, 17.10.2026. Die Gerätemessung auf dem Honor Magic V2 (Android 16) ist nicht erfolgt, das Gerät war per adb nicht erreichbar. Der Spike-Code bleibt auf dem Branch `spike/m3-server` und wird nicht gemergt, bis die Gerätepunkte nachgeholt und bewertet sind.
+Status: angenommen, 18.10.2026. Grundlage sind der Machbarkeits-Spike auf dem Branch `spike/m3-server` (PR #23, Draft) und die Gerätemessungen vom 18.10.2026. Die produktiven Teile stehen auf dem Branch `feature/m3-server-basis`. Der Spike-Code bleibt auf seinem Branch und wird nicht gemergt.
 
 ## Kontext
 
@@ -10,22 +10,42 @@ Meilenstein 3 braucht einen Ktor-Server im Foreground-Service, über den Gäste 
 - Was kostet der Server in der Release-APK?
 - Welche Engine und welche Bibliotheken braucht es, und wie groß ist der Overhead?
 - Wie läuft ein Upload mit Limit und ein Range-Download?
-- Überlebt der Dienst im Hintergrund auf einem echten Gerät (Doze, Bildschirm aus)?
+- Überlebt der Dienst im Hintergrund auf einem echten Gerät (Doze, Bildschirm aus, Akkubetrieb)?
 
-Dieser ADR beantwortet die ersten vier Fragen mit Messwerten und Tests. Die letzte ist offen.
+Die ersten vier Fragen beantwortet der Spike mit Messwerten und Tests. Die letzte beantworten die Gerätemessungen unten. Sie zeigen, dass der Hintergrundbetrieb von Herstellereinstellungen abhängt.
 
 ## Entscheidung
 
-- **Engine**: Ktor 3.6.0, Engine CIO. `ktor-server-core`, `ktor-server-cio`, `ktor-server-partial-content`. Ktor 3.6.0 ist laut Maven Central die neueste stabile Version. Das POM nennt `kotlin-stdlib` 2.3.21, aufgelöst wird 2.4.21 (keine Konflikte).
-- **Kapselung**: Aufrufer kennen nur das Interface `LocalServer` mit `start(ServerConfig): Int`, `stop()` und `state`. `ServerConfig` enthält Port (0 = frei) und Token. Ktor-Typen sind nach außen nicht sichtbar, außer dem Konstruktor von `KtorLocalServer`, der eine Routen-Lambda nimmt. Konsumenten brauchen dafür `ktor-server-core` auf dem Compile-Classpath (siehe Befund unten).
+- **Engine**: Ktor 3.6.0, Engine CIO, nur `ktor-server-core`, `ktor-server-cio` und `ktor-server-partial-content`. Ktor 3.6.0 ist laut Maven Central die neueste stabile Version. Das POM nennt `kotlin-stdlib` 2.3.21, aufgelöst wird 2.4.21 (keine Konflikte).
+- **Kapselung**: Aufrufer kennen nur das Interface `LocalServer` mit `start(ServerConfig): Int`, `stop()` und `state`. `ServerConfig` enthält nur den Port (0 = frei). Die Implementierung `KtorLocalServer` nimmt die Routen als Lambda entgegen. Dieser Konstruktor verlangt Ktor auf dem Compile-Classpath des Aufrufers. Das ist eine bekannte Einschränkung.
 - **Bindung**: `0.0.0.0`, Port frei oder fest vorgegeben.
-- **Zugriffsschutz**: Jeder Pfad, auch `/health` und unbekannte Pfade, verlangt `Authorization: Bearer <token>`. Der Vergleich läuft über `MessageDigest.isEqual`. Ohne gültigen Token kommt 401 mit `WWW-Authenticate: Bearer`. Der Wert des Tokens erscheint nie in `toString()` oder im Log.
-- **Range**: `PartialContent` mit `LocalFileContent`. Die Antwort kommt mit `Content-Length`, Range-Anfragen liefern 206.
-- **Upload**: Streaming über `part.provider()` in den app-internen Speicher. Die Größe zählt der Code selbst, weil `formFieldLimit` nur Formularfelder begrenzt, nicht Dateiteile. Das Limit liegt bei 2 GiB. Ein `Content-Length` über Limit plus 64 KiB wird vor dem Lesen mit 413 abgelehnt. Überschreitet der Strom das Limit, wird die Teildatei gelöscht. Der Dateiname des Clients wird nie übernommen.
-- **Dienst**: `SpikeServerService` als Foreground-Service mit Typ `connectedDevice`. Start nur über den Debug-Einstieg `SpikeDebugActivity` (nur Debug-Source-Set).
-- **Build-Sperre**: Task `checkServerIsolation` (Convention-Plugin `emberlight.server.isolation`) prüft den aufgelösten Abhängigkeitsgraphen von `:share:server` auf `:core:media` und `:feature:gallery` und hängt in `check`.
+- **Zugriffsschutz**: Erweiterungspunkt `RequestAuthorizer`. Die Prüfung läuft vor jeder Route, auch vor `/health` und unbekannten Pfaden. Der Standard ist `RequestAuthorizer.DenyAll`: Der Server lehnt alles ab (401, `WWW-Authenticate: Bearer`), wenn keine Prüfung eingesetzt wird. Die konkrete Prüfung mit Zugangsschlüssel und Einladungen kommt mit Paket 3.x. Der Spike hatte einen Token fest verdrahtet. Das ist entfernt.
+- **`/health`**: liefert ausschließlich `{"status":"ok","apiVersion":1}`. Keine Prozess-ID, keine Zeitangaben, keine Sperrzustände, keine Gerätedaten.
+- **Protokoll-Hook**: `requestLog` ist ein generischer Hook. Er erhält Eingang und Abschluss jeder Anfrage (Methode, Pfad, Status, Dauer). Standardmäßig protokolliert der Server nichts.
+- **Range**: Plugin `PartialContent`. Range-Anfragen liefern 206 mit `Content-Length`.
+- **Upload-Baustein**: `ApplicationCall.receiveSingleFile(targetDir, maxBytes)`, ohne Routen.
+  - `formFieldLimit` wird auf `maxBytes` plus 64 KiB gesetzt. Ohne diesen Parameter scheitert ein Upload an Ktors Standardgrenze von 50 MiB.
+  - Das Limit zählt der Code beim Lesen selbst. Ein `Content-Length` über dem Limit wird vor dem Lesen abgelehnt.
+  - Der Dateiname des Clients wird nie übernommen. Das Ziel ist eine zufällige UUID mit Endung `.bin`.
+  - Überschreitet der Strom das Limit oder bricht das Schreiben ab, wird die Teildatei gelöscht.
+  - Das Limit legt der Aufrufer fest. Der Spike nutzte 2 GiB.
+- **Dienst**: `SpaceServerService` als Foreground-Service mit Typ `connectedDevice`. `dataSync` scheidet aus, weil es ab Android 15 ein Limit von sechs Stunden pro Tag hat (siehe [KONZEPT.md](../KONZEPT.md), Abschnitt Betrieb). Der Dienst hat noch keine Routen und keinen Startpunkt in der Oberfläche.
+- **Sperren**: PARTIAL_WAKE_LOCK mit dem Tag `emberlight:space-server` und ein WifiLock im Modus `WIFI_MODE_FULL_HIGH_PERF`. Beide gelten ohne Zeitlimit, bis der Server stoppt. Stopp über Intent oder Benachrichtigung gibt beide frei, ebenso `onDestroy`. `WIFI_MODE_LOW_LATENCY` wirkt nach Doku nur bei eingeschaltetem Bildschirm im Vordergrund und scheidet deshalb aus.
+- **Berechtigungen**: `INTERNET`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `WAKE_LOCK`, `CHANGE_NETWORK_STATE` (eine der laut Doku für `connectedDevice` nötigen Alternativen, normal, zur Installationszeit gewährt) und `ACCESS_LOCAL_NETWORK`.
+- **Lokales Netz**: `ACCESS_LOCAL_NETWORK` ist ab targetSdk 37 Pflicht (eingehend und ausgehend sowie NSD). Die Anfrage zur Laufzeit folgt in Paket 3.3. Der Dienst verweigert den Start auf API 37 und höher ohne diese Berechtigung. Darunter gilt die Prüfung als erfüllt.
+- **Build-Sperre**: Task `checkServerIsolation` (Convention-Plugin `emberlight.server.isolation`) prüft den aufgelösten Abhängigkeitsgraphen von `:share:server`, transitiv, auf `:core:media` und `:feature:gallery`. Der Task hängt in `check`. Damit läuft er in CI und lokal.
+- **Keine TLS-Verschlüsselung**: Der Server spricht HTTP. TLS im fremden WLAN ist für einen späteren Meilenstein vorgesehen (CLAUDE.md, Meilensteine, Punkt 6). App-zu-App-Verbindungen haben laut [KONZEPT.md](../KONZEPT.md), Abschnitt Verschlüsselung, eigene Regeln.
+- **R8**: `share/server/consumer-rules.pro` enthält nur zwei `-dontwarn`-Zeilen für `java.lang.management`. Es wird keine Klasse behalten.
+- **Einbindung in die App**: `app` bindet `:share:server` in allen Varianten ein, auch im Release. Der Release-Build prüft so R8 mit dem Server. Die APK wächst dadurch (siehe Messwerte).
 
-Der Spike-Code (Endpunkte `/spike/*`, Dienst, Debug-Einstieg) liegt nur auf dem Branch.
+## Änderungen gegenüber dem Entwurf (17.10.2026)
+
+- Der Token ist aus `ServerConfig` und aus dem Server entfernt. Er gehört in ein späteres Paket. Der Standard verweigert alles.
+- `/health` enthält nur Status und API-Version. Der Spike-Umfang (Prozess-ID, Startzeit, Sperrzustände, letzter Herzschlag) ist entfernt.
+- Die Spike-Routen (`/spike/upload`, `/spike/files/{id}`) sind nicht übernommen. Übernommen ist nur der Upload-Baustein.
+- Der Dienst heißt `SpaceServerService`, die Sperren `ServerLocks`. Der Debug-Einstieg, die Diagnose und das Selbstprotokoll sind nicht übernommen.
+- Die Notiz, die Regel „Strikte Trennung von Space und Galerie“ stehe nicht in CLAUDE.md, ist überholt. Die Regel steht jetzt in CLAUDE.md und in KONZEPT.md.
+- `POST_NOTIFICATIONS` ist nicht deklariert. Mit der Laufzeitanfrage in Paket 3.3 kommt die Deklaration dazu.
 
 ## Messwerte
 
@@ -34,98 +54,96 @@ Der Spike-Code (Endpunkte `/spike/*`, Dienst, Debug-Einstieg) liegt nur auf dem 
 | Prüfung | Ergebnis |
 |---|---|
 | Kompatibilität Kotlin 2.4.21 | Build ohne Compilerwarnungen, `allWarningsAsErrors` aktiv |
-| `minSdk` 26, Lint | `:app:lintDebug` und `:share:server:lintDebug` grün. `checkDependencies` der App erfasst die Ktor-Bytecodes im Debug-Classpath, dort kein NewApi-Befund |
+| `minSdk` 26, Lint | `lintDebug` für `:share:server` und `:app` grün. Lint hat die Ktor-Bytecodes im Debug-Classpath geprüft, dort kein NewApi-Befund |
 | Desugaring | Nicht eingerichtet, Lint verlangt es nicht. Das Laufzeitverhalten auf API 26 ist nicht getestet (offen) |
 | `checkNoPlayServices` | grün |
-| SLF4J | Nur `slf4j-api`, kein Backend. Ohne Provider greift der No-op-Logger. Eine Konsolenwarnung von SLF4J beim Start wurde nicht geprüft |
-| Lint-Befunde im Spike | Zwei Befunde behoben: `FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE` ist erst ab API 29 (InlinedApi, Typ wird darunter weggelassen), `notify` ohne Prüfung von `POST_NOTIFICATIONS` (MissingPermission, Prüfung ab API 33) |
+| SLF4J | Kein eigener Eintrag im Version Catalog. Ktor bringt `slf4j-api` mit. Ohne Provider greift der No-op-Logger |
 | Spotless und ktlint | grün |
+| `checkServerIsolation` | grün. Negativprobe: `implementation(project(":core:media"))` in `share/server/build.gradle.kts` bricht den Task ab und nennt `:core:media`. Die Zeile wurde danach entfernt, der Task läuft wieder grün. |
+
+### Tests
+
+- `:share:server`: 25 Unit-Tests, alle grün.
+  - `KtorLocalServerTest` (10): `/health` nur mit Berechtigung, Standard verweigert alles, unbekannte Pfade geschützt, Request-Log, echter Socket auf Port 0 mit Start, 401, 200 und Stopp, zweiter Start abgelehnt, Port-Bereich.
+  - `UploadStoreTest` (6): Zufallsname, Limit beim Lesen, Grenzwert, `Content-Length`-Vorprüfung, Upload über 50 MiB, Formular ohne Datei.
+  - `ServerLocksTest` (6): Erwerb, Idempotenz, Freigabe, Freigabe ohne Erwerb, doppelte Freigabe, Rückabwicklung bei fehlgeschlagenem WLAN-Erwerb.
+  - `SpaceServerServiceTest` (3, Robolectric): Stopp-Intent, Start ohne `ACCESS_LOCAL_NETWORK` auf API 37 wird abgelehnt, unbekannter Aufruf beendet den Dienst.
+- `:convention`: `ProjectIsolationGuardTest` (5), zusammen mit den übrigen Tests der Convention-Plugins grün.
+- Gesamte Kover-Zeilenabdeckung: 90,9 % (3730 von 4104 Zeilen). `share:server` allein: 80,8 % (168 von 208 Zeilen). Untergrenze 70 %.
+- Gesamtlauf `./gradlew check koverXmlReport assembleDebug assembleRelease`: grün (BUILD SUCCESSFUL, Exit 0), inklusive Spotless, Lint, Roborazzi-Verify, Kover-Verify, `checkNoPlayServices`, `checkServerIsolation`.
 
 ### APK-Größe (unsigniert, Release)
 
 | Stand | Größe |
 |---|---|
-| Baseline, `main` 8d04693 | 2 993 877 Byte (2,85 MiB) |
-| Probe: Server im Release-Classpath verlinkt | 3 652 841 Byte (+658 964 Byte, +22,0 %) |
-| Ausgeliefert (Server nur im Debug-Classpath) | 2 993 877 Byte, unverändert |
+| Baseline, `main` (Code unverändert seit 8d04693, Messung des Spike-ADR) | 2 993 877 Byte |
+| Mit Server, `feature/m3-server-basis` | 3 652 833 Byte (+658 956 Byte, +22,0 %) |
 
-Die Probe band den Server kurz in `EmberlightApplication` ein, damit R8 die Engine behält. Danach wurde sie zurückgenommen. Die Release-APK des Spike-Branchs entspricht deshalb der Baseline. Die Debug-APK des Spike-Branchs misst 20 832 246 Byte. Eine Vergleichsmessung der Debug-APK vor dem Spike fehlt.
+Der Spike hatte gemessen: Der Server wächst die Release-APK um rund 0,66 MB (+22 %). Die Messung oben gilt für den Stand dieses Branchs mit eingebundenem Server. Eine Aufschlüsselung nach Paketen fehlt weiterhin.
 
 ### R8
 
 - Ohne Regel bricht der Release-Build ab: Ktor referenziert `java.lang.management.ManagementFactory` und `RuntimeMXBean` (Debugger-Erkennung in `IntellijIdeaDebugDetector`). Das Paket gibt es auf Android nicht.
-- Eingetragen sind nur die zwei `-dontwarn`-Zeilen in `share/server/consumer-rules.pro`. Es wird keine Klasse behalten.
-- Offen: Der Laufzeitpfad der Debugger-Erkennung ist auf Android nicht belegt. Er wird im Spike nicht aufgerufen, das ist aber nicht geprüft.
+- Eingetragen sind nur die zwei `-dontwarn`-Zeilen. Offen: Der Laufzeitpfad der Debugger-Erkennung ist auf Android nicht belegt.
 
-### Build-Sperre
+## Gerätemessung (18.10.2026)
 
-- Task `:share:server:checkServerIsolation` hängt in `check`. Die Prüffunktion hat fünf Unit-Tests (`ProjectIsolationGuardTest`, Teil von `:convention:test`).
-- Negativprobe: Eine temporäre Abhängigkeit `implementation(project(":core:media"))` in `share/server/build.gradle.kts` bricht den Task ab und nennt `:core:media`. Die Zeile wurde danach entfernt, der Task läuft wieder grün.
-- Die Prüfung nutzt den aufgelösten Graphen (`allComponents`) und erfasst damit auch transitive Abhängigkeiten. Die Negativprobe deckt nur den direkten Fall ab.
-- Quelle der Vorgabe: Der Auftrag nennt die Regel „Strikte Trennung von Space und Galerie“ und die Sperre aus CLAUDE.md. Beides steht weder in [CLAUDE.md](../../CLAUDE.md) noch in [KONZEPT.md](../KONZEPT.md) (Stand `main` 8d04693). Die Regel ist hier aus dem Auftrag übernommen und muss in CLAUDE.md oder KONZEPT.md nachgetragen werden.
+Gerät: Honor Magic V2 (VER-N49), Android 16, MagicOS, WLAN. Der Spike war in beiden Läufen mit einem Dienst im Typ `connectedDevice` aktiv, mit Akku-Ausnahme (deviceidle-Whitelist), PARTIAL_WAKE_LOCK und WifiLock. Herzschlag der App alle 5 s, Anfragen aus dem Netz.
 
-### Tests
+**Lauf 1: nur Akku-Ausnahme**
 
-- `share:server`: 23 Unit-Tests, alle grün. `AccessTokenTest` (6), `KtorLocalServerTest` (5, davon ein echter Socket-Test mit Start, 401 und 200 und Stopp), `SpikeRoutesTest` (12): Upload, Download, Range (`bytes=0-1023` und offen), Limit beim Lesen und bei `Content-Length`, Teildatei wird gelöscht, unbekannte und manipulierte IDs (404), Token-Pflicht, Fortschritt.
-- Gesamte Kover-Zeilenabdeckung: 89,3 % (3685 von 4126 Zeilen), Untergrenze 70 %.
-- `./gradlew check koverXmlReport assembleDebug assembleRelease` lokal grün.
+- Angesteckt, Bildschirm aus: 34 von 34 Anfragen ok.
+- Abgesteckt: 0 von 107 Anfragen ok.
+- Herzschlag der App ab 1 s nach dem Abstecken ausgesetzt: 5 Lücken von 12 bis 37 min. Auch in Wachphasen des Systems blieben Herzschläge aus.
+- Anfragen wurden erst etwa 18 min verspätet gelesen.
+- Kein WLAN-Verlust, nie eine Netz-Blockade gemeldet.
 
-## Gerätemessung (offen)
+**Lauf 2: zusätzlich Honor „App-Start“**
 
-Auf dem Gerät ist nichts gemessen. `adb devices` zeigte bei der Ausführung kein angeschlossenes Gerät. Die Punkte stehen hier, damit sie nicht vergessen werden:
+Einstellungen: „Automatisch verwalten“ aus, Automatischer Start, Sekundärer Start und Im Hintergrund ausführen an.
 
-- Erreichbarkeit im WLAN, Durchsatz Upload und Download für 200 MB, Statuscodes 200 und 206 mit Range.
-- Dauertest von mindestens 45 min mit `/health` alle 60 s, `pidof`, `dumpsys` des Dienstes (`isForeground`, `foregroundServiceType`), Abbrüche bei Doze und Bildschirm aus.
-- `dumpsys meminfo` vor und nach dem Upload.
-- Verhalten ohne `POST_NOTIFICATIONS` (Dienst läuft, Meldung unsichtbar; im Code protokolliert).
+- 22 min abgesteckt, Bildschirm aus: 45 von 45 Anfragen ok, Mittel 0,12 s.
+- 268 von 268 Herzschläge, keine Lücke.
+- Server-Verzögerung 1 bis 2 s. Light-Idle trat auf, Deep Doze nicht.
 
-## Netzwerk und Berechtigungen
-
-- `INTERNET` ist ab diesem Spike im Modul-Manifest (für den Server nötig). Im Manifest der App stand bisher keine INTERNET-Berechtigung.
-- `ACCESS_LOCAL_NETWORK` ist im Manifest deklariert. Die Android-Doku legt die Durchsetzung auf targetSdk 37 (Android 17). Auf Android 16 gilt sie nicht, dort war die Berechtigung nur ein Übergang (die Doku nennt dafür `NEARBY_WIFI_DEVICES`). Dieser Ablauf ist aus der Doku abgeleitet und am Gerät nicht geprüft.
-- Ablauf für Android 17 (noch nicht umgesetzt, Aufgabe der Oberfläche in Paket 3.x): Vor dem Start die Berechtigung prüfen (`checkSelfPermission`). Fehlt sie, mit `requestPermissions` anfragen und den Start erst nach Gewährung ausführen. Der Spike prüft nur und lehnt ab, er fragt nicht an.
-- Der Dienst prüft `ACCESS_LOCAL_NETWORK` bei API 37 und höher. Darunter ist die Prüfung erfüllt.
-- FGS-Typ: `connectedDevice` mit `FOREGROUND_SERVICE_CONNECTED_DEVICE` und `CHANGE_NETWORK_STATE` (eine der laut Doku nötigen Alternativen). Kein `dataSync`, weil dessen Zeitlimit (laut KONZEPT sechs Stunden pro Tag ab Android 15) den Dauerbetrieb begrenzt. Die Doku nennt für `connectedDevice` kein Zeitlimit (verifiziert).
-
-## Logging und Datenschutz
-
-- Ausgaben nur über `android.util.Log`, Tag `EmberlightSpike`. Protokolliert werden Port, Byte-Mengen und der Start- oder Stopp-Status.
-- Nie protokolliert: Token, Dateinamen, Inhalte, Pfade.
-- Den Token übergibt der PC als Intent-Extra. Der Dienst speichert ihn nicht. Der Befehl steht in der Shell-Historie, deshalb nur für Wegwerf-Tests.
-- Der Spike schreibt nur nach `filesDir/spike/`, nie in MediaStore oder die Galerie.
+**Deutung (Schluss aus den Messungen, keine belegte Ursache):** MagicOS friert Apps im Akkubetrieb trotz Foreground-Service, Wakelock und Akku-Ausnahme ein, solange „App-Start“ automatisch verwaltet wird. Belegt ist nur die Kombination aus beiden Einstellungen. Ob die App-Start-Einstellung allein reicht, ist offen.
 
 ## Konsequenzen
 
-- Der Server ist mit Ktor CIO machbar. Build, Lint und R8 sind grün, nachdem zwei Lint-Befunde und ein R8-Fehler (fehlende Klassen) behandelt sind.
-- Die Release-APK wächst um rund 0,66 MB (+22 %), sobald der Server eingebunden wird. Eine Aufschlüsselung nach Paketen fehlt.
-- Der Konstruktor von `KtorLocalServer` verlangt Ktor auf dem Compile-Classpath des Aufrufers. Vor einem produktiven Einsatz sollte die Lambda-Schnittstelle gekapselt werden.
-- Die Build-Sperre schützt die Modulgrenze ab jetzt im Build.
+- Der Server mit Ktor CIO ist machbar. Build, Lint, Tests und R8 sind grün.
+- Auf dem Honor-Gerät hat die Akku-Ausnahme allein (Lauf 1) nicht ausgereicht. Zusätzlich war die Hintergrund-Freigabe nötig (Lauf 2). Andere Hersteller können eigene Sperren haben.
+- Paket 3.3 bekommt einen Einrichtungs-Ablauf:
+  - Akku-Ausnahme
+  - herstellerspezifische Hintergrund-Freigabe, Honor zuerst. Huawei, Xiaomi und weitere als Ausbaustufe
+  - Ladegerät-Empfehlung
+  - erneute Prüfung beim Space-Start
+  - Laufzeitanfragen für `ACCESS_LOCAL_NETWORK` und `POST_NOTIFICATIONS`
+- **Pausen-Erkennung**: Der Dienst führt einen eigenen Herzschlag und erkennt Lücken (Laufzeit gegen Erwartung). Erkennt er eine Pause, zeigt er einen Hinweis, dass das System emberlight pausiert hat, mit Weg zur Einstellung. Hersteller-Einstellungen lassen sich nicht per API abfragen, deshalb läuft die Erkennung über die Laufzeit.
+- Die Build-Sperre schützt die Modulgrenze im Build, transitiv.
+- Der Upload-Baustein ist ohne Route getestet. Die Route, die Dateiablage und die Space-Verwaltung folgen in Paket 3.1 und 3.2.
 
-## Offene Risiken
+## Offene Punkte und Risiken
 
-- **Gerätetest fehlt**: Dauerbetrieb, Doze, Netzwerk nach Bildschirm aus und Durchsatz sind ungemessen. Der FGS-Typ `connectedDevice` ist damit nicht belegt.
-- **Android 8 (API 26)**: Ktor und seine Abhängigkeiten sind auf API 26 nicht zur Laufzeit geprüft. Ein fehlendes Java-API erst zur Laufzeit wird von Lint nicht gemeldet.
-- **Engine-Kompatibilität**: Eine ausdrückliche Android-Freigabe für CIO habe ich in der Recherche nicht gefunden. Die Suche war nicht erschöpfend, die Laufzeit auf Android ist nicht getestet.
-- **Android 17**: Der Ablauf zu `ACCESS_LOCAL_NETWORK` ist nicht am Gerät getestet.
-- **TLS**: Der Spike läuft über HTTP mit Token. TLS ist für Meilenstein 5 vorgesehen (siehe KONZEPT, offene Punkte).
+- **Langzeitverhalten**: Dauerbetrieb über Stunden, Nacht und Deep Doze ist nicht gemessen. Die Prüfung folgt mit der echten Space-Funktion auf dem Gerät.
+- **Android 8 (API 26)**: Ktor und seine Abhängigkeiten sind dort zur Laufzeit nicht geprüft. Lint erkennt fehlende Java-APIs nur zum Teil, ein Fehlen zeigt sich also erst zur Laufzeit.
+- **Engine-Kompatibilität**: Eine ausdrückliche Android-Freigabe für CIO habe ich nicht gefunden. Die Laufzeit auf Android ist nur auf dem Honor-Gerät getestet.
+- **Android 17 Laufzeitanfrage**: Der Ablauf zu `ACCESS_LOCAL_NETWORK` ist nicht am Gerät getestet, weil die Oberfläche fehlt.
 - **Prozess-Tod**: Der Dienst startet nach einem Prozess-Tod nicht neu (`START_NOT_STICKY`). Ein Gast verliert dann die Verbindung ohne Hinweis.
-- **Token über die Kommandozeile**: Nur für den Spike. Ein Produktivtoken wird von der App erzeugt und nicht über adb übergeben.
-
-## Empfehlung für Paket 3.1 und 3.2
-
-1. Gerätemessung nachholen (Punkte oben), bevor Ktor produktiv eingebunden wird.
-2. Die Build-Sperre mit einer Negativprobe für den transitiven Fall ergänzen, und die Regel in CLAUDE.md oder KONZEPT.md festhalten.
-3. Den Dienst über die UI starten und dabei die Berechtigungen anfragen. Der Debug-Einstieg bleibt nur im Debug-Set.
-4. Dateiablage und Space-Verwaltung vor dem Serverausbau entwerfen. Die Spike-Ablage `filesDir/spike/` ist nur ein Platzhalter.
+- **WifiLock-Modus**: `WIFI_MODE_FULL_HIGH_PERF` ist als veraltet markiert. Die Warnung ist mit `@Suppress("DEPRECATION")` unterdrückt. Ein Ersatz ohne Einschränkung ist nicht bekannt.
+- **Schutz gegen Zugriff**: Ohne Zugriffsprüfung antwortet der Server nur mit 401. Vor dem ersten Routen-Einsatz muss Paket 3.x die Prüfung liefern.
+- **TLS**: Der Server spricht HTTP (siehe Entscheidung).
+- **Gerätetest**: Der Hintergrundbetrieb wird im Gerätetest mit der echten Space-Funktion geprüft, nicht mit dem Spike.
 
 ## Alternativen
 
 - **Andere Engines (Netty, Jetty)**: nicht geprüft. Die Wahl von CIO folgt CLAUDE.md (Technik: „Eingebetteter Server: Ktor Server (CIO)“).
 - **Upload über `dataSync`**: verworfen, wegen des Sechs-Stunden-Limits (KONZEPT).
 - **Dateiname des Clients übernehmen**: verworfen, weil damit Pfad-Angriffe und Datenlecks möglich werden.
+- **Standardmäßig offener Zugang**: verworfen. Der Server verweigert ohne Prüfung alles.
 
 ## Quellen
 
+- Spike-Stand: Branch `spike/m3-server`, PR #23 (Draft).
 - Ktor-Artefakte (Maven Central): [ktor-server-core 3.6.0 POM](https://repo1.maven.org/maven2/io/ktor/ktor-server-core-jvm/3.6.0/ktor-server-core-jvm-3.6.0.pom), [ktor-server-cio 3.6.0 POM](https://repo1.maven.org/maven2/io/ktor/ktor-server-cio-jvm/3.6.0/ktor-server-cio-jvm-3.6.0.pom)
 - Android-Doku, Foreground-Service-Typen (connectedDevice, specialUse, dataSync): [developer.android.com](https://developer.android.com/develop/background-work/services/fgs/service-types)
 - Android-Doku, Berechtigung für lokales Netz: [developer.android.com](https://developer.android.com/privacy-and-security/local-network-permission)
