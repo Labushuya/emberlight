@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.share.server
 
 import android.annotation.SuppressLint
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -24,20 +25,33 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Foreground-Service, der den lokalen Server am Leben hält (ADR 0012). Typ `connectedDevice`, weil `dataSync` ein
- * Zeitlimit hat.
+ * Zeitlimit hat. Der Typ `connectedDevice` hat kein Zeitlimit.
  *
  * Solange der Server läuft, halten CPU-Wakelock und WLAN-Lock den Betrieb wach. Stopp (per Intent oder über die
- * Benachrichtigung) gibt beide Sperren frei. Ein Neustart nach Prozess-Tod erfolgt nicht (`START_NOT_STICKY`).
+ * Benachrichtigung) und `onDestroy` geben beide Sperren ausdrücklich frei. Ein Neustart nach Prozess-Tod erfolgt nicht
+ * (`START_NOT_STICKY`).
+ *
+ * Start und Stopp laufen über [lifecycle] in der Reihenfolge, in der sie unter dem Mutex ankommen. Ein Stopp, der
+ * während des Starts kommt, wartet, bis der Start fertig ist, und räumt danach Server und Sperren auf. Sperren werden
+ * nur erworben, solange [stopRequested] nicht gesetzt ist.
  *
  * Noch ohne Routen und ohne Zugriffsprüfung (Paket 3.x): Der Server verweigert damit jede Anfrage. Die Oberfläche, die
  * den Dienst startet, folgt in Paket 3.1 bzw. 3.3.
  */
 class SpaceServerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Serialisiert Start, Stopp und Aufräumen. Verhindert, dass ein Stopp und ein laufender Start einander überholen. */
+    private val lifecycle = Mutex()
+
+    /** Gesetzt, sobald ein Stopp angefordert wurde. Start und Erwerb der Sperren prüfen das unter dem Mutex. */
+    private val stopRequested = AtomicBoolean(false)
 
     /** Verhindert einen zweiten Startversuch, solange ein Start läuft oder der Server aktiv ist. */
     private val startRequested = AtomicBoolean(false)
@@ -46,7 +60,7 @@ class SpaceServerService : Service() {
     @Volatile
     private var locks: ServerLocks? = null
 
-    private val server: LocalServer by lazy { KtorLocalServer(routes = {}) }
+    private val server: LocalServer by lazy { serverFactory() }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -56,63 +70,90 @@ class SpaceServerService : Service() {
         startId: Int,
     ): Int {
         if (intent?.action == ACTION_STOP) {
-            stopServer()
+            requestStop()
             return START_NOT_STICKY
         }
         // Vordergrund zuerst: Android verlangt den Aufruf kurz nach startForegroundService. Auch unbekannte Aufrufe
         // erfüllen diese Pflicht, bevor der Dienst wieder endet.
-        ensureForeground()
-        if (intent?.action != ACTION_START) {
-            stopServer()
+        if (!ensureForeground()) {
+            requestStop()
+            return START_NOT_STICKY
+        }
+        if (intent == null || intent.action != ACTION_START) {
+            requestStop()
             return START_NOT_STICKY
         }
         if (!startRequested.compareAndSet(false, true)) return START_NOT_STICKY
         if (!localNetworkAllowed()) {
             Log.w(TAG, "ACCESS_LOCAL_NETWORK fehlt auf API ${Build.VERSION.SDK_INT}, Start abgelehnt.")
-            stopServer()
+            requestStop()
             return START_NOT_STICKY
         }
 
+        stopRequested.set(false)
         val port = intent.getIntExtra(EXTRA_PORT, 0)
         scope.launch {
-            try {
-                val bound = server.start(ServerConfig(port = port))
-                acquireLocks()
-                Log.i(TAG, "Server läuft auf Port $bound")
-                updateNotification(bound)
-            } catch (failure: Exception) {
-                Log.e(TAG, "Start fehlgeschlagen: ${failure.javaClass.simpleName}")
-                stopServer()
-            }
+            lifecycle.withLock { startLocked(port) }
         }
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
-        // Sperren zuerst lösen, damit sie auch bei abgebrochenem Stopp nicht hängen bleiben.
+        // Sperren sofort lösen, auch wenn ein Start noch wartet. Ein wartender Start prüft [stopRequested] und erwirbt
+        // dann nichts mehr.
+        stopRequested.set(true)
         locks?.release()
-        // Server zuerst sauber stoppen, dann den Scope beenden.
-        scope.launch { server.stop() }.invokeOnCompletion { scope.cancel() }
+        // Server und Sperren danach unter dem Mutex abschließen, dann den Scope beenden.
+        scope
+            .launch { lifecycle.withLock { shutDownLocked(stopSelfAfter = false) } }
+            .invokeOnCompletion { scope.cancel() }
         super.onDestroy()
     }
 
-    private fun stopServer() {
-        scope.launch {
-            locks?.release()
+    /** Fordert den Stopp an. Der eigentliche Abbau läuft unter dem Mutex, nach einem eventuell laufenden Start. */
+    private fun requestStop() {
+        stopRequested.set(true)
+        scope.launch { lifecycle.withLock { shutDownLocked(stopSelfAfter = true) } }
+    }
+
+    /** Läuft unter [lifecycle]. Startet den Server und erwirbt die Sperren, außer ein Stopp steht an. */
+    private suspend fun startLocked(port: Int) {
+        if (stopRequested.get()) return
+        try {
+            val bound = server.start(ServerConfig(port = port))
+            // Stopp kam während des Starts: Der wartende Stopp räumt auf, hier nichts mehr erwerben.
+            if (stopRequested.get()) return
+            acquireLocks()
+            Log.i(TAG, "Server läuft auf Port $bound")
+            updateNotification(bound)
+        } catch (failure: Exception) {
+            Log.e(TAG, "Start fehlgeschlagen: ${failure.javaClass.simpleName}")
+            shutDownLocked(stopSelfAfter = true)
+        }
+    }
+
+    /** Läuft unter [lifecycle]. Gibt Sperren frei, stoppt den Server und beendet den Dienst. */
+    private suspend fun shutDownLocked(stopSelfAfter: Boolean) {
+        locks?.release()
+        try {
             server.stop()
-            startRequested.set(false)
-            ServiceCompat.stopForeground(this@SpaceServerService, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        } catch (failure: Exception) {
+            Log.e(TAG, "Stopp fehlgeschlagen: ${failure.javaClass.simpleName}")
+        }
+        startRequested.set(false)
+        if (stopSelfAfter) {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
 
     private fun acquireLocks() {
-        val current = locks ?: createLocks().also { locks = it }
+        val current = locks ?: locksFactory(this).also { locks = it }
         current.acquire()
     }
 
     @Suppress("DEPRECATION")
-    private fun createLocks(): ServerLocks {
+    internal fun createServerLocks(): ServerLocks {
         val power = getSystemService(PowerManager::class.java)
         val wifi = applicationContext.getSystemService(WifiManager::class.java)
         val wake = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply { setReferenceCounted(false) }
@@ -127,18 +168,33 @@ class SpaceServerService : Service() {
         return ServerLocks(wake.asServerLock(), wifiLock.asServerLock())
     }
 
-    private fun ensureForeground() {
+    /**
+     * Startet den Vordergrund-Betrieb. Liefert `false`, wenn Android den Start verweigert. Dann ist der Dienst nicht im
+     * Vordergrund und der Aufrufer stoppt ihn.
+     */
+    private fun ensureForeground(): Boolean {
         createChannel()
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            buildNotification(port = null),
-            foregroundType(),
-        )
+        try {
+            foregroundStarter.start(this, buildNotification(port = null), foregroundType())
+        } catch (failure: SecurityException) {
+            Log.e(TAG, "startForeground verweigert: SecurityException")
+            return false
+        } catch (failure: IllegalStateException) {
+            if (!isForegroundStartNotAllowed(failure)) throw failure
+            Log.e(TAG, "startForeground verweigert: ForegroundServiceStartNotAllowedException")
+            return false
+        }
         if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
             // Ohne Benachrichtigungs-Erlaubnis läuft der Dienst trotzdem, die Meldung bleibt unsichtbar.
             Log.w(TAG, "Benachrichtigungen sind nicht erlaubt, der Dienst läuft ohne sichtbare Meldung.")
         }
+        return true
+    }
+
+    /** Ab API 31 kann Android den Vordergrund-Start aus dem Hintergrund ablehnen. Die Ausnahme gibt es erst ab dort. */
+    private fun isForegroundStartNotAllowed(failure: IllegalStateException): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        return failure is ForegroundServiceStartNotAllowedException
     }
 
     private fun updateNotification(port: Int) {
@@ -191,12 +247,23 @@ class SpaceServerService : Service() {
     }
 
     /**
-     * Ab targetSdk 37 ist lokaler Netzwerkzugriff eine Laufzeit-Berechtigung. Auf älteren Systemen gibt es sie nicht,
-     * dort gilt die Prüfung als erfüllt. Die Anfrage selbst gehört in die Oberfläche (ADR 0012, Paket 3.3).
+     * Prüft die Berechtigung `ACCESS_LOCAL_NETWORK`. Sie gilt nur, wenn das System API 37 oder neuer ist UND die App auf
+     * targetSdk 37 oder neuer zielt. Andernfalls gilt die Prüfung als erfüllt. Die Anfrage selbst gehört in die
+     * Oberfläche (ADR 0012, Paket 3.3).
      */
     private fun localNetworkAllowed(): Boolean {
         if (Build.VERSION.SDK_INT < ANDROID_17_SDK) return true
+        if (applicationInfo.targetSdkVersion < ANDROID_17_SDK) return true
         return ContextCompat.checkSelfPermission(this, LOCAL_NETWORK_PERMISSION) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /** Ein Aufruf von `startForeground`. Eigener Typ, damit Tests den Fehlerpfad auslösen können. */
+    internal fun interface ForegroundStarter {
+        fun start(
+            service: SpaceServerService,
+            notification: Notification,
+            type: Int,
+        )
     }
 
     companion object {
@@ -213,6 +280,14 @@ class SpaceServerService : Service() {
         private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
         private const val POST_NOTIFICATIONS_PERMISSION = "android.permission.POST_NOTIFICATIONS"
 
+        /** Test-Nähte. Produktion nutzt die Standardwerte. */
+        internal var serverFactory: () -> LocalServer = { KtorLocalServer(routes = {}) }
+        internal var locksFactory: (SpaceServerService) -> ServerLocks = { service -> service.createServerLocks() }
+        internal var foregroundStarter: ForegroundStarter =
+            ForegroundStarter { service, notification, type ->
+                ServiceCompat.startForeground(service, NOTIFICATION_ID, notification, type)
+            }
+
         /** Startintent. [port] 0 wählt einen freien Port. */
         fun startIntent(
             context: Context,
@@ -228,7 +303,8 @@ class SpaceServerService : Service() {
     }
 }
 
-// Ohne Timeout mit Absicht: die Sperre gilt, bis der Server stoppt. Der Dienst im Vordergrund begrenzt die Laufzeit.
+// Ohne Timeout mit Absicht: Der Typ connectedDevice hat kein Zeitlimit. Die Sperre gilt, bis sie in Stopp oder onDestroy
+// ausdrücklich freigegeben wird (siehe SpaceServerService.shutDownLocked und onDestroy).
 @SuppressLint("WakelockTimeout")
 private fun PowerManager.WakeLock.asServerLock(): ServerLock =
     object : ServerLock {

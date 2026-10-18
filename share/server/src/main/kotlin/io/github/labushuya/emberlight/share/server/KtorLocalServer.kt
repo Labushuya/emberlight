@@ -29,8 +29,12 @@ const val SERVER_API_VERSION = 1
  * Ktor-Implementierung von [LocalServer] mit der CIO-Engine (ADR 0012).
  *
  * Bindet an `0.0.0.0`. Jede Anfrage, auch `/health` und unbekannte Pfade, durchläuft [authorizer]. Die übergebenen
- * [routes] liegen hinter dieser Prüfung. [requestLog] erhält Eingang und Abschluss jeder Anfrage (Methode, Pfad,
- * Status, Dauer). Der Aufrufer darf Pfade nur ohne sensible Teile protokollieren.
+ * [routes] liegen hinter dieser Prüfung.
+ *
+ * [requestLog] erhält Eingang und Abschluss jeder Anfrage (Methode, Pfad, Status, Dauer). Der Server übergibt den rohen
+ * Pfad ohne Query-String. Enthält der Pfad ein Geheimnis, steht es also unverändert im Protokoll. Tokens und
+ * Einladungsschlüssel gehören deshalb nie in den Pfad oder in die Query (ADR 0012). Ab Paket 3.1 protokolliert der
+ * Aufrufer Route-Templates statt roher URIs.
  */
 class KtorLocalServer(
     private val routes: Route.() -> Unit,
