@@ -2,7 +2,7 @@
 
 Status: Entwurf, 18.10.2026. Der Entwurf wird vor der Implementierung von Paket 3.1a geprüft. Stand 18.10.2026: Netzverlust, Stopp-Zuordnung und GPS-Aufteilung sind entschieden. Grenzwerte sind vorgeschlagen und nicht bestätigt. Die Engine-Entscheidung ist offen, Messung siehe „Messung Engine“. Offene Entscheidungen stehen am Ende.
 
-Quellen sind mit [Q1] bis [Q20] markiert, die Liste steht am Ende. Was nicht belegt werden konnte, ist als „Vermutung“ gekennzeichnet. Android-API-Fakten sind am lokalen SDK geprüft (Abschnitt „Android-API-Fakten“).
+Quellen sind mit [Q1] bis [Q24] markiert, die Liste steht am Ende. Was nicht belegt werden konnte, ist als „Vermutung“ gekennzeichnet. Android-API-Fakten sind am lokalen SDK geprüft (Abschnitt „Android-API-Fakten“).
 
 ## Kontext
 
@@ -305,12 +305,74 @@ Prüfung am lokalen SDK, 18.10.2026. Quellen: `H:\DEV\tools\android-sdk\platform
 
 Folgerungen:
 
-- Für den Netz-Abschnitt braucht 3.1a `ACCESS_NETWORK_STATE` im Manifest von `share:server`. `CHANGE_NETWORK_STATE` reicht dafür nicht aus (Annotation nennt nur `ACCESS_NETWORK_STATE`).
+- Für den Netz-Abschnitt braucht 3.1a `ACCESS_NETWORK_STATE` im Manifest von `share:server`. `CHANGE_NETWORK_STATE` reicht dafür nicht aus (Annotation nennt nur `ACCESS_NETWORK_STATE`). Im gebauten Manifest der App ist die Berechtigung bereits vorhanden, eingetragen von `androidx.media3:media3-exoplayer` (Merge-Report der Messung, siehe „Messung Engine“). Die Deklaration in `share:server` bleibt trotzdem nötig, damit das Modul auch ohne Media3 korrekt ist.
 - `onLinkPropertiesChanged` ist der richtige Weg, um Adressänderungen zu erkennen (Netzverlust-Regel, siehe Netz-Abschnitt).
 
-## Messung Engine
+## Messung Engine (18.10.2026)
 
-Abschnitt wird mit der Messung (Spike auf Branch `spike/m3-engine`, Worktree temporär) ergänzt. Bis dahin ist die Engine-Entscheidung offen.
+Status: **Messung abgeschlossen, Entscheidung nicht getroffen.** Die Engine-Wahl (CIO oder Netty) trifft die Nutzerin bzw. der Nutzer. Dieser Abschnitt enthält keine Empfehlung im Sinne einer Entscheidung.
+
+### Methode
+
+- Umgebung: Windows 10, Temurin JDK 17.0.19, Kotlin 2.4.21, Ktor 3.6.0 (CIO bzw. Netty), Netty 4.2.17.Final (transitiv über Ktor). Loopback `127.0.0.1`, Server und Client in getrennten JVMs. Zeitmessung mit `System.nanoTime()` auf Clientseite.
+- Je Variante ein Lauf (n = 1). Ergebnisse sind Richtwerte, keine statistischen Aussagen.
+- Ablauf: Kontrolle (5 × `GET /ok`). Fälle a, b, c gleichzeitig auf eigenen Verbindungen, je bis 120 s. Fall d (2 000 Verbindungen, Probe `GET /ok` alle 10 s über 120 s). Fälle e und f nacheinander. Zusatzfälle g (Body-Pause) und e2 (Header-Gesamtgröße unter dem Zeilenlimit).
+- Fall d wurde in einem zweiten Lauf mit Speicherprobe wiederholt (alle 5 s, Server-JVM). Heap wird als „belegt“ ohne erzwungene GC gemessen, das ist eine obere Schranke. Die Latenzen im Abschnitt d unterscheiden sich am Anfang: Der erste Aufruf nach dem Serverstart dauert 48 bis 78 ms (Kaltstart), danach 1,7 bis 2,7 ms.
+- Varianten: CIO-Standard. CIO mit `connectionIdleTimeoutSeconds = 15`. CIO mit Idle 15 s und Lese-Timeout pro Chunk (`withTimeoutOrNull(15 s)` um `readAvailable`). Netty-Standard. Netty mit `requestReadTimeoutSeconds = 15`, `runningLimit = 16`, `maxHeaderSize = 8192`, `maxInitialLineLength = 4096` (Option-Namen aus dem Quelltext 4.2.17 bzw. Ktor 3.6.0, [Q22], [Q23]).
+
+### Gemessen
+
+| Fall | CIO-Standard | CIO, Idle 15 s | CIO, Idle 15 s + Lese-Timeout pro Chunk | Netty-Standard | Netty mit Grenzen |
+|---|---|---|---|---|---|
+| a Verbindung ohne Daten | Schluss bei 45,0 s (EOF) | Schluss bei 15,0 s | Schluss bei 15,0 s | offen bis 120 s | offen bis 120 s |
+| b Header, 1 Byte alle 5 s | Schluss bei 45,0 s (52 Byte gesendet) | Schluss bei 15,0 s (46 Byte) | Schluss bei 15,0 s (46 Byte) | offen bis 120 s (67 Byte) | offen bis 120 s (67 Byte) |
+| c Body, 1 KiB alle 5 s, `Content-Length: 10485760` | offen bis 120 s (24 684 Byte) | offen bis 120 s | offen bis 120 s | offen bis 120 s | offen bis 120 s |
+| d 2 000 stumme Verbindungen, Schluss durch Server | alle 2 000 bei 45 s | alle 2 000 bei 15 s | alle 2 000 bei 15 s | 0 von 2 000 bis 120 s | 0 von 2 000 bis 120 s |
+| d Latenz `GET /ok` (warmer Server) | 1,7 bis 2,1 ms (t = 10 bis 40 s, Verbindungen offen) | 2,1 bis 2,2 ms (t = 10 bis 20 s) | 2,2 ms (t = 10 bis 20 s) | 1,9 bis 2,5 ms (t = 10 bis 110 s, alle offen) | 1,8 bis 2,7 ms (t = 10 bis 110 s, alle offen) |
+| d Heap belegt, ohne GC (MB) | 13 → 74 (10 s) → 80 | 14 → 73 (15 s) → 79 | 13 → 69 (10 s) → 74 | 13 → 34 (15 s) → 40 (120 s) | 14 → 31 (10 s) → 55 (25 s) → 61 (120 s) |
+| d Threads | 8 → 89 bis 90 (Last) → 24 nach Schluss | 8 → 90 → 24 nach Schluss | 8 → 90 → 24 nach Schluss | 8 → 22 (10 s) → 32 (120 s) | 8 → 22 (10 s) → 32 (120 s) |
+| e 200 Header mit je 8192 Byte Wert (Zeile 8201 Byte) | 400 (HTTP/1.0) | 400 | 400 | 400 (HTTP/1.1) | 400 |
+| e2 200 Header mit je 8009 Byte (Zeilen unter 8192, gesamt 1 601 800 Byte) | 200 OK | 200 OK | 200 OK | 400 | 400 |
+| e2 1 000 Header mit je 1009 Byte (gesamt 1 009 000 Byte) | 200 OK | 200 OK | 200 OK | 400 | 400 |
+| f Request-Zeile mit 64 KiB Pfad | 400 (HTTP/1.0) | 400 | 400 | 400 (HTTP/1.0) | 400 |
+| g Body-Pause 40 s nach 1 KiB | offen bis 40 s, keine Antwort | offen bis 40 s | Antwort (Route 408) bei 15,1 s, Schluss bei 30,1 s | offen bis 40 s | erste Antwort-Bytes bei 15,1 s, Schluss bei 15,1 s (Status nicht protokolliert) |
+| Kontrolle `GET /ok` ohne Angriff | Erstaufruf 60 ms, danach 1,3 bis 1,7 ms | 61 ms, danach 1,4 bis 1,8 ms | 60 ms, danach 1,3 bis 1,5 ms | 115 ms, danach 1,4 bis 1,8 ms | 106 ms, danach 1,5 bis 1,9 ms |
+
+Hinweise zur Tabelle: Die Zeilen d „Latenz“, d „Heap“ und d „Threads“ stammen aus einem zweiten Lauf nur für Fall d (Speicherprobe). Kontrolle, a bis c, e und f stammen aus dem ersten Lauf, g und e2 aus einem Zusatzlauf. Bei a bis c wurden Antwort-Bytes nicht protokolliert, die Angabe „offen“ meint nur fehlenden Schluss.
+
+### Build-Kosten Netty (Vergleich mit main, CIO)
+
+Messung mit `:app:assembleRelease` (unsigniert, beide Seiten identisch gebaut). Das Netty-Build ist die Variante ohne `netty-codec-native-quic`, mit den unten genannten Build-Regeln.
+
+- APK main (CIO): 3 652 833 Byte (Wert reproduziert).
+- APK Netty: 3 816 317 Byte. Delta +163 484 Byte (+4,5 %).
+- Ohne Ausschluss von `netty-codec-native-quic` bricht `mergeReleaseJavaResource` ab. Die fünf plattformspezifischen Jars enthalten dieselben Pfade (`META-INF/license/LICENSE.webbit.txt`, `META-INF/native-image/...`).
+- Mit dem Ausschluss bricht `mergeReleaseJavaResource` wegen `META-INF/INDEX.LIST` in 18 bis 23 Netty-Jars ab. Die Konfiguration schließt zusätzlich `META-INF/io.netty.versions.properties` und `META-INF/native-image/**` aus. Diese beiden Ausschlüsse wurden nicht einzeln auf Notwendigkeit geprüft.
+- R8 bricht ohne Regeln mit 45 fehlenden Klassen ab (TLS-Provider tcnative, Conscrypt, BouncyCastle, Log4j, `jdk.jfr`, `javax.naming`). Die von R8 erzeugte Datei `missing_rules.txt` enthält 45 `-dontwarn`-Zeilen. Mit diesen Zeilen in `share/server/consumer-rules.pro` baut die Konfiguration. Eine Warnung zu `reactor.blockhound` bleibt (nicht fatal).
+- Native Bibliotheken: Die APK enthält keine Netty-`.so`-Dateien. `lib/` enthält nur `libandroidx.graphics.path.so` und `libdatastore_shared_counter.so` in vier ABIs. Ein Vergleich von `lib/` mit main wurde nicht separat gemessen.
+- Manifest-Berechtigungen: Netty bringt keine. Die Netty-Jars enthalten kein `AndroidManifest.xml`. Eine Vergleichsliste der main-APK wurde nicht separat erhoben. `ACCESS_NETWORK_STATE` steht bereits im gemergten Manifest der App, eingetragen von `androidx.media3:media3-exoplayer` (Merge-Report der Netty-Variante).
+- Lint: `:share:server:lintRelease` und `:share:server:checkServerIsolation` sind grün. `allWarningsAsErrors` (Kotlin) meldet nichts. Lint für die gesamte App wurde nicht ausgeführt, außer `lintVitalRelease` im Release-Build.
+- Tests: Die 29 bestehenden Server-Unit-Tests (`KtorLocalServerTest` 10, `ServerLocksTest` 6, `SpaceServerServiceTest` 13) laufen mit Netty grün.
+- Gerätelauf: nicht erfolgt (kein Gerät angeschlossen). Die Messung oben gilt für JVM und Build, nicht für Android-Laufzeit.
+
+### Deutung (nicht gemessen oder nur indirekt belegt)
+
+- **CIO, Verbindungsschutz**: Der Idle-Timeout schließt stumme Verbindungen (a, d) und Header-Tropfen (b) am Ende des Timeouts. Die Schwelle bei Tropfen gilt also für die Zeit bis zum vollständigen Header, nicht pro Byte. Die Ursache liegt vermutlich im Schreibschleifen-Timer, der vom Verbindungsbeginn läuft. Quelle: [Q24], Messung b.
+- **CIO, Körperschutz**: Ein Körper, der mit Pausen unter dem Timeout tröpfelt (c), bleibt offen. Ein Lese-Timeout pro Chunk wirkt nur bei echten Pausen (g). Für c braucht es eine eigene Mindestrate über ein Zeitfenster (Vorschlag, nicht gemessen).
+- **Netty, Schutz vor stillen Verbindungen**: `requestReadTimeoutSeconds` schließt Pausen innerhalb eines Körpers (g). Stille Verbindungen vor dem ersten Byte (a, d) schließt es nicht. Das Serverprotokoll zeigt 2 001 `ReadTimeoutException`, die bis zum Pipeline-Ende laufen und nicht behandelt werden. Im Quelltext leitet `NettyHttp1Handler` die Ausnahme ohne aktive Anfrage nur weiter (`fireExceptionCaught`) [Q23]. Die Ursache folgt daraus, ist aber nicht im Debugger verifiziert.
+- **Header-Gesamtgröße**: CIO begrenzt sie nicht (e2: 200 OK bei 1,6 MB). Netty begrenzt sie über `maxHeaderSize` (Standard 8192, e2: 400). Die Werte der Variante „mit Grenzen“ entsprechen den Netty-Standardwerten [Q22]. Die Einstellungen ändern in dieser Version also nichts.
+- **Zeilenlimit**: Beide Engines lehnen Zeilen über 8192 Byte (CIO) bzw. eine Request-Zeile über 4096 Byte (Netty) mit 400 ab (e, f). Der Statuscode 400 ist bei allen Varianten gleich, eine 431 oder 414 kam nicht vor.
+- **Speicher und Threads**: CIO hat während der Last mehr Threads (bis 90) und gibt sie nach dem Schluss zurück (24). Netty wächst im Heap langsam weiter (bis 40 MB bzw. 61 MB), die Threads bleiben bei 32. Die Werte sind ohne GC-Erzwingung, also nicht belastbar für den Gerätespeicher. Der stärkere Heap-Anstieg bei Netty mit Grenzen (31 auf 55 MB bis 25 s) dürfte zum Teil aus den 2 001 Warnungen mit Stack-Trace stammen. Das ist nicht isoliert geprüft.
+- **Latenz**: In allen Varianten blieb `GET /ok` bei 1,7 bis 2,7 ms, auch mit 2 000 offenen Verbindungen. Das gilt für Loopback mit n = 1 und sagt nichts über WLAN aus.
+- **Build-Aufwand**: Netty kostet +163 KB APK und drei Build-Eingriffe (Ausschluss QUIC, Packaging-Ausschlüsse, 45 `-dontwarn`-Zeilen). Die Regeln hängen an Netty 4.2.17. Bei Ktor-Updates müssen sie erneut geprüft werden.
+- **Android-Einschränkungen von Netty** (aus Quellen, nicht am Gerät geprüft):
+  - Netty 4.2 setzt Java 8 voraus [Q21]. Für minSdk 26 ist das unkritisch.
+  - `java.lang.invoke.VarHandle` ist erst ab API 33 verfügbar [Q20]. Netty 4.2.17 nutzt es in `PlatformDependent`, `VarHandleFactory` und weiteren Klassen. Der Lade- und Initialisierungspfad fängt Fehler mit `catch (Throwable)` ab und fällt auf andere Pfade zurück [Q22]. Ob der Fallback auf API 26 bis 32 sauber läuft, ist nicht geprüft.
+  - `java.lang.invoke.MethodHandle` ist ab API 26 verfügbar [Q20], also für minSdk 26 passend. Netty nutzt es in `PlatformDependent0` [Q22].
+  - `sun.misc.Unsafe` ist optional. Netty schaltet über `io.netty.noUnsafe` ab [Q22]. Die Android-Erkennung läuft über den VM-Namen „Dalvik“ [Q22].
+  - Native Transporte (epoll, kqueue) enthält die APK nicht, Netty nutzt damit den NIO-Transport. Die Migrationsnotiz nennt glibc ab 2.17 für die nativen Transporte [Q21]. Ob der NIO-Pfad auf ART ohne Einschränkung läuft, ist nicht am Gerät geprüft.
+  - Eine öffentliche Android-Freigabe von Ktor oder Netty für die Server-Engine habe ich nicht gefunden. Die Suche ergab nur anekdotische Meldungen ohne Quellen.
+- **Bewertung**: Keine der Varianten erfüllt die Schutzgrenzen allein. CIO fehlen die Gesamtgröße der Header und eine Mindestrate für den Körper. Netty fehlt mit den Standardoptionen der Schutz vor stillen Verbindungen. Die Entscheidung bleibt offen. Der Gerätetest steht aus.
 
 ## Offene Entscheidungen
 
@@ -353,6 +415,10 @@ Abschnitt wird mit der Messung (Spike auf Branch `spike/m3-engine`, Worktree tem
 - [Q17] Repo: `share/server/src/main/AndroidManifest.xml`, `app/src/main/res/xml/data_extraction_rules.xml`, `share/server/src/main/kotlin/.../KtorLocalServer.kt`, `RequestAuthorizer.kt`.
 - [Q18] Lokales Android SDK, Platform `android-37.0`: `platforms\android-37.0\android.jar`, Ausgabe von `javap` für `android.net.ConnectivityManager`, `ConnectivityManager$NetworkCallback`, `android.net.LinkProperties`, `android.net.LinkAddress`, `android.content.Context`.
 - [Q19] Lokales Android SDK: `platforms\android-37.0\data\annotations.zip`, Dateien `android/net/annotations.xml` (Permission-Annotationen).
-- [Q20] Lokales Android SDK: `platforms\android-37.0\data\api-versions.xml` (Einführungsversion je Klasse und Methode).
+- [Q20] Lokales Android SDK: `platforms\android-37.0\data\api-versions.xml` (Einführungsversion je Klasse und Methode). Enthält unter anderem `java/lang/invoke/MethodHandle` ab API 26 und `java/lang/invoke/VarHandle` ab API 33.
+- [Q21] Netty, Migrationsleitfaden 4.2: https://netty.io/wiki/netty-4.2-migration-guide.html (Java 8 als Mindestversion, glibc 2.17 für native Transporte, io_uring ab Java 9).
+- [Q22] Netty 4.2.17.Final, Quelltext-Jars (Maven Central): `netty-common` (`PlatformDependent.java`, `PlatformDependent0.java`, `VarHandleFactory.java`), `netty-codec-http` (`HttpObjectDecoder.java`: `DEFAULT_MAX_HEADER_SIZE = 8192`, `DEFAULT_MAX_INITIAL_LINE_LENGTH = 4096`). https://repo1.maven.org/maven2/io/netty/
+- [Q23] Ktor 3.6.0 Netty, Quelltext-Jar `ktor-server-netty-jvm-3.6.0-sources.jar`: `NettyChannelInitializer.kt` (Einhängen des `ReadTimeoutHandler`), `http1/NettyHttp1Handler.kt` (Behandlung von `ReadTimeoutException`), `NettyApplicationEngine.kt` (Standardwerte der Optionen).
+- [Q24] Ktor 3.6.0 CIO, Quelltext-Jar `ktor-server-cio-jvm-3.6.0-sources.jar`: `backend/HttpServer.kt` und `backend/ServerPipeline.kt` (Timer `connectionIdleTimeoutSeconds`).
 
 Nicht abrufbar (als Vermutung gekennzeichnet): Die Android-Referenzseiten zu `ConnectivityManager.NetworkCallback`, `LinkProperties`, `NetworkCapabilities` und `Context.getNoBackupFilesDir` wurden nicht gelesen. Die Fakten sind stattdessen über das lokale SDK belegt (Q18 bis Q20). Der AOSP-Quelltext ließ sich nicht laden und liegt auch im SDK nicht vor. Die Apple-QuickTime-Spezifikation ließ sich nicht als Text auswerten.

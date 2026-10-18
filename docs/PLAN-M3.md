@@ -27,7 +27,7 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 - **`/health`** bleibt hinter der Zugriffsprüfung. Die Gäste-Webseite schickt den Token als Header mit (ADR 0014).
 - **`SERVER_API_VERSION` bleibt 1.** Erhöhung erst bei inkompatiblen Änderungen nach dem ersten Release mit Routen (`v0.3.0`) (ADR 0014, Version).
 - **Grenzwerte** (Dateigrößen, Speicherlimit, Restspeicher, Parallelität, Timeouts) sind vorgeschlagen und noch nicht von der Nutzerin bzw. dem Nutzer bestätigt (ADR 0013).
-- **Engine** (CIO oder Netty) ist offen, bis die Messung in ADR 0013 vorliegt und entschieden ist.
+- **Engine** (CIO oder Netty) ist offen. Die Messung liegt in ADR 0013 („Messung Engine“) vor, die Entscheidung steht aus. Der Gerätetest fehlt noch.
 
 ## Entscheidungsdokumente
 
