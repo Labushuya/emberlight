@@ -8,7 +8,7 @@ Was entschieden ist und warum, steht in [docs/KONZEPT.md](docs/KONZEPT.md). Lies
 - **Nur lokal.** Kein Backend, kein Relais, keine Cloud-Dienste, keine Konten, kein Tracking, keine Analytics.
 - **Keine Abhängigkeit von Google Play Services** (kein ML Kit, kein Nearby, kein Firebase). Die App wird per Sideloading verteilt und soll auf jedem Android 8+ laufen.
 - Nichts einbauen, was einen späteren Play-Store-Umzug verhindert. Der In-App-Updater kommt später in einen eigenen Build-Flavor.
-- **Strikte Trennung von Space und Galerie.** Ein Space gibt nur Medien preis, die ausdrücklich in ihn geteilt wurden. Die private Galerie ist für Server und Teilnehmer nie erreichbar. Space-Medien liegen nur im app-internen Space-Speicher; in eine Galerie gelangt nur, was ausdrücklich ausgewählt und heruntergeladen wurde. Technische Durchsetzung ab Meilenstein 3: `share:server` darf nicht von `core:media` abhängen (Build-Prüfung), Auslieferung nur aus dem Space-Speicher, Tests dafür.
+- **Strikte Trennung von Space und Galerie.** Ein Space gibt nur Medien preis, die ausdrücklich in ihn geteilt wurden. Die private Galerie ist für Server und Teilnehmer nie erreichbar. Space-Medien liegen nur im app-internen Space-Speicher; in eine Galerie gelangt nur, was ausdrücklich ausgewählt und heruntergeladen wurde. Technische Durchsetzung ab Meilenstein 3: `share:server` darf über keine auflösbare Konfiguration `core:media`, `:feature:*` oder `:app` erreichen (Build-Prüfung `checkServerIsolation`, transitiv). Der Quelltext von `share:server` darf keine Galerie-Medien- oder Speicherzugriffe enthalten (Build-Prüfung `checkServerSources`). Auslieferung nur aus dem Space-Speicher, Tests dafür.
 
 ## Technik (Vorgabe, begründet abweichen ist erlaubt)
 
