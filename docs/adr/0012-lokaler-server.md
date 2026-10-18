@@ -212,3 +212,10 @@ Diese Punkte müssen erfüllt und getestet sein, bevor Paket 3.1 Routen einführ
 - Ktor-Artefakte (Maven Central): [ktor-server-core 3.6.0 POM](https://repo1.maven.org/maven2/io/ktor/ktor-server-core-jvm/3.6.0/ktor-server-core-jvm-3.6.0.pom), [ktor-server-cio 3.6.0 POM](https://repo1.maven.org/maven2/io/ktor/ktor-server-cio-jvm/3.6.0/ktor-server-cio-jvm-3.6.0.pom)
 - Android-Doku, Foreground-Service-Typen (connectedDevice, specialUse, dataSync): [developer.android.com](https://developer.android.com/develop/background-work/services/fgs/service-types)
 - Android-Doku, Berechtigung für lokales Netz: [developer.android.com](https://developer.android.com/privacy-and-security/local-network-permission)
+
+## Nachtrag (18.10.2026)
+
+Der Text oben bleibt unverändert. Zwei Punkte werden präzisiert:
+
+- (a) Der Punkt „Stopp in der App“ unter „Pflicht vor Paket 3.1“ gehört zu **Paket 3.3** (Start aus der Oberfläche). Er ist keine Voraussetzung von Paket 3.1. Bis 3.3 bleibt der Stopp auf Server-Ebene getestet (ADR 0014, Teststrategie). Siehe [PLAN-M3](../PLAN-M3.md), Paket 3.3.
+- (b) Der Speicherort der Space-Dateien ist durch [ADR 0013](0013-schutz-gegen-manipulation.md) auf `noBackupFilesDir` präzisiert (Abschnitt „Speicher“). „Unterhalb des app-internen Speichers“ bleibt richtig, ist aber nicht mehr die genaue Festlegung.

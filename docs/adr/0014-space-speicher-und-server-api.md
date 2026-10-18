@@ -1,6 +1,6 @@
 # ADR 0014: Space-Speicher und Server-API (Meilenstein 3, Paket 3.1)
 
-Status: Entwurf, 18.10.2026. Der Entwurf wird vor der Implementierung von Paket 3.1a geprüft. Die Sicherheitsgrundlagen (Netz, Authorization, Inhaltsprüfung, Grenzen) stehen in [ADR 0013](0013-schutz-gegen-manipulation.md). Dieses ADR legt Module, Persistenz, Schnittstelle und Tests fest.
+Status: Entwurf, 18.10.2026. Der Entwurf wird vor der Implementierung von Paket 3.1a geprüft. Stand 18.10.2026 festgelegt: Version bleibt 1, `/health` bleibt hinter der Zugriffsprüfung, Umfang 3.1a (Abschnitt „Umfang 3.1a“). Offen: Room-Pfad (Test in 3.1a). Die Sicherheitsgrundlagen (Netz, Authorization, Inhaltsprüfung, Grenzen) stehen in [ADR 0013](0013-schutz-gegen-manipulation.md). Dieses ADR legt Module, Persistenz, Schnittstelle und Tests fest.
 
 ## Kontext
 
@@ -32,7 +32,8 @@ Paket 3.1 braucht einen Speicher für Space-Medien, einen Index und eine API, ü
 ### Entscheidung
 
 - Room mit **eigener Datenbankdatei** `spaces.db`, abgelegt unter `noBackupFilesDir/spaces/spaces.db` (nicht `databases/`). Begründung: `databases/` ist nicht gesondert vom Backup geschützt, Dateien in `noBackupFilesDir` sind es (ADR 0013, Speicher).
-- **Vermutung, im Spike prüfen**: Room erlaubt einen absoluten Pfad als Dateiname im `databaseBuilder`. Falls nicht, ist die Datenbank über `Room.databaseBuilder` mit eigenem Dateipfad oder über den Factory-Hook anzulegen. Der Pfad wird im Gerätetest kontrolliert.
+- **Vermutung, offen**: Room erlaubt einen absoluten Dateinamen im `databaseBuilder`. Das lässt sich am SDK nicht prüfen. `Context.getDatabasePath` ist im SDK abstrakt, die Implementierung (`ContextImpl`) liegt nicht lokal vor (ADR 0013, Android-API-Fakten, Nr. 5). **Im 3.1a-Robolectric-Test zu verifizieren**: Die Datenbank liegt tatsächlich unter `noBackupFilesDir/spaces/`, nicht unter `databases/`. Falls der absolute Pfad nicht geht, ist die Datenbank über `Room.databaseBuilder` mit eigenem Dateipfad oder über den Factory-Hook anzulegen. Der Pfad wird im Gerätetest kontrolliert.
+- **Belegt**: `Context.getNoBackupFilesDir()` ist abstrakt und ab API 21 verfügbar (ADR 0013, Android-API-Fakten, Nr. 4).
 - Felder (Vorschlag, mit der Begründung aus ADR 0013):
 
 | Tabelle | Felder |
@@ -137,14 +138,28 @@ Jede Anfrage durchläuft zuerst die Prüfungen aus ADR 0013: Host, Netz, Authori
 
 ### Version
 
-- Das Präfix `/api/v1` bleibt Version 1. `SERVER_API_VERSION` bleibt 1, weil die Änderungen in 3.1 die Schnittstelle v1 erweitern und nicht brechen. Vorschlag. Die KDoc in `KtorLocalServer.kt` („Erhöhen, wenn sich Routen … ändern“) ist dann zu präzisieren. Entscheidung nötig.
+- **Entschieden (18.10.2026)**: `SERVER_API_VERSION` bleibt 1. `/api/v1` ist die erste Fassung mit Routen. Die Version wird erst bei inkompatiblen Änderungen nach dem ersten Release mit Routen (`v0.3.0`) erhöht.
+- **Aufgabe für 3.1a**: Die KDoc von `SERVER_API_VERSION` in `KtorLocalServer.kt` (Zeile 25) lautet heute „Erhöhen, wenn sich Routen oder Antworten für Gäste-Geräte ändern.“ Sie wird auf die Regel oben umgestellt. Das ist ein reiner Kommentar, kein Verhaltenswechsel. Der bestehende Test `/health` prüft `apiVersion` über die Konstante.
 
 ## Offene Entscheidungen
 
-1. **Room-Pfad**: absoluter Dateipfad im `databaseBuilder` (Vermutung, im Spike prüfen).
-2. **`/health` hinter der Authorization**: ADR 0012 verlangt das. Für Gäste-Browser heißt das: Der Health-Check braucht den Token. Das ist gewollt, aber die Gäste-Webseite muss es berücksichtigen.
-3. **Version** (siehe oben).
-4. **Zwischenstand ohne GPS-Entfernung** (siehe ADR 0013, Offene Entscheidungen).
+1. **Room-Pfad**: offen. Absoluter Dateipfad im `databaseBuilder` ist im 3.1a-Robolectric-Test zu verifizieren (siehe Persistenz).
+2. **`/health` hinter der Authorization (entschieden, 18.10.2026)**: `/health` bleibt hinter der Zugriffsprüfung, wie in ADR 0012. Die Gäste-Webseite schickt den Token als Header mit, auch für den Health-Check.
+3. **Version (entschieden, 18.10.2026)**: `SERVER_API_VERSION` bleibt 1 (siehe Version).
+4. **Zwischenstand ohne GPS-Entfernung (entschieden, 18.10.2026)**: 3.1a und 3.1b bleiben getrennt, 3.1b vor dem ersten erreichbaren Upload (siehe ADR 0013, Offene Entscheidungen, Punkt 2).
+
+## Umfang 3.1a
+
+Festgelegt am 18.10.2026. Zu 3.1a gehört alles außer der GPS-Entfernung (3.1b).
+
+- Zugriffsprüfung (Host, Netz, Authorization) in die Phase `Setup` verlegen. Test „kein Plugin antwortet vorher“ (ADR 0013, Reihenfolge der Prüfungen).
+- Manifest von `share:server`: `ACCESS_NETWORK_STATE` ergänzen (Pflicht für `registerNetworkCallback`, ADR 0013, Android-API-Fakten).
+- `<device-transfer>`-Regeln in `app/src/main/res/xml/data_extraction_rules.xml` ergänzen. Heute fehlt der Abschnitt, damit ist die Geräte-zu-Geräte-Übertragung für App-Daten nicht eingeschränkt (ADR 0013, Speicher). Die Ausschlüsse entsprechen `<cloud-backup>`.
+- Build-Sperren für `share:space` in beide Richtungen: `share:space` darf nicht von `:app`, `:feature:*`, `:core:media` oder `share:server` abhängen (transitiv). Galerie-Module (`:core:media`, `:feature:gallery`, `:app`) dürfen nicht von `share:*` abhängen. Die Richtung „Galerie → Space“ ist neu (`checkGalleryNoSpaceDependency`, Vorschlag).
+- Prüfung, dass das Release-Manifest keinen Debug-Einstieg enthält (Build-Prüfung `checkReleaseManifest`, Vorschlag).
+- Room-Pfad per Robolectric-Test absichern: prüfen, dass die Datenbank unter `noBackupFilesDir/spaces/` angelegt wird und der absolute Dateiname funktioniert (siehe Persistenz, offen).
+- `SERVER_API_VERSION`-KDoc anpassen (siehe Version).
+- Zugriffsprüfung auf `Setup` und Protokollierung ohne Roh-URI (ADR 0013, Logging) sind ebenfalls Teil von 3.1a.
 
 ## Teststrategie für 3.1a
 
@@ -157,7 +172,7 @@ Jede Anfrage durchläuft zuerst die Prüfungen aus ADR 0013: Host, Netz, Authori
 | Kein Plugin vor der Zugriffsprüfung | Test-Plugin in `Plugins` und `Fallback` antwortet, unauthentifizierte Anfrage erhält trotzdem `401`. | JVM |
 | Downloads | Header `nosniff`, `Content-Type` aus der Erkennung, `Content-Disposition` nach RFC 6266. | JVM |
 | Mehrfache Authorization | Zwei Header → `401`. | JVM |
-| Stopp in der App | Vorerst nur Server-Ebene (Stopp gibt Port frei). Der Stopp aus der Oberfläche folgt in 3.3 (siehe ADR 0013, offene Entscheidung 3). | JVM, Gerät in 3.3 |
+| Stopp in der App | Vorerst nur Server-Ebene (Stopp gibt Port frei). Der Stopp aus der Oberfläche folgt in 3.3 (Voraussetzung von 3.3, siehe ADR 0012, Nachtrag). | JVM, Gerät in 3.3 |
 | Logging | Route-Template statt Roh-URI. Kein Token, kein Header im Protokoll. | JVM mit Log-Sammler |
 
 ### Pflicht-Tests für den Upload (ADR 0012)

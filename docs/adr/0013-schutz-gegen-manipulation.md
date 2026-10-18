@@ -1,8 +1,8 @@
 # ADR 0013: Schutz gegen Manipulation (Meilenstein 3, Paket 3.1)
 
-Status: Entwurf, 18.10.2026. Der Entwurf wird vor der Implementierung von Paket 3.1a geprüft. Offene Entscheidungen stehen am Ende.
+Status: Entwurf, 18.10.2026. Der Entwurf wird vor der Implementierung von Paket 3.1a geprüft. Stand 18.10.2026: Netzverlust, Stopp-Zuordnung und GPS-Aufteilung sind entschieden. Grenzwerte sind vorgeschlagen und nicht bestätigt. Die Engine-Entscheidung ist offen, Messung siehe „Messung Engine“. Offene Entscheidungen stehen am Ende.
 
-Quellen sind mit [Q1] bis [Q17] markiert, die Liste steht am Ende. Was nicht belegt werden konnte, ist als „Vermutung“ gekennzeichnet.
+Quellen sind mit [Q1] bis [Q20] markiert, die Liste steht am Ende. Was nicht belegt werden konnte, ist als „Vermutung“ gekennzeichnet. Android-API-Fakten sind am lokalen SDK geprüft (Abschnitt „Android-API-Fakten“).
 
 ## Kontext
 
@@ -31,14 +31,15 @@ Dieses ADR beschreibt die Abwehr. Die Schnittstelle selbst (Routen, Statuscodes)
 Befund:
 
 - Der Connectivity-Leitfaden zeigt `requestNetwork()` bzw. `registerNetworkCallback()` mit einer `NetworkRequest`, die `TRANSPORT_WIFI` enthält. Die Callbacks `onLost()` („indicates that the device has lost connection to the network“) und `onCapabilitiesChanged()` sind dort beschrieben [Q7].
-- Die Referenzseiten für `ConnectivityManager.NetworkCallback`, `LinkProperties` und `NetworkCapabilities` konnten nicht gelesen werden (nur Navigation). Ebenso ließ sich der AOSP-Quelltext nicht abrufen.
-- **Vermutung, vor der Umsetzung prüfen**: `onLinkPropertiesChanged` liefert die `LinkProperties` mit den `LinkAddress`-Einträgen; `registerNetworkCallback` verlangt `ACCESS_NETWORK_STATE`. Das Manifest von `share:server` deklariert `ACCESS_NETWORK_STATE` bisher nicht ([Repo: `share/server/src/main/AndroidManifest.xml`]). Es enthält nur `CHANGE_NETWORK_STATE`.
+- Die Referenzseiten für `ConnectivityManager.NetworkCallback`, `LinkProperties` und `NetworkCapabilities` konnten nicht gelesen werden (nur Navigation). Ebenso ließ sich der AOSP-Quelltext nicht abrufen. Die Fakten sind inzwischen am lokalen SDK geprüft (siehe „Android-API-Fakten“).
+- **Geprüft am lokalen SDK** (Platform `android-37.0`, 18.10.2026): `onLinkPropertiesChanged(Network, LinkProperties)` existiert in `ConnectivityManager.NetworkCallback` [Q18]. `LinkProperties.getLinkAddresses()` liefert `List<LinkAddress>`, `LinkAddress` hat `getAddress()` und `getPrefixLength()` [Q18]. `registerNetworkCallback(NetworkRequest, NetworkCallback)` trägt `@RequiresPermission(ACCESS_NETWORK_STATE)` [Q19]. Das Manifest von `share:server` deklariert `ACCESS_NETWORK_STATE` nicht. Es enthält `CHANGE_NETWORK_STATE` und `ACCESS_LOCAL_NETWORK` ([Repo: `share/server/src/main/AndroidManifest.xml`]).
+- **Folge**: `ACCESS_NETWORK_STATE` ist als Manifest-Aufgabe für 3.1a vorzusehen (Umfang 3.1a, ADR 0014).
 
 Vorschlag:
 
 - Ein `NetworkCallback` mit `TRANSPORT_WIFI` liefert die aktive WLAN-Schnittstelle. Daraus IPv4-Adresse und Präfixlänge (`Inet4Address`).
-- Netzwechsel: Bei `onLost` des WLAN-Netzes stoppt der Server die Annahme. Gäste verlieren die Verbindung, der Gastgeber bekommt eine Benachrichtigung. Der Server startet nicht selbst in einem neuen Netz neu. Die URL und der QR-Code ändern sich dann, der Gastgeber startet bewusst neu (Paket 3.3).
-- Die Adresse ändert sich ohne Verlust des WLANs (z. B. DHCP-Wechsel): Ebenfalls Stopp. Die Zugangsschlüssel bleiben gültig, die URL ist neu.
+- **Entschieden (18.10.2026), Paket 3.1a**: Bei `onLost` des WLAN-Netzes oder bei Wechsel der WLAN-Schnittstelle bzw. ihrer IPv4-Adresse (auch ein DHCP-Wechsel im selben WLAN) stoppt der Server die Annahme. Das ist der sichere Standard. Gäste verlieren die Verbindung, der Gastgeber bekommt eine Benachrichtigung. Der Server startet nicht selbst neu.
+- **Entschieden (18.10.2026), Paket 3.3**: Automatisches Fortsetzen, wenn dasselbe WLAN mit derselben IPv4-Adresse zurückkommt. Sonst Hinweis an den Gastgeber. Die URL und der QR-Code ändern sich dann, der Gastgeber startet bewusst neu. Die Zugangsschlüssel bleiben in beiden Fällen gültig.
 
 ### Host-Header-Prüfung (DNS-Rebinding)
 
@@ -81,9 +82,13 @@ Folgerung: Die Pflicht „explizite CIO-Grenzen“ (ADR 0012) lässt sich mit CI
 
 Alternative: Ktor Netty 3.6.0 bietet die fehlenden Grenzen. `maxHeaderSize`, `maxInitialLineLength`, `maxChunkSize`, `requestReadTimeoutSeconds` (Standard 0, also aus), `responseWriteTimeoutSeconds` (Standard 10) und `runningLimit` (Standard 32) sind konfigurierbar [Q3]. Netty weicht von CLAUDE.md ab, das CIO vorgibt. Die Abweichung ist nach CLAUDE.md begründbar, braucht aber eine Messung (APK-Größe, Lauf auf Android 8 und auf dem Testgerät).
 
-### Startwerte (gelten für CIO und Netty)
+**Status der Engine-Entscheidung: offen, Messung siehe „Messung Engine“ unten.** Der Entwurf legt sich nicht fest.
 
-| Grenze | Startwert | Begründung |
+### Startwerte (vorgeschlagen, nicht bestätigt; gelten für CIO und Netty)
+
+Die Werte bleiben „vorgeschlagen“, bis die Nutzerin bzw. der Nutzer sie bestätigt. Erst dann steht „Startwerte, bestätigt am …“ im Dokument.
+
+| Grenze | Startwert (vorgeschlagen) | Begründung |
 |---|---|---|
 | `connectionIdleTimeoutSeconds` (CIO) | 15 s | Standard 45 s ist für Gäste mit Browser lang genug, verlängert aber die Zeit, in der Verbindungen offen bleiben. Vorschlag. |
 | Gleichzeitige Anfragen gesamt | 16 | Entspricht der Größenordnung von Netty `runningLimit` (32, halbiert). Eigener Zähler (Semaphore) über alle Routen. Vorschlag. |
@@ -103,6 +108,7 @@ Umsetzung in 3.4, die Schnittstelle steht schon in 3.1.
 - In der Datenbank steht nur der SHA-256-Hash des Tokens. Der Vergleich geschieht über `MessageDigest.isEqual` auf die Hashes. Die Java-Dokumentation sagt, dass die Laufzeit nur von der Länge des ersten Arguments abhängt, nicht vom Inhalt [Q16]. Bei gleich langen Hashes ist das ein konstanter Vergleich.
 - Ein SHA-256 ohne Salt und ohne Schlüsselableitung reicht, weil der Token selbst 256 bit Zufall ist. Ein Angreifer kann ihn nicht erraten.
 - Mehrere `Authorization`-Header ergeben `401`, der erste Wert wird nicht genommen.
+- `/health` bleibt hinter der Zugriffsprüfung (wie ADR 0012). Die Gäste-Webseite schickt den Token als Header mit, auch für den Health-Check (Entscheidung 18.10.2026, ADR 0014).
 - `RequestAuthorizer` liefert einen `Principal` (participantId, Rolle `HOST` oder `GUEST`) statt `Boolean`. Der bisherige Typ `isAuthorized(String?): Boolean` ist in 3.1a zu ersetzen. `DenyAll` bleibt der Standard.
 - Gäste-Webseite (3.5): Der Token steht im URL-Fragment des QR-Links (`…#<token>`). Ein Fragment wird nicht an den Server gesendet. Laut Referrer-Policy wird es beim Referer entfernt [Q14, §8.4]. Laut RFC 9110 ist das Fragment nicht Teil der http-Definition [Q15, §4.2.5]. Die Seite liest den Token mit JavaScript und setzt ihn als Header. Im Server-Log und im Referer taucht er nicht auf. Lokal bleibt er im Verlauf des Browsers. Das Verhalten wird in 3.5 auf Geräten geprüft.
 
@@ -129,7 +135,9 @@ Umsetzung in 3.4, die Schnittstelle steht schon in 3.1.
 
 ### Dateigrenzen
 
-| Grenze | Startwert | Begründung |
+Die Startwerte sind vorgeschlagen (siehe oben).
+
+| Grenze | Startwert (vorgeschlagen) | Begründung |
 |---|---|---|
 | Bild | 50 MiB | Fotos vom Handy sind meist deutlich kleiner (Vermutung, zu messen). |
 | Video | 2 GiB | Der Spike nutzte 2 GiB (ADR 0012). Videos wachsen mit Bitrate und Länge, also ist die Grenze großzügig. Vermutung, zu messen. |
@@ -280,16 +288,42 @@ Vorschlag: **ablehnen** mit `422` und einem klaren Code (`location_not_removable
 
 Bis 3.1b werden Ortsdaten **nicht** entfernt. Das widerspricht dem Standard in KONZEPT. Offene Entscheidung (siehe unten).
 
+## Android-API-Fakten
+
+Prüfung am lokalen SDK, 18.10.2026. Quellen: `H:\DEV\tools\android-sdk\platforms\android-37.0\android.jar` (Signaturen per `javap`), `data\annotations.zip` (Permission-Annotationen), `data\api-versions.xml` (Einführungsversion). Lokale Quelltexte (`sources`) liegen im SDK nicht vor. Die Aussagen gelten für die Stubs, nicht für das Laufzeitverhalten auf einem Gerät.
+
+| Nr. | Aussage | Ergebnis | Fundstelle |
+|---|---|---|---|
+| 1 | `registerNetworkCallback(NetworkRequest, NetworkCallback)` braucht `ACCESS_NETWORK_STATE` | **Ja.** `@RequiresPermission` (`androidx.annotation`). Gilt auch für die Überladungen mit `Handler` und `PendingIntent`. | [Q19] `android/net/annotations.xml` |
+| 1 | `getActiveNetwork()`, `getLinkProperties(Network)`, `getNetworkCapabilities(Network)` brauchen eine Permission | **Ja**, jeweils `ACCESS_NETWORK_STATE`. | [Q19] `android/net/annotations.xml` |
+| 1 | `requestNetwork(...)` braucht eine Permission | Keine Annotation im SDK. Der Entwurf nutzt `registerNetworkCallback`, daher ohne Bedeutung. | [Q19] (kein Eintrag) |
+| 2 | `ConnectivityManager.NetworkCallback.onLinkPropertiesChanged(Network, LinkProperties)` | **Ja**, öffentlich. Die Klasse `NetworkCallback` ist ab API 21 eingeführt. | [Q18] `javap`; [Q20] `ConnectivityManager$NetworkCallback since="21"` |
+| 3 | `LinkProperties.getLinkAddresses()` liefert `List<LinkAddress>` | **Ja.** Klasse ab API 21. | [Q18] `javap`; [Q20] `LinkProperties since="21"` |
+| 3 | `LinkAddress.getAddress()` (`InetAddress`) und `getPrefixLength()` (`int`) | **Ja.** Klasse ab API 21. | [Q18] `javap`; [Q20] `LinkAddress since="21"` |
+| 4 | `Context.getNoBackupFilesDir()` | **Ja**, abstrakt, ab API 21. | [Q18] `javap android.content.Context`; [Q20] `getNoBackupFilesDir()Ljava/io/File;` since="21" |
+| 5 | `ContextImpl.getDatabasePath` akzeptiert absolute Pfade | **Nicht prüfbar** am SDK: Implementierungsdetail, lokale Quelltexte fehlen. Im 3.1a-Robolectric-Test zu verifizieren (ADR 0014, Room-Pfad). | — |
+
+Folgerungen:
+
+- Für den Netz-Abschnitt braucht 3.1a `ACCESS_NETWORK_STATE` im Manifest von `share:server`. `CHANGE_NETWORK_STATE` reicht dafür nicht aus (Annotation nennt nur `ACCESS_NETWORK_STATE`).
+- `onLinkPropertiesChanged` ist der richtige Weg, um Adressänderungen zu erkennen (Netzverlust-Regel, siehe Netz-Abschnitt).
+
+## Messung Engine
+
+Abschnitt wird mit der Messung (Spike auf Branch `spike/m3-engine`, Worktree temporär) ergänzt. Bis dahin ist die Engine-Entscheidung offen.
+
 ## Offene Entscheidungen
 
-1. **CIO reicht für die Pflicht-Grenzen nicht.** Kopf-Gesamtgröße und Lese-Timeouts fehlen in CIO 3.6.0 [Q1, Q2]. Angreifer im WLAN können Speicher belegen, bevor unser Code läuft. Optionen:
+1. **CIO reicht für die Pflicht-Grenzen nicht (offen, Messung siehe „Messung Engine“).** Kopf-Gesamtgröße und Lese-Timeouts fehlen in CIO 3.6.0 [Q1, Q2]. Angreifer im WLAN können Speicher belegen, bevor unser Code läuft. Optionen:
    - **A**: CIO bleibt. Eigene Grenzen auf Anfrage-Ebene. Das Restrisiko (Kopf-Flut, stehende Verbindungen) wird in ADR 0012 und im Testkatalog festgehalten.
    - **B**: Wechsel auf Netty 3.6.0 (`maxHeaderSize`, `requestReadTimeoutSeconds`). Abweichung von CLAUDE.md, Begründung hier. Vorher messen: APK-Größe, Lauf auf Android 8 und auf dem Testgerät.
-   - **Empfehlung des Executors**: B, nach einem kurzen Spike mit Messung. Die Entscheidung trifft die Nutzerin bzw. der Nutzer.
-2. **Zwischenzustand ohne GPS-Entfernung** (3.1a vor 3.1b). Optionen: 3.1a und 3.1b zusammen ausliefern, oder 3.1a mit Hinweis in der API, dass Ortsdaten noch erhalten bleiben.
-3. **„Stopp in der App“** ist Pflicht vor 3.1 (ADR 0012), aber die Oberfläche kommt erst in 3.3. Vorschlag: Die Pflicht gilt als Voraussetzung für die Auslieferung des Diensts, nicht für 3.1a. Entscheidung nötig.
+   - Frühere Vorab-Einschätzung des Entwurfs: B, vorbehaltlich der Messung. Die Messung liegt unten vor. Die Entscheidung trifft die Nutzerin bzw. der Nutzer, sie ist **nicht** getroffen.
+2. **Zwischenzustand ohne GPS-Entfernung (entschieden, 18.10.2026)**: 3.1a und 3.1b bleiben getrennt. 3.1b muss vor dem ersten für Nutzer erreichbaren Upload (Paket 3.5) gemergt sein. Bis dahin ist der Server aus keiner Oberfläche erreichbar, deshalb widerspricht der Zwischenzustand KONZEPT nicht. Der Zwischenzustand selbst bleibt ein Risiko, solange 3.1b fehlt. Er ist nur im Entwicklungsstand ohne Oberfläche tragbar.
+3. **„Stopp in der App“ (entschieden, 18.10.2026)**: Voraussetzung von Paket 3.3 (Start aus der Oberfläche), nicht von 3.1. Die Präzisierung steht als Nachtrag in ADR 0012.
 4. **HEIC/AVIF-GPS**: Längenerhaltendes Überschreiben braucht einen eigenen Parser. Im Spike prüfen, sonst ablehnen (siehe GPS).
-5. **ACCESS_NETWORK_STATE** fehlt im Manifest. Die Pflicht hängt von der Android-Dokumentation ab, die ich nicht lesen konnte. Vor der Umsetzung prüfen.
+5. **ACCESS_NETWORK_STATE** (geklärt, 18.10.2026): `registerNetworkCallback` trägt die Annotation `RequiresPermission(ACCESS_NETWORK_STATE)` [Q19]. Das Manifest deklariert sie nicht. Manifest-Aufgabe für 3.1a (ADR 0014, Umfang 3.1a).
+6. **Netzverlust (entschieden, 18.10.2026)**: 3.1a stoppt, 3.3 setzt fort, wenn dasselbe WLAN mit derselben IP zurückkommt (siehe Netz-Abschnitt).
+7. **Grenzwerte (offen)**: Alle Startwerte sind vorgeschlagen. Bestätigung durch die Nutzerin bzw. den Nutzer steht aus.
 
 ## Konsequenzen
 
@@ -317,5 +351,8 @@ Bis 3.1b werden Ortsdaten **nicht** entfernt. Das widerspricht dem Standard in K
 - [Q15] RFC 9110 (HTTP), §4.2.5: https://www.rfc-editor.org/rfc/rfc9110
 - [Q16] Java SE 21, `MessageDigest.isEqual`: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/security/MessageDigest.html
 - [Q17] Repo: `share/server/src/main/AndroidManifest.xml`, `app/src/main/res/xml/data_extraction_rules.xml`, `share/server/src/main/kotlin/.../KtorLocalServer.kt`, `RequestAuthorizer.kt`.
+- [Q18] Lokales Android SDK, Platform `android-37.0`: `platforms\android-37.0\android.jar`, Ausgabe von `javap` für `android.net.ConnectivityManager`, `ConnectivityManager$NetworkCallback`, `android.net.LinkProperties`, `android.net.LinkAddress`, `android.content.Context`.
+- [Q19] Lokales Android SDK: `platforms\android-37.0\data\annotations.zip`, Dateien `android/net/annotations.xml` (Permission-Annotationen).
+- [Q20] Lokales Android SDK: `platforms\android-37.0\data\api-versions.xml` (Einführungsversion je Klasse und Methode).
 
-Nicht abrufbar (als Vermutung gekennzeichnet): Android-Referenzseiten zu `ConnectivityManager.NetworkCallback`, `LinkProperties`, `NetworkCapabilities` und `Context.getNoBackupFilesDir`. Der AOSP-Quelltext ließ sich nicht laden. Die Apple-QuickTime-Spezifikation ließ sich nicht als Text auswerten.
+Nicht abrufbar (als Vermutung gekennzeichnet): Die Android-Referenzseiten zu `ConnectivityManager.NetworkCallback`, `LinkProperties`, `NetworkCapabilities` und `Context.getNoBackupFilesDir` wurden nicht gelesen. Die Fakten sind stattdessen über das lokale SDK belegt (Q18 bis Q20). Der AOSP-Quelltext ließ sich nicht laden und liegt auch im SDK nicht vor. Die Apple-QuickTime-Spezifikation ließ sich nicht als Text auswerten.
