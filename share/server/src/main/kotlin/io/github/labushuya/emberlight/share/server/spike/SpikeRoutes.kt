@@ -168,8 +168,10 @@ internal fun spikeHealthJson(
     wakeLockHeld: Boolean = false,
     wifiLockHeld: Boolean = false,
     wifiLockMode: String = SpikeLocks.WIFI_MODE_NAME,
+    lastHeartbeatEpochMs: Long = 0L,
 ): String {
     val uptimeMs = (nowEpochMs - startedAtEpochMs).coerceAtLeast(0L)
     return "{\"status\":\"ok\",\"pid\":$pid,\"startedAtEpochMs\":$startedAtEpochMs,\"uptimeMs\":$uptimeMs," +
-        "\"wakeLockHeld\":$wakeLockHeld,\"wifiLockHeld\":$wifiLockHeld,\"wifiLockMode\":\"$wifiLockMode\"}"
+        "\"wakeLockHeld\":$wakeLockHeld,\"wifiLockHeld\":$wifiLockHeld,\"wifiLockMode\":\"$wifiLockMode\"," +
+        "\"lastHeartbeatEpochMs\":$lastHeartbeatEpochMs}"
 }

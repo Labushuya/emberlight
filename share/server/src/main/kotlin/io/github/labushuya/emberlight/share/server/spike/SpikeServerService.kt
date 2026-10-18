@@ -49,6 +49,12 @@ class SpikeServerService : Service() {
     /** CPU- und WLAN-Sperre, solange der Server läuft. Entsteht beim ersten erfolgreichen Start. */
     @Volatile
     private var locks: SpikeLocks? = null
+
+    /** Selbstprotokoll in filesDir/spike/diag.log (Herzschlag, Zustände, Anfragen). Wird in onCreate gestartet. */
+    private val diagnostics: SpikeDiagnostics by lazy {
+        SpikeDiagnostics(applicationContext, File(File(filesDir, SPIKE_DIR), SpikeDiagLog.FILE_NAME), scope) { locks }
+    }
+
     private val server: LocalServer by lazy {
         KtorLocalServer(
             routes =
@@ -63,9 +69,16 @@ class SpikeServerService : Service() {
                     nowEpochMs = System.currentTimeMillis(),
                     wakeLockHeld = held?.cpuHeld ?: false,
                     wifiLockHeld = held?.wifiHeld ?: false,
+                    lastHeartbeatEpochMs = diagnostics.lastHeartbeatEpochMs,
                 )
             },
+            requestLog = { diagnostics.record(it) },
         )
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        diagnostics.start()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -99,8 +112,12 @@ class SpikeServerService : Service() {
 
         scope.launch {
             try {
-                // Alte Spike-Dateien aus früheren Läufen entfernen. Der Server läuft hier nicht, also greift niemand zu.
-                File(filesDir, SPIKE_DIR).deleteRecursively()
+                // Alte Spike-Dateien aus früheren Läufen entfernen, das Diagnoseprotokoll bleibt. Der Server läuft hier nicht, also greift niemand zu.
+                File(filesDir, SPIKE_DIR)
+                    .listFiles()
+                    .orEmpty()
+                    .filter { it.name != SpikeDiagLog.FILE_NAME }
+                    .forEach { it.deleteRecursively() }
                 startedAtEpochMs = System.currentTimeMillis()
                 val bound = server.start(ServerConfig(port = port, token = token))
                 acquireLocks()
@@ -116,6 +133,7 @@ class SpikeServerService : Service() {
 
     override fun onDestroy() {
         // Sperren zuerst lösen, damit sie auch bei abgebrochenem Stopp nicht hängen bleiben.
+        diagnostics.stop()
         locks?.release()
         // Server zuerst sauber stoppen, dann den Scope beenden.
         scope.launch { server.stop() }.invokeOnCompletion { scope.cancel() }

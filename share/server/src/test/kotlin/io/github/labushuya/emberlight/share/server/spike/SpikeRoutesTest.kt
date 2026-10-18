@@ -162,7 +162,7 @@ class SpikeRoutesTest {
     @Test
     fun healthJsonContainsPidAndUptime() {
         assertEquals(
-            """{"status":"ok","pid":4242,"startedAtEpochMs":1000,"uptimeMs":60000,"wakeLockHeld":false,"wifiLockHeld":false,"wifiLockMode":"WIFI_MODE_FULL_HIGH_PERF"}""",
+            """{"status":"ok","pid":4242,"startedAtEpochMs":1000,"uptimeMs":60000,"wakeLockHeld":false,"wifiLockHeld":false,"wifiLockMode":"WIFI_MODE_FULL_HIGH_PERF","lastHeartbeatEpochMs":0}""",
             spikeHealthJson(pid = 4242, startedAtEpochMs = 1_000L, nowEpochMs = 61_000L),
         )
         // Uhrensprung rückwärts: Laufzeit nie negativ.
@@ -182,7 +182,7 @@ class SpikeRoutesTest {
             val response = client.get("/health") { header(HttpHeaders.Authorization, auth) }
             assertEquals(HttpStatusCode.OK, response.status)
             assertEquals(
-                """{"status":"ok","pid":4242,"startedAtEpochMs":1000,"uptimeMs":1000,"wakeLockHeld":false,"wifiLockHeld":false,"wifiLockMode":"WIFI_MODE_FULL_HIGH_PERF"}""",
+                """{"status":"ok","pid":4242,"startedAtEpochMs":1000,"uptimeMs":1000,"wakeLockHeld":false,"wifiLockHeld":false,"wifiLockMode":"WIFI_MODE_FULL_HIGH_PERF","lastHeartbeatEpochMs":0}""",
                 response.bodyAsText(),
             )
         }

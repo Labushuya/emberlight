@@ -30,6 +30,7 @@ import kotlinx.coroutines.sync.withLock
 class KtorLocalServer(
     private val routes: Route.() -> Unit,
     private val health: () -> String = { HEALTH_BODY },
+    private val requestLog: (String) -> Unit = {},
 ) : LocalServer {
     private val lock = Mutex()
     private val mutableState = MutableStateFlow<ServerState>(ServerState.Stopped)
@@ -42,7 +43,7 @@ class KtorLocalServer(
             check(running == null) { "Server läuft bereits." }
             val server =
                 embeddedServer(CIO, port = config.port, host = BIND_HOST) {
-                    installEmberlightModule(config.token, health, routes)
+                    installEmberlightModule(config.token, health, requestLog, routes)
                 }
             val port =
                 try {
@@ -83,10 +84,26 @@ class KtorLocalServer(
 internal fun Application.installEmberlightModule(
     token: AccessToken,
     health: () -> String = { HEALTH_BODY },
+    requestLog: (String) -> Unit = {},
     routes: Route.() -> Unit,
 ) {
     install(PartialContent)
     routing {
+        // Protokoll: Eingang und fertige Antwort. Liegt vor der Token-Prüfung, damit auch abgewiesene Anfragen auftauchen.
+        intercept(ApplicationCallPipeline.Call) {
+            val startedAt = System.nanoTime()
+            val path =
+                context.request.local.uri
+                    .substringBefore('?')
+            requestLog("req-in method=${context.request.local.method.value} path=$path")
+            try {
+                proceed()
+            } finally {
+                val status = context.response.status()?.value ?: 0
+                val ms = (System.nanoTime() - startedAt) / 1_000_000L
+                requestLog("req-out path=$path status=$status ms=$ms")
+            }
+        }
         intercept(ApplicationCallPipeline.Call) {
             val appCall = context
             if (!token.matches(bearerToken(appCall.request.headers[HttpHeaders.Authorization]))) {
