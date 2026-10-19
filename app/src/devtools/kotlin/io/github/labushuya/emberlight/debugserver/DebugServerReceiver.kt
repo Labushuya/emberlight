@@ -19,7 +19,8 @@ import java.security.SecureRandom
 import java.util.Base64
 
 /**
- * Debug-Einstieg für den Gerätetest des Servers (ADR 0014, docs/DEBUG-SERVER.md). Nur im Debug-Build.
+ * Debug-Einstieg für den Gerätetest des Servers (ADR 0014, docs/DEBUG-SERVER.md). Liegt im Source-Set `devtools` und ist nur
+ * im Debug- und Benchmark-Build enthalten, nie im Release.
  *
  * START legt einen Test-Space mit einem Gastgeber und optional einem Gast an. Jeder Teilnehmer bekommt einen zufälligen
  * Token (256 bit). Im Speicher der App landen nur die Hashes. Die Klartext-Tokens stehen in einer Datei unter

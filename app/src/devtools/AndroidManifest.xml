@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Debug-Einstieg für Gerätetests (ADR 0014, docs/DEBUG-SERVER.md). Liegt nur im Debug-Build. Der Release-Build und der
-    Benchmark-Build bekommen diese Datei nicht. Die Prüfung checkReleaseManifestDebugEntry bricht ab, falls das anders wäre.
+    Debug-Einstieg für Gerätetests (ADR 0014, docs/DEBUG-SERVER.md). Liegt im Source-Set devtools, das nur Debug- und
+    Benchmark-Build einbinden (app/build.gradle.kts). Der Release-Build bekommt diese Datei nicht. Die Prüfung
+    checkReleaseManifestDebugEntry bricht ab, falls das anders wäre.
 -->
 <manifest
     xmlns:android="http://schemas.android.com/apk/res/android"

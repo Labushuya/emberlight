@@ -358,7 +358,7 @@ class SpaceServerService : Service() {
 
         /**
          * Einrichtung des Serverlaufs. Produktion: keine (`null`), der Dienst startet nicht. Der Debug-Einstieg setzt sie
-         * nur im Debug-Build (ADR 0014, Debug-Einstieg).
+         * nur in Debug- und Benchmark-Build (ADR 0014, Debug-Einstieg).
          */
         @Volatile
         var serverSetupProvider: () -> ServerSetup? = { null }

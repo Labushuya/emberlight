@@ -8,9 +8,9 @@ import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.register
 
 /**
- * Hängt `checkReleaseManifest` an `check`. Prüft das gemergte Manifest der Release-Variante auf den Debug-Einstieg
- * (ADR 0014). Der Debug-Einstieg liegt im Paket `io.github.labushuya.emberlight.debugserver` und nur im Source-Set
- * `debug`.
+ * Hängt `checkReleaseManifestDebugEntry` an `check`. Prüft das gemergte Manifest der Release-Variante auf den Debug-Einstieg
+ * (ADR 0014). Der Debug-Einstieg liegt im Paket `io.github.labushuya.emberlight.debugserver` und im Source-Set
+ * `devtools`, das nur in Debug- und Benchmark-Build eingebunden wird.
  */
 class ReleaseManifestConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
