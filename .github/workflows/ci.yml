@@ -83,6 +83,16 @@ jobs:
           path: ~/.m2/repository/org/robolectric/android-all-instrumented
           key: robolectric-${{ steps.robolectric.outputs.version }}-sdk${{ steps.robolectric.outputs.sdk }}-${{ runner.os }}
 
+      # Gegenprobe der Standortentfernung (ADR 0015, Tests): ExifTool und ffmpeg nur auf dem Runner, nie auf dem Rechner
+      # der Entwicklung. Der Test in share:space bricht ohne sie ab, weil CI=true gesetzt ist.
+      - name: ExifTool und ffmpeg für die Standort-Gegenprobe installieren
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends libimage-exiftool-perl ffmpeg
+          exiftool -ver
+          ffmpeg -version | head -1
+
       # Der frühere Schritt „Toolchains anzeigen“ war nur eine Ausgabe. Fehlt eine JDK, bricht dieser Build selbst ab.
       # testForks=2 passt zu den 4 vCPU des Runners (ADR 0006).
       - name: Build, Lint und Tests
