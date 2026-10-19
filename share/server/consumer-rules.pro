@@ -5,10 +5,6 @@
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
 
-# Einstiegspunkte des Servers bleiben im Release erhalten (ADR 0012, ADR 0014). Ohne diese Regeln entfernt R8 den ganzen
-# Serverpfad: In der Release-Variante gibt es keine Einrichtung (SpaceServerService.serverSetupProvider liefert null), und
-# R8 schließt daraus, dass der Server nie startet. Der Release-Build prüft R8 aber mit dem Server (ADR 0012). Die Regeln
-# halten die Klassen, nicht die Funktion. Ein Start bleibt ohne Einrichtung unmöglich.
-# Abbau in Paket 3.3, sobald es einen echten Einstieg gibt (ADR 0014, Abschnitt „Offen“, docs/PLAN-M3.md).
--keep class io.github.labushuya.emberlight.share.server.KtorLocalServer { *; }
--keep class io.github.labushuya.emberlight.share.server.SpaceServerService$Companion { *; }
+# Keine -keep-Regeln für den Serverpfad (ADR 0014, Umsetzung 3.1a). R8 hält die Server-Pipeline über die Erreichbarkeit
+# vom Debug-Einstieg aus: Der Empfänger liegt im Manifest des benchmark-Builds, dessen Ketten zur Einrichtung und zur
+# Routing-Pipeline führen. Im Release gibt es bis Paket 3.3 keinen Einstieg, dort entfernt R8 den Serverpfad.
