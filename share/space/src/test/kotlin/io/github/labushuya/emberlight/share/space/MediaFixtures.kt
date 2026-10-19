@@ -9,11 +9,27 @@ import kotlinx.coroutines.CancellationException
 internal object MediaFixtures {
     private val pngSignature = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 
-    fun jpeg(size: Int = 64): ByteArray = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()) + ByteArray(size - 3)
+    /** Schlusschunk IEND mit leerer Nutzlast und der festen CRC. */
+    private val IEND_CHUNK = byteArrayOf(0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE.toByte(), 0x42, 0x60, 0x82.toByte())
 
-    fun png(extra: ByteArray = ByteArray(0)): ByteArray = pngSignature + ByteArray(24) + extra
+    /**
+     * Minimales gültiges JPEG: SOI, ein COM-Segment aus Nullen, EOI. Die Länge ist genau [size] Bytes (mindestens 8).
+     * Ohne gültige Segmente gilt die Struktur als unsicher (ADR 0015, Strukturprüfung).
+     */
+    fun jpeg(size: Int = 64): ByteArray {
+        require(size >= 8) { "JPEG-Fixture braucht mindestens 8 Bytes." }
+        val comLength = size - 6
+        return byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xFE.toByte()) +
+            byteArrayOf((comLength shr 8).toByte(), comLength.toByte()) +
+            ByteArray(size - 8) +
+            byteArrayOf(0xFF.toByte(), 0xD9.toByte())
+    }
 
-    fun gif(): ByteArray = ascii("GIF89a") + ByteArray(26)
+    /** Gültiges PNG mit IEND. [extra] liegt hinter IEND und ist damit ein Anhängsel. */
+    fun png(extra: ByteArray = ByteArray(0)): ByteArray = pngSignature + IEND_CHUNK + extra
+
+    /** Gültiges GIF: Logische Bildschirmbeschreibung ohne Farbtabelle, dann der Trailer 0x3B. */
+    fun gif(): ByteArray = ascii("GIF89a") + ByteArray(7) + byteArrayOf(0x3B)
 
     fun webp(): ByteArray = ascii("RIFF") + u32(12) + ascii("WEBP") + ByteArray(12)
 
@@ -30,7 +46,8 @@ internal object MediaFixtures {
 
     fun avif(): ByteArray = ftyp("avif") + box("mdat", ByteArray(16))
 
-    fun mp4(): ByteArray = ftyp("isom") + box("moov", ByteArray(16)) + box("mdat", ByteArray(16))
+    /** `moov` mit einem gültigen Kind (`free` mit Nullen), damit der Box-Walker die Struktur prüfen kann. */
+    fun mp4(): ByteArray = ftyp("isom") + box("moov", box("free", ByteArray(8))) + box("mdat", ByteArray(16))
 
     fun threeGp(): ByteArray = ftyp("3gp5") + box("mdat", ByteArray(16))
 

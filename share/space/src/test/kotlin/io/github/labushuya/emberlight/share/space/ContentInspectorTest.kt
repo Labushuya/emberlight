@@ -127,12 +127,57 @@ class ContentInspectorTest {
         assertFalse(accepted(bytes))
     }
 
+    /** Ein Rest unter 8 Bytes ist kein Box-Kopf, also ein Anhang: Die Kette bleibt gültig (ADR 0015, Anhänge). */
     @Test
-    fun trailingPartialHeaderIsRejected() {
-        val bytes = MediaFixtures.mp4() + ByteArray(3)
+    fun trailingPartialHeaderIsAnAttachmentAndEndsTheChain() {
+        val mp4 = MediaFixtures.mp4()
+        val bytes = mp4 + ByteArray(3)
+
+        assertTrue(accepted(bytes))
+        assertEquals(mp4.size.toLong(), validEnd(bytes))
+    }
+
+    /** Ein Anhang mit Zufallsbytes nach der letzten Box ist ebenfalls kein Fehler, das Kettenende liegt davor. */
+    @Test
+    fun randomAttachmentAfterTheLastBoxEndsTheChain() {
+        val mp4 = MediaFixtures.mp4()
+        val bytes = mp4 + ByteArray(4096) { (it * 131 + 7).toByte() }
+
+        assertTrue(accepted(bytes))
+        assertEquals(mp4.size.toLong(), validEnd(bytes))
+    }
+
+    /** Ein Kopf mit bekanntem Typ und kaputter Größe mitten in der Kette ist beschädigt: keine Abschneide-Chance. */
+    @Test
+    fun brokenKnownBoxInsideTheChainIsRejectedEvenWithAttachment() {
+        val bytes =
+            MediaFixtures.ftyp("isom") + MediaFixtures.box("moov", ByteArray(8)) +
+                MediaFixtures.rawBox(1_000_000, "mdat", ByteArray(16)) + ByteArray(64)
 
         assertFalse(accepted(bytes))
+        assertNull(validEnd(bytes))
     }
+
+    /** Ein Kopf mit unbekanntem Typ und kaputter Größe ist ein Anhang, auch wenn er druckbare Zeichen trägt. */
+    @Test
+    fun unknownPrintableTypeWithOversizedLengthIsAnAttachment() {
+        val mp4 = MediaFixtures.mp4()
+        val bytes = mp4 + MediaFixtures.rawBox(0x7FFF_0000L, "SEFH", ByteArray(32))
+
+        assertTrue(accepted(bytes))
+        assertEquals(mp4.size.toLong(), validEnd(bytes))
+    }
+
+    /** Ohne gültige erste Box gibt es keine Kette, also auch kein Kettenende. */
+    @Test
+    fun noValidFirstBoxHasNoChainEnd() {
+        assertNull(validEnd(MediaFixtures.ascii("<html>kein Box-Kopf hier</html>")))
+    }
+
+    private fun validEnd(bytes: ByteArray): Long? =
+        ContentInspector.validBoxEnd(bytes.size.toLong()) { offset, length ->
+            bytes.copyOfRange(offset.toInt(), min(bytes.size, offset.toInt() + length))
+        }
 
     @Test
     fun largeSizeBelowHeaderLengthIsRejected() {

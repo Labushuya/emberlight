@@ -40,7 +40,7 @@ Paket 3.1 braucht einen Speicher für Space-Medien, einen Index und eine API, ü
 |---|---|
 | `space` | `id`, `name`, `color`, `expires_at`, `retention_until`, `storage_limit_bytes`, `created_at`. In 3.1 nur als Stub, befüllt in 3.2. |
 | `participant` | `id`, `space_id`, `display_name` (eindeutig pro Space), `role` (HOST/GUEST), `token_hash` (SHA-256). In 3.1 nur der Gastgeber als Test-Principal, befüllt in 3.4. |
-| `media` | `id` (Base64url, 128 bit), `space_id`, `sha256` (32 Byte), `mime`, `size_bytes`, `original_name` (bereinigt, max. 120 Zeichen), `uploader_id`, `created_at` (UTC, Millisekunden), `storage_name` (Zufallsname, nie vom Client), `state` (`READY`, `DELETING`). |
+| `media` | `id` (Base64url, 128 bit), `space_id`, `sha256` (32 Byte), `mime`, `size_bytes` (Länge der gespeicherten Datei; nach dem Abschneiden von Anhängen gemäß ADR 0015 kann sie kleiner als der Upload sein), `original_name` (bereinigt, max. 120 Zeichen), `uploader_id`, `created_at` (UTC, Millisekunden), `storage_name` (Zufallsname, nie vom Client), `state` (`READY`, `DELETING`). |
 
 - Eindeutigkeit: `media(space_id, sha256)` unique (Dedupe). `media(id)` primary key. Index `media(space_id, created_at, id)` für die Liste.
 - `state` dient der Bereinigung. Beim Start werden `DELETING`-Einträge und Dateien ohne Eintrag entfernt (Vorschlag).
@@ -93,7 +93,8 @@ Jede Anfrage durchläuft zuerst die Prüfungen aus ADR 0013: Host, Netz, Authori
 - `warning`: `"storage_80"`, sobald der Space mindestens 80 % seines Limits belegt. Sonst `null`.
 - `507` mit Code `storage_full` (Space-Limit erreicht) oder `device_storage_low` (Mindest-Restspeicher unterschritten).
 - `429` mit `Retry-After: 5` bei zu vielen parallelen Uploads (Startwerte aus ADR 0013).
-- `422` mit `location_not_removable` (ab 3.1b, siehe ADR 0013).
+- `422` mit `{"error":"location_not_removable","reason":"<code>"}` (ab 3.1b, siehe ADR 0015). Die Datei wird nicht gespeichert. Der Header `X-Emberlight-Keep-Location: 1` speichert nicht bereinigbare Dateien unverändert, mit `locationKept: true`. Er wirkt nur dort. Andere Werte ergeben `400` (`bad_request`).
+- Antwort `201` und `200` enthalten zusätzlich `"locationKept"`.
 
 ### Download
 
@@ -132,7 +133,7 @@ Jede Anfrage durchläuft zuerst die Prüfungen aus ADR 0013: Host, Netz, Authori
 | 410 | Space ist beendet |
 | 413 | Body über dem Limit |
 | 415 | Falscher `Content-Type` oder Inhalt nicht erlaubt |
-| 422 | Ortsdaten nicht sicher entfernbar (3.1b) |
+| 422 | Ortsdaten nicht sicher entfernbar (3.1b, ADR 0015), ohne Einwilligung |
 | 429 | Zu viele parallele Uploads |
 | 507 | Speicher voll (Space oder Gerät) |
 

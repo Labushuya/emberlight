@@ -27,6 +27,8 @@ datastore = "1.2.1"
 telephoto = "0.19.0"
 # EXIF lesen für den Infobereich (ADR 0010, Kurzer Blick und Infobereich). Stabil, keine Play-Services-Abhängigkeit.
 exifinterface = "1.4.2"
+# Nur Tests (Paket 3.1b, ADR 0015): unabhängige Gegenprobe, ob ein Standort noch lesbar ist. Apache-2.0, kein Laufzeitcode.
+metadata-extractor = "2.21.0"
 media3 = "1.11.1"
 # Eingebetteter Server (Paket 3.0, ADR 0012). Ktor 3.6.0 ist laut Maven Central die neueste stabile Version.
 ktor = "3.6.0"
@@ -60,6 +62,7 @@ coil-video = { group = "io.coil-kt.coil3", name = "coil-video", version.ref = "c
 coil-test = { group = "io.coil-kt.coil3", name = "coil-test", version.ref = "coil" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+metadata-extractor = { group = "com.drewnoakes", name = "metadata-extractor", version.ref = "metadata-extractor" }
 telephoto-zoomable-image = { group = "me.saket.telephoto", name = "zoomable-image", version.ref = "telephoto" }
 telephoto-sub-sampling-image = { group = "me.saket.telephoto", name = "sub-sampling-image", version.ref = "telephoto" }
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }

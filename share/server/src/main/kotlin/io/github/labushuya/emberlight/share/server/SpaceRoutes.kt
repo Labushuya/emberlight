@@ -157,6 +157,22 @@ private suspend fun handleUpload(
         call.refuseUpload(HttpStatusCode.BadRequest, "bad_filename")
         return
     }
+    // Einwilligung (ADR 0015): nur der exakte Wert "1" gilt. Alles andere ist ein Fehler, keine stille Annahme.
+    val keepLocation =
+        when (call.request.headers[KeepLocationHeader.NAME]) {
+            null -> {
+                false
+            }
+
+            KeepLocationHeader.YES -> {
+                true
+            }
+
+            else -> {
+                call.refuseUpload(HttpStatusCode.BadRequest, "bad_request")
+                return
+            }
+        }
     val rawLength = call.request.headers[HttpHeaders.ContentLength]
     val declared =
         if (rawLength == null) {
@@ -170,7 +186,7 @@ private suspend fun handleUpload(
     val source = BodyChunkSource(call.receiveChannel(), tuning.clock, tuning.policy, tuning.pollMillis, declared)
     val result =
         try {
-            vault.ingest(call.principal(), name, declared, source)
+            vault.ingest(call.principal(), name, declared, source, keepLocation)
         } catch (abort: TransferAbortedException) {
             call.refuseUpload(
                 HttpStatusCode.RequestTimeout,
@@ -203,6 +219,7 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondUploaded(
                 "type" to JsonPrimitive(record.mime),
                 "size" to JsonPrimitive(record.sizeBytes),
                 "duplicate" to JsonPrimitive(duplicate),
+                "locationKept" to JsonPrimitive(record.locationKept),
                 "warning" to (warning?.let { JsonPrimitive("storage_80") } ?: JsonNull),
             ),
         ),
@@ -229,6 +246,14 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondRejected(r
 
         RejectReason.DeviceStorageLow -> {
             refuseUpload(HttpStatusCode.InsufficientStorage, "device_storage_low")
+        }
+
+        is RejectReason.LocationNotRemovable -> {
+            refuseUpload(
+                HttpStatusCode.UnprocessableEntity,
+                "location_not_removable",
+                mapOf("reason" to JsonPrimitive(reason.reason.code)),
+            )
         }
     }
 }
@@ -261,5 +286,6 @@ private fun listItemJson(entry: MediaListEntry): JsonElement =
             "type" to JsonPrimitive(entry.mime),
             "size" to JsonPrimitive(entry.sizeBytes),
             "createdAt" to JsonPrimitive(entry.createdAt),
+            "locationKept" to JsonPrimitive(entry.locationKept),
         ),
     )

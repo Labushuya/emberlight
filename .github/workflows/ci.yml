@@ -83,10 +83,49 @@ jobs:
           path: ~/.m2/repository/org/robolectric/android-all-instrumented
           key: robolectric-${{ steps.robolectric.outputs.version }}-sdk${{ steps.robolectric.outputs.sdk }}-${{ runner.os }}
 
+      # Gegenprobe der Standortentfernung (ADR 0015, Tests): ExifTool, ffmpeg, heif-enc (HEIC mit dem x265-Plugin)
+      # und avifenc (AVIF) nur auf dem Runner, nie auf dem Rechner der Entwicklung. Der Test in share:space bricht
+      # ohne sie ab, weil CI=true gesetzt ist. Paketnamen geprüft für ubuntu-latest (noble, 24.04): libheif-examples
+      # 1.17.6, libheif-plugin-x265 1.17.6, libavif-bin 1.0.4.
+      - name: Werkzeuge für die Standort-Gegenprobe installieren
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libimage-exiftool-perl ffmpeg libheif-examples libheif-plugin-x265 libavif-bin
+          exiftool -ver
+          ffmpeg -version | head -1
+          # Nur zur Protokollierung. Fehlt ein Werkzeug, bricht der Test in share:space mit CI=true ab.
+          heif-enc --version 2>&1 | head -1 || true
+          avifenc --version 2>&1 | head -1 || true
+
       # Der frühere Schritt „Toolchains anzeigen“ war nur eine Ausgabe. Fehlt eine JDK, bricht dieser Build selbst ab.
       # testForks=2 passt zu den 4 vCPU des Runners (ADR 0006).
       - name: Build, Lint und Tests
         run: ./gradlew check koverXmlReport assembleDebug assembleRelease -Pemberlight.testForks=2 -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+
+      # Gradle kürzt Ausnahmen im Log (nur Typ und Ort). Bei Fehlschlag die Meldungen aus den Testberichten in den Log schreiben.
+      # Gegenprobe-Ausgabe (ADR 0015): ExifTool-Zeilen vorher und nachher je Format, aus dem Testbericht (Systemausgabe).
+      - name: Gegenprobe-Ausgabe (ExifTool vorher und nachher) anzeigen
+        if: always()
+        shell: bash
+        run: |
+          find . -path '*/build/test-results/*' -name '*ExternalToolCrossCheckTest.xml' \
+            -exec grep -h 'GEGENPROBE' {} + 2>/dev/null | sed -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&quot;/"/g' -e 's/&amp;/\&/g' || true
+          exit 0
+
+      - name: Meldungen fehlgeschlagener Tests zeigen
+        if: failure()
+        shell: bash
+        run: |
+          set -uo pipefail
+          find . -path '*/build/test-results/*' -name '*.xml' -exec grep -l '<failure' {} + 2>/dev/null | head -5 |
+            while read -r report; do
+              echo "::group::Testbericht $report"
+              grep -A12 '<failure' "$report" | sed -e 's/&#10;/\n/g' -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&quot;/"/g' | head -80
+              echo "::endgroup::"
+            done
+          exit 0
 
       # Übersicht in der Job-Zusammenfassung: Zeilenabdeckung aus dem Kover-XML und die Namen abweichender Screenshots.
       # Läuft auch bei Fehlschlag. Der Schritt selbst bricht nicht ab, die Durchsetzung passiert in check.
