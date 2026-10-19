@@ -260,4 +260,5 @@ Jede Fehlerantwort: `{"error":"<code>"}` plus Felder. Schutzheader auf allen Ant
 
 - Auto-Resume nach Netzverlust und die Stopp-Oberfläche folgen in 3.3.
 - GPS-Entfernung folgt in 3.1b, vor dem ersten Upload über die Gäste-Webseite (3.5).
-- Keep-Regeln für den Serverpfad (`share/server/consumer-rules.pro`: `KtorLocalServer`, `SpaceServerService$Companion`) entfernen oder prüfen, sobald 3.3 einen echten Einstieg aus der Oberfläche hat. Bis dahin halten sie den Serverpfad im Release-Build, damit R8 ihn nicht entfernt (Paket 3.3 in `docs/PLAN-M3.md`).
+- Keep-Regeln für den Serverpfad (`share/server/consumer-rules.pro`: `KtorLocalServer`, `SpaceServerService$Companion`) entfernen oder prüfen, sobald 3.3 einen echten Einstieg aus der Oberfläche hat (Paket 3.3 in `docs/PLAN-M3.md`).
+- Befund beim Vergleich der Release-Builds (Stand f09f220): Die Regeln halten nur die Klassenhülle. Die Routing-Pipeline (`installEmberlightModule` in `ServerPipeline.kt`) fehlt im R8-Mapping, die Ktor-Plugins (`PartialContent`, `ConditionalHeaders`) ebenfalls. Im Release ist der Server ohne Einrichtung nicht startbar, deshalb fällt das bisher nicht auf. Vor 3.3 muss die Pipeline gehalten werden, und die Build-Prüfung soll das Mapping daraufhin prüfen.
