@@ -98,6 +98,20 @@ jobs:
       - name: Build, Lint und Tests
         run: ./gradlew check koverXmlReport assembleDebug assembleRelease -Pemberlight.testForks=2 -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
 
+      # Gradle kürzt Ausnahmen im Log (nur Typ und Ort). Bei Fehlschlag die Meldungen aus den Testberichten in den Log schreiben.
+      - name: Meldungen fehlgeschlagener Tests zeigen
+        if: failure()
+        shell: bash
+        run: |
+          set -uo pipefail
+          find . -path '*/build/test-results/*' -name '*.xml' -exec grep -l '<failure' {} + 2>/dev/null | head -5 |
+            while read -r report; do
+              echo "::group::Testbericht $report"
+              grep -A12 '<failure' "$report" | sed -e 's/&#10;/\n/g' -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&quot;/"/g' | head -80
+              echo "::endgroup::"
+            done
+          exit 0
+
       # Übersicht in der Job-Zusammenfassung: Zeilenabdeckung aus dem Kover-XML und die Namen abweichender Screenshots.
       # Läuft auch bei Fehlschlag. Der Schritt selbst bricht nicht ab, die Durchsetzung passiert in check.
       - name: Coverage und Screenshots zusammenfassen
