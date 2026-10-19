@@ -1,5 +1,102 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="feature_space_title">Spaces</string>
-    <string name="feature_space_text">Hier öffnest du bald Spaces und teilst den Abend mit allen, die dabei sind.</string>
+
+    <!-- Liste -->
+    <string name="space_empty_title">Noch kein Space</string>
+    <string name="space_empty_text">Ein Space ist ein Ort für den Abend. Gäste im selben WLAN laden Fotos und Videos hoch, und nach Ablauf entscheidest du, was du behältst. Leg einen an, um loszulegen.</string>
+    <string name="space_create">Space anlegen</string>
+    <string name="space_card_cover_description">Titelbild von %1$s</string>
+    <string name="space_status_draft">Entwurf</string>
+    <string name="space_card_lifetime">Laufzeit: %1$s</string>
+    <string name="space_card_limit">Speicherlimit: %1$s</string>
+
+    <!-- Detail -->
+    <string name="space_detail_summary">Zusammenfassung</string>
+    <string name="space_detail_color">Farbe</string>
+    <string name="space_detail_lifetime">Laufzeit</string>
+    <string name="space_detail_retention">Nachhaltefrist</string>
+    <string name="space_detail_limit">Speicherlimit</string>
+    <string name="space_detail_edit">Bearbeiten</string>
+    <string name="space_detail_delete">Löschen</string>
+    <string name="space_detail_not_editable">Nur Entwürfe lassen sich bearbeiten. Ist ein Space aktiv, bleiben seine Einstellungen fest.</string>
+    <string name="space_detail_missing">Dieser Space gibt es nicht mehr.</string>
+    <string name="space_detail_select">Wähle einen Space aus, um die Details zu sehen.</string>
+
+    <!-- Löschen -->
+    <string name="space_delete_title">Space löschen?</string>
+    <string name="space_delete_text">„%1$s“ wird endgültig gelöscht. Dazu gehören die Einstellungen, das Titelbild und alle Medien im Space-Speicher. Das lässt sich nicht rückgängig machen.</string>
+    <string name="space_delete_confirm">Endgültig löschen</string>
+    <string name="space_cancel">Abbrechen</string>
+
+    <!-- Formular -->
+    <string name="space_form_title_new">Space anlegen</string>
+    <string name="space_form_title_edit">Space bearbeiten</string>
+    <string name="space_back">Zurück</string>
+    <string name="space_save">Speichern</string>
+    <string name="space_save_failed">Speichern nicht möglich. Bitte prüfe die markierten Felder.</string>
+    <string name="space_section_name">Name</string>
+    <string name="space_name_label">Name des Space</string>
+    <string name="space_name_support">1 bis 40 Zeichen</string>
+    <string name="space_section_cover">Titelbild</string>
+    <string name="space_cover_none">Kein Titelbild. Stattdessen wird die Farbe gezeigt.</string>
+    <string name="space_cover_pick">Bild wählen</string>
+    <string name="space_cover_change">Bild ändern</string>
+    <string name="space_cover_remove">Bild entfernen</string>
+    <string name="space_cover_error_type">Diese Datei ist kein Bild, das sich verwenden lässt.</string>
+    <string name="space_cover_error_too_large">Das Bild ist zu groß. Das Limit liegt bei 50 MiB.</string>
+    <string name="space_cover_error_location">Bild kann nicht verwendet werden, weil sich der Standort nicht entfernen lässt. Bitte wähle ein anderes Bild.</string>
+    <string name="space_cover_error_generic">Das Bild konnte nicht gelesen werden. Bitte wähle ein anderes.</string>
+    <string name="space_section_color">Farbe</string>
+    <string name="space_color_glow">Glut</string>
+    <string name="space_color_gold">Gold</string>
+    <string name="space_color_coral">Koralle</string>
+    <string name="space_color_amber">Bernstein</string>
+    <string name="space_color_rose">Rosé</string>
+    <string name="space_color_copper">Kupfer</string>
+    <string name="space_color_moss">Moos</string>
+    <string name="space_color_dusk">Dämmerung</string>
+    <string name="space_section_lifetime">Laufzeit</string>
+    <string name="space_lifetime_two_hours">2 Stunden</string>
+    <string name="space_lifetime_six_hours">6 Stunden</string>
+    <string name="space_lifetime_twelve_hours">12 Stunden</string>
+    <string name="space_lifetime_one_day">1 Tag</string>
+    <string name="space_lifetime_three_days">3 Tage</string>
+    <string name="space_lifetime_one_week">1 Woche</string>
+    <string name="space_lifetime_until">Eigenes Ende</string>
+    <string name="space_until_date">Datum</string>
+    <string name="space_until_time">Uhrzeit</string>
+    <string name="space_until_support">Format: TT.MM.JJJJ und HH:MM. Höchstens 30 Tage voraus, und nur in der Zukunft.</string>
+    <string name="space_section_retention">Nachhaltefrist</string>
+    <string name="space_retention_immediate">Sofort löschen</string>
+    <string name="space_retention_one_day">1 Tag</string>
+    <string name="space_retention_one_week">1 Woche</string>
+    <string name="space_retention_custom">Eigene</string>
+    <string name="space_retention_custom_label">Tage (1 bis 90)</string>
+    <string name="space_section_storage">Speicherlimit</string>
+    <string name="space_storage_gib">%1$s GiB</string>
+    <string name="space_storage_custom">Eigenes</string>
+    <string name="space_storage_custom_label">Limit in GiB (0,5 bis 64)</string>
+    <string name="space_storage_warning">Das Limit ist größer als der freie Speicher des Geräts abzüglich 2 GiB. Der Space füllt sich dann möglicherweise nicht vollständig.</string>
+    <plurals name="space_days">
+        <item quantity="one">%1$d Tag</item>
+        <item quantity="other">%1$d Tage</item>
+    </plurals>
+
+    <!-- Fehler am Feld -->
+    <string name="space_error_name_empty">Bitte gib einen Namen ein.</string>
+    <string name="space_error_name_too_long">Höchstens 40 Zeichen.</string>
+    <string name="space_error_color">Bitte wähle eine Farbe.</string>
+    <string name="space_error_until_not_future">Das Ende muss in der Zukunft liegen.</string>
+    <string name="space_error_until_too_far">Höchstens 30 Tage voraus.</string>
+    <string name="space_error_until_unreadable">Datum oder Uhrzeit sind nicht lesbar.</string>
+    <string name="space_error_retention">Zwischen 1 und 90 Tagen.</string>
+    <string name="space_error_storage">Zwischen 0,5 und 64 GiB.</string>
+    <string name="space_error_cover_missing">Das Titelbild wurde nicht gefunden. Bitte wähle es erneut.</string>
+
+    <!-- Verwerfen -->
+    <string name="space_discard_title">Änderungen verwerfen?</string>
+    <string name="space_discard_text">Die ungespeicherten Änderungen gehen verloren.</string>
+    <string name="space_discard_confirm">Verwerfen</string>
+    <string name="space_discard_dismiss">Weiter bearbeiten</string>
+    <string name="space_not_editable">Dieser Space ist kein Entwurf mehr und lässt sich nicht bearbeiten.</string>
 </resources>

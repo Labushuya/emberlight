@@ -55,8 +55,10 @@ import io.github.labushuya.emberlight.feature.gallery.galleryScreen
 import io.github.labushuya.emberlight.feature.gallery.navigateToGallery
 import io.github.labushuya.emberlight.feature.gallery.viewer.LocalViewerImageSources
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerImageSourceContribution
+import io.github.labushuya.emberlight.feature.space.navigateToSpaceDetail
+import io.github.labushuya.emberlight.feature.space.navigateToSpaceEdit
 import io.github.labushuya.emberlight.feature.space.navigateToSpaces
-import io.github.labushuya.emberlight.feature.space.spacesScreen
+import io.github.labushuya.emberlight.feature.space.spacesScreens
 
 /**
  * Wurzel der Oberfläche: Navigation (unten am Handy, Rail auf großen Displays) und der NavHost mit den Top-Level-Zielen.
@@ -181,7 +183,12 @@ private fun AppNavHost(navController: NavHostController) {
     NavHost(navController = navController, startDestination = GalleryRoute) {
         galleryScreen(onAlbumClick = { bucketId -> navController.navigateToAlbum(bucketId) })
         albumScreen(onBack = { navController.popBackStack() })
-        spacesScreen()
+        spacesScreens(
+            onCreate = { navController.navigateToSpaceEdit() },
+            onOpen = { id -> navController.navigateToSpaceDetail(id) },
+            onEdit = { id -> navController.navigateToSpaceEdit(id) },
+            onBack = { navController.popBackStack() },
+        )
     }
 }
 
