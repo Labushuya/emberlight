@@ -6,6 +6,7 @@ import io.github.labushuya.emberlight.share.space.MediaFixtures
 import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
+import io.github.labushuya.emberlight.share.space.StorageProbe
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -36,13 +37,14 @@ class SpaceRepositoryTest {
     private lateinit var covers: SpaceCoverStore
     private lateinit var repository: SpaceRepository
     private var now = NOW
+    private var freeBytes = 100 * GIB
 
     @Before
     fun setUp() {
         spacesDir = folder.newFolder("spaces")
         database = SpacesDatabase.open(ApplicationProvider.getApplicationContext(), spacesDir)
         covers = SpaceCoverStore(spacesDir)
-        repository = SpaceRepository(database, covers) { now }
+        repository = SpaceRepository(database, covers, spacesDir, StorageProbe { freeBytes }) { now }
     }
 
     @After
@@ -277,7 +279,71 @@ class SpaceRepositoryTest {
             assertEquals(listOf("Neu", "Alt"), names)
         }
 
+    @Test
+    fun aLimitAboveTheDeviceCeilingIsRefusedAndWritesNothing() =
+        runBlocking {
+            // 10 GiB frei: die Obergrenze ist 8 GiB.
+            freeBytes = 10 * GIB
+            val id = SpaceId.generate()
+
+            val refused = repository.create(id, settings().copy(storageLimitBytes = 9 * GIB), null)
+
+            assertEquals(SaveResult.Invalid(setOf(SettingsError.STORAGE_ABOVE_MAX)), refused)
+            assertNull(repository.find(id))
+            assertEquals(8 * GIB, repository.storageCeilingBytes())
+            assertTrue(repository.create(id, settings().copy(storageLimitBytes = 8 * GIB), null) is SaveResult.Saved)
+        }
+
+    @Test
+    fun theCeilingIsCheckedAgainAtSaveTime() =
+        runBlocking {
+            val id = SpaceId.generate()
+            assertTrue(repository.create(id, settings().copy(storageLimitBytes = 4 * GIB), null) is SaveResult.Saved)
+
+            // Das Gerät ist seit dem Öffnen des Formulars voller geworden: Die Obergrenze liegt jetzt bei 3 GiB.
+            freeBytes = 5 * GIB
+            val result = repository.update(id, settings().copy(storageLimitBytes = 4 * GIB), null)
+
+            assertEquals(SaveResult.Invalid(setOf(SettingsError.STORAGE_ABOVE_MAX)), result)
+            assertEquals(4 * GIB, repository.find(id)?.settings?.storageLimitBytes)
+        }
+
+    @Test
+    fun aDeviceWithoutRoomForTheSmallestLimitCannotCreateAnySpace() =
+        runBlocking {
+            freeBytes = 2 * GIB
+            val id = SpaceId.generate()
+
+            val result = repository.create(id, settings().copy(storageLimitBytes = SpaceRules.STORAGE_MIN_BYTES), null)
+
+            assertEquals(SaveResult.Invalid(setOf(SettingsError.STORAGE_ABOVE_MAX)), result)
+            assertEquals(0L, repository.storageCeilingBytes())
+        }
+
+    @Test
+    fun firstAccessRemovesOrphanedSpaceDirectoriesAndKeepsKnownOnes() =
+        runBlocking {
+            val known = SpaceId.generate()
+            repository.create(known, settings("Bekannt"), null)
+            val orphan = SpaceId.generate()
+            File(spaceDirectory(orphan), "cover-${"a".repeat(64)}").apply {
+                parentFile?.mkdirs()
+                writeBytes(byteArrayOf(1, 2, 3))
+            }
+            // Ein Ordner mit fremdem Namen bleibt, wie alles, was keine Space-Kennung trägt.
+            File(spacesDir, "notizen").mkdirs()
+
+            // Eine frische Instanz wie beim App-Start: Der erste Zugriff räumt auf.
+            val started = SpaceRepository(database, covers, spacesDir, StorageProbe { freeBytes }) { now }
+            assertEquals(listOf("Bekannt"), started.observeAll().first().map { it.settings.name })
+
+            assertFalse(spaceDirectory(orphan).exists())
+            assertTrue(spaceDirectory(known).isDirectory)
+            assertTrue(File(spacesDir, "notizen").isDirectory)
+        }
+
     private companion object {
         const val NOW = 1_800_000_000_000L
+        const val GIB = 1024L * 1024L * 1024L
     }
 }

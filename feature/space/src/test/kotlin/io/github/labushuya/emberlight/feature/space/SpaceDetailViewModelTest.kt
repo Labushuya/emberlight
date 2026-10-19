@@ -7,6 +7,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
+import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.management.SpaceDefaults
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
@@ -44,7 +45,7 @@ class SpaceDetailViewModelTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val spacesDir = folder.newFolder("spaces")
         database = SpacesDatabase.open(context, spacesDir)
-        repository = SpaceRepository(database, SpaceCoverStore(spacesDir))
+        repository = SpaceRepository(database, SpaceCoverStore(spacesDir), spacesDir, StorageProbe { FREE_BYTES })
     }
 
     private var collector: Job? = null
@@ -110,6 +111,7 @@ class SpaceDetailViewModelTest {
 
     private companion object {
         const val ID = "GGGGGGGGGGGGGGGGGGGGGG"
+        const val FREE_BYTES = 64L * 1024 * 1024 * 1024
         const val TIMEOUT_MILLIS = 5_000L
         const val POLL_MILLIS = 5L
     }

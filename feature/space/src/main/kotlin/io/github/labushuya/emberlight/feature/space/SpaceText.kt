@@ -6,15 +6,18 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import io.github.labushuya.emberlight.feature.space.form.LifetimeOption
 import io.github.labushuya.emberlight.feature.space.form.RetentionOption
-import io.github.labushuya.emberlight.feature.space.form.SpaceForm
 import io.github.labushuya.emberlight.feature.space.form.StorageOption
 import io.github.labushuya.emberlight.share.space.management.Lifetime
 import io.github.labushuya.emberlight.share.space.management.LifetimePreset
 import io.github.labushuya.emberlight.share.space.management.SettingsError
 import java.text.NumberFormat
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 
 private const val GIB = 1024.0 * 1024.0 * 1024.0
@@ -24,14 +27,36 @@ private const val GIB = 1024.0 * 1024.0 * 1024.0
 internal fun SettingsError.messageRes(): Int =
     when (this) {
         SettingsError.NAME_EMPTY -> R.string.space_error_name_empty
+
         SettingsError.NAME_TOO_LONG -> R.string.space_error_name_too_long
+
         SettingsError.COLOR_OUT_OF_RANGE -> R.string.space_error_color
+
         SettingsError.UNTIL_NOT_IN_FUTURE -> R.string.space_error_until_not_future
+
         SettingsError.UNTIL_TOO_FAR -> R.string.space_error_until_too_far
-        SettingsError.UNTIL_UNREADABLE -> R.string.space_error_until_unreadable
+
+        SettingsError.UNTIL_MISSING -> R.string.space_error_until_missing
+
         SettingsError.RETENTION_OUT_OF_RANGE -> R.string.space_error_retention
+
         SettingsError.STORAGE_OUT_OF_RANGE -> R.string.space_error_storage
+
+        // Mit Zahl, siehe [settingsErrorText].
+        SettingsError.STORAGE_ABOVE_MAX -> R.string.space_error_storage_above_max
+
         SettingsError.COVER_MISSING -> R.string.space_error_cover_missing
+    }
+
+/** Fehlertext für die Anzeige. Der Hinweis zur Obergrenze nennt den Wert des Geräts. */
+@Composable
+internal fun settingsErrorText(
+    error: SettingsError,
+    storageMaxBytes: Long,
+): String =
+    when (error) {
+        SettingsError.STORAGE_ABOVE_MAX -> stringResource(error.messageRes(), formatGib(storageMaxBytes))
+        else -> stringResource(error.messageRes())
     }
 
 @StringRes
@@ -89,7 +114,7 @@ internal fun lifetimeText(lifetime: Lifetime): String =
         is Lifetime.Until -> stringResource(R.string.space_lifetime_until) + ": " + formatUntil(lifetime.epochMillis)
     }
 
-/** Nachhaltefrist als Text. `0` heißt „Sofort löschen“. */
+/** Aufbewahrung nach dem Ende als Text. `0` heißt „Sofort löschen“. */
 @Composable
 internal fun retentionText(days: Int): String =
     when (days) {
@@ -104,16 +129,27 @@ internal fun retentionText(days: Int): String =
 internal fun limitText(bytes: Long): String = stringResource(R.string.space_storage_gib, formatGib(bytes))
 
 /** Zahl in GiB für die Anzeige, mit Dezimalkomma je nach Sprache. */
-internal fun formatGib(bytes: Long): String {
+internal fun formatGib(bytes: Long): String = formatGib(bytes / GIB)
+
+/** Zahl in GiB für die Anzeige, mit Dezimaltrennzeichen der aktuellen Sprache. */
+internal fun formatGib(gib: Double): String {
     val format = NumberFormat.getNumberInstance(Locale.getDefault()).apply { maximumFractionDigits = 1 }
-    return format.format(bytes / GIB)
+    return format.format(gib)
 }
 
-/** Datum und Uhrzeit eines festen Endes in der Zeitzone des Geräts (`TT.MM.JJJJ HH:mm`). */
+/** Datum in der Form der aktuellen Sprache, etwa „20.10.2026“ auf Deutsch. */
+internal fun formatLocalDate(date: LocalDate): String =
+    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault()).format(date)
+
+/** Uhrzeit in der Form der aktuellen Sprache, etwa „14:30“ auf Deutsch. */
+internal fun formatLocalTime(time: LocalTime): String =
+    DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(Locale.getDefault()).format(time)
+
+/** Datum und Uhrzeit eines festen Endes in der Zeitzone des Geräts, in der Form der aktuellen Sprache. */
 internal fun formatUntil(
     epochMillis: Long,
     zone: ZoneId = ZoneId.systemDefault(),
 ): String {
     val local = ZonedDateTime.ofInstant(Instant.ofEpochMilli(epochMillis), zone)
-    return SpaceForm.DISPLAY_DATE.format(local) + " " + SpaceForm.DISPLAY_TIME.format(local)
+    return formatLocalDate(local.toLocalDate()) + " " + formatLocalTime(local.toLocalTime())
 }

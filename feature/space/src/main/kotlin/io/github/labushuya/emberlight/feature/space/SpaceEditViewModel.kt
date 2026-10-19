@@ -2,13 +2,13 @@ package io.github.labushuya.emberlight.feature.space
 
 import android.content.Context
 import android.net.Uri
-import android.os.StatFs
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.labushuya.emberlight.feature.space.form.LifetimeOption
+import io.github.labushuya.emberlight.feature.space.form.NameIdeas
 import io.github.labushuya.emberlight.feature.space.form.SpaceForm
 import io.github.labushuya.emberlight.feature.space.form.changedFields
 import io.github.labushuya.emberlight.share.space.SpaceId
@@ -16,7 +16,6 @@ import io.github.labushuya.emberlight.share.space.management.CoverResult
 import io.github.labushuya.emberlight.share.space.management.SaveResult
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
-import io.github.labushuya.emberlight.share.space.management.SpaceRules
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -31,6 +30,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.time.ZoneId
 import javax.inject.Inject
+import kotlin.random.Random
 
 /** Ereignis des Formulars: Das Ziel ist abgeschlossen (gespeichert oder verworfen), die Oberfläche geht zurück. */
 sealed interface SpaceEditEvent {
@@ -48,6 +48,7 @@ class SpaceEditViewModel
     constructor(
         savedStateHandle: SavedStateHandle,
         private val repository: SpaceRepository,
+        private val random: Random,
         @ApplicationContext private val appContext: Context,
     ) : ViewModel() {
         private val zone: ZoneId = ZoneId.systemDefault()
@@ -61,7 +62,6 @@ class SpaceEditViewModel
         private val spaceId: SpaceId = routeId?.let { SpaceId.parse(it) } ?: draftId
 
         private var saved: SpaceRecord? = null
-        private val freeBytes: Long? = freeStorage()
 
         private val _state = MutableStateFlow(SpaceEditUiState(isNew = routeId == null))
         val state: StateFlow<SpaceEditUiState> = _state.asStateFlow()
@@ -73,7 +73,9 @@ class SpaceEditViewModel
             viewModelScope.launch {
                 val existing = if (routeId != null) repository.find(spaceId) else null
                 saved = existing
-                val initial = existing?.let { SpaceForm.from(it, zone) } ?: SpaceForm()
+                val ceiling = repository.storageCeilingBytes()
+                // Ein neuer Space bekommt die größte zulässige Voreinstellung, wenn die übliche 4 GiB nicht passen.
+                val initial = existing?.let { SpaceForm.from(it, zone) } ?: SpaceForm.forNewSpace(ceiling)
                 val editable = routeId == null || (existing != null && existing.status == SpaceStatus.DRAFT)
                 _state.value =
                     SpaceEditUiState(
@@ -82,6 +84,7 @@ class SpaceEditViewModel
                         editable = editable,
                         form = initial,
                         initial = initial,
+                        storageMaxBytes = ceiling,
                     ).withDerived(initial)
             }
         }
@@ -94,6 +97,37 @@ class SpaceEditViewModel
         /** Wählt eine Laufzeit. Bei „Eigenes Ende“ wird ein Vorschlag eingetragen, wenn noch keiner da ist. */
         fun onLifetimeSelected(option: LifetimeOption) {
             applyForm(_state.value.form.withLifetime(option, System.currentTimeMillis(), zone))
+        }
+
+        /**
+         * Würfel: schlägt einen Namen vor. Ist das Feld leer, wird der Vorschlag gleich übernommen. Steht schon ein eigener
+         * Name darin, fragt die Oberfläche vorher nach ([SpaceEditUiState.pendingName]). So geht keine Eingabe verloren.
+         */
+        fun onSuggestName() {
+            val suggestion =
+                NameIdeas.suggest(
+                    adjectives = appContext.resources.getStringArray(R.array.space_name_adjectives).toList(),
+                    nouns = appContext.resources.getStringArray(R.array.space_name_nouns).toList(),
+                    random = random,
+                )
+            val current = _state.value
+            if (current.form.name.isBlank()) {
+                applyForm(current.form.copy(name = suggestion))
+            } else {
+                _state.value = current.copy(pendingName = suggestion)
+            }
+        }
+
+        /** Der Nutzer bestätigt den Ersatz des eigenen Namens durch den Vorschlag. */
+        fun confirmNameSuggestion() {
+            val pending = _state.value.pendingName ?: return
+            _state.value = _state.value.copy(pendingName = null)
+            applyForm(_state.value.form.copy(name = pending))
+        }
+
+        /** Der Nutzer behält den eigenen Namen. */
+        fun dismissNameSuggestion() {
+            _state.value = _state.value.copy(pendingName = null)
         }
 
         /** Titelbild aus der System-Fotoauswahl übernehmen. */
@@ -122,7 +156,7 @@ class SpaceEditViewModel
             viewModelScope.launch {
                 _state.value = _state.value.copy(saving = true, attempted = true)
                 val form = _state.value.form
-                val parsed = form.toSettings(System.currentTimeMillis(), zone)
+                val parsed = form.toSettings(System.currentTimeMillis(), zone, _state.value.storageMaxBytes)
                 val result =
                     if (saved == null) {
                         repository.create(spaceId, parsed.settings, form.coverSha256)
@@ -136,7 +170,14 @@ class SpaceEditViewModel
                     }
 
                     is SaveResult.Invalid -> {
-                        _state.value = _state.value.copy(saving = false, saveFailed = true)
+                        // Die Prüfung beim Speichern gilt mit der aktuellen Obergrenze. Die Anzeige übernimmt sie.
+                        _state.value =
+                            _state.value.copy(
+                                saving = false,
+                                saveFailed = true,
+                                errors = result.errors,
+                                storageMaxBytes = repository.storageCeilingBytes(),
+                            )
                     }
 
                     SaveResult.NotEditable, SaveResult.NotFound -> {
@@ -226,16 +267,12 @@ class SpaceEditViewModel
             _state.value = next.withDerived(form)
         }
 
-        /** Fehler, Speicherwarnung und Titelbild-Pfad aus dem Formular ableiten. */
+        /** Fehler und Titelbild-Pfad aus dem Formular ableiten. Die Obergrenze des Speichers kommt aus dem Zustand. */
         private fun SpaceEditUiState.withDerived(form: SpaceForm): SpaceEditUiState {
-            val parsed = form.toSettings(System.currentTimeMillis(), zone)
-            val warning = freeBytes?.let { SpaceRules.exceedsFreeSpace(parsed.settings.storageLimitBytes, it) } ?: false
+            val parsed = form.toSettings(System.currentTimeMillis(), zone, storageMaxBytes)
             val file = form.coverSha256?.let { repository.coverFile(spaceId, it) }
-            return copy(errors = parsed.errors, storageWarning = warning, coverFile = file)
+            return copy(errors = parsed.errors, coverFile = file)
         }
-
-        private fun freeStorage(): Long? =
-            runCatching { StatFs(appContext.noBackupFilesDir.path).availableBytes }.getOrNull()
 
         private companion object {
             const val ARG_ID = "id"

@@ -6,22 +6,37 @@ import io.github.labushuya.emberlight.share.space.management.LifetimePreset
 import io.github.labushuya.emberlight.share.space.management.SettingsError
 import io.github.labushuya.emberlight.share.space.management.SpaceDefaults
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
+import io.github.labushuya.emberlight.share.space.management.SpaceRules
 import io.github.labushuya.emberlight.share.space.management.SpaceSettings
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-/** Formular des Space (Paket 3.2): Umrechnung der Eingaben, Voreinstellungen und Rückführung aus einem Space. */
+/** Formular des Space (Paket 3.2): Umrechnung der Eingaben, Voreinstellungen, Obergrenze und Rückführung. */
 class SpaceFormTest {
     private val zone: ZoneId = ZoneId.of("Europe/Berlin")
     private val now: Long = ZonedDateTime.of(2026, 10, 16, 12, 0, 0, 0, zone).toInstant().toEpochMilli()
     private val gib = 1024L * 1024L * 1024L
 
-    private fun valid(form: SpaceForm = SpaceForm(name = "Hochzeit")) = form.toSettings(now, zone)
+    /** Obergrenze, die für die übrigen Regeln keine Rolle spielt. */
+    private val noDeviceLimit = SpaceRules.STORAGE_MAX_BYTES
+
+    private fun valid(
+        form: SpaceForm = SpaceForm(name = "Hochzeit"),
+        maxStorageBytes: Long = noDeviceLimit,
+    ) = form.toSettings(now, zone, maxStorageBytes)
+
+    private fun until(
+        date: LocalDate,
+        time: LocalTime,
+    ) = SpaceForm(name = "Abend", lifetime = LifetimeOption.UNTIL, untilDate = date, untilTime = time)
 
     @Test
     fun formDefaultsAreTheAgreedPresets() {
@@ -50,9 +65,8 @@ class SpaceFormTest {
     }
 
     @Test
-    fun untilIsParsedInTheDevicesZone() {
-        val form =
-            SpaceForm(name = "Abend", lifetime = LifetimeOption.UNTIL, untilDate = "17.10.2026", untilTime = "22:30")
+    fun untilIsTakenFromThePickersInTheDevicesZone() {
+        val form = until(LocalDate.of(2026, 10, 17), LocalTime.of(22, 30))
         val expected = ZonedDateTime.of(2026, 10, 17, 22, 30, 0, 0, zone).toInstant().toEpochMilli()
 
         val parsed = valid(form)
@@ -62,25 +76,29 @@ class SpaceFormTest {
     }
 
     @Test
-    fun unreadableUntilIsReported() {
-        val form =
-            SpaceForm(name = "Abend", lifetime = LifetimeOption.UNTIL, untilDate = "31.02.2026", untilTime = "22:30")
-        assertEquals(setOf(SettingsError.UNTIL_UNREADABLE), valid(form).errors)
-        val badTime = form.copy(untilDate = "17.10.2026", untilTime = "25:00")
-        assertEquals(setOf(SettingsError.UNTIL_UNREADABLE), valid(badTime).errors)
+    fun aCustomEndWithoutDateOrTimeIsMissing() {
+        assertEquals(
+            setOf(SettingsError.UNTIL_MISSING),
+            valid(SpaceForm(name = "A", lifetime = LifetimeOption.UNTIL)).errors,
+        )
+        assertEquals(
+            setOf(SettingsError.UNTIL_MISSING),
+            valid(
+                SpaceForm(name = "A", lifetime = LifetimeOption.UNTIL, untilDate = LocalDate.of(2026, 10, 17)),
+            ).errors,
+        )
     }
 
     @Test
     fun untilMustBeInTheFutureAndAtMostThirtyDaysAway() {
-        val past = SpaceForm(name = "A", lifetime = LifetimeOption.UNTIL, untilDate = "16.10.2026", untilTime = "11:00")
+        val past = until(LocalDate.of(2026, 10, 16), LocalTime.of(11, 0))
         assertEquals(setOf(SettingsError.UNTIL_NOT_IN_FUTURE), valid(past).errors)
-        val far = SpaceForm(name = "A", lifetime = LifetimeOption.UNTIL, untilDate = "16.11.2026", untilTime = "13:00")
+        val far = until(LocalDate.of(2026, 11, 16), LocalTime.of(13, 0))
         assertEquals(setOf(SettingsError.UNTIL_TOO_FAR), valid(far).errors)
         // Zwischen dem 16.10. und dem 15.11. liegt die Zeitumstellung. 11:00 ist genau 30 Tage entfernt, 12:00 schon eine Stunde mehr.
-        val edge = SpaceForm(name = "A", lifetime = LifetimeOption.UNTIL, untilDate = "15.11.2026", untilTime = "11:00")
+        val edge = until(LocalDate.of(2026, 11, 15), LocalTime.of(11, 0))
         assertTrue(valid(edge).errors.isEmpty())
-        val justOver =
-            SpaceForm(name = "A", lifetime = LifetimeOption.UNTIL, untilDate = "15.11.2026", untilTime = "12:00")
+        val justOver = until(LocalDate.of(2026, 11, 15), LocalTime.of(12, 0))
         assertEquals(setOf(SettingsError.UNTIL_TOO_FAR), valid(justOver).errors)
     }
 
@@ -89,17 +107,17 @@ class SpaceFormTest {
         val suggested = SpaceForm(name = "A").withLifetime(LifetimeOption.UNTIL, now, zone)
 
         assertEquals(LifetimeOption.UNTIL, suggested.lifetime)
-        assertEquals("17.10.2026", suggested.untilDate)
-        assertEquals("12:00", suggested.untilTime)
+        assertEquals(LocalDate.of(2026, 10, 17), suggested.untilDate)
+        assertEquals(LocalTime.of(12, 0), suggested.untilTime)
         assertTrue(valid(suggested).errors.isEmpty())
     }
 
     @Test
-    fun choosingAPresetKeepsTheTypedUntilFields() {
-        val typed = SpaceForm(untilDate = "17.10.2026", untilTime = "10:00")
+    fun choosingAPresetKeepsTheChosenUntilFields() {
+        val typed = SpaceForm(untilDate = LocalDate.of(2026, 10, 17), untilTime = LocalTime.of(10, 0))
         val preset = typed.withLifetime(LifetimeOption.TWO_HOURS, now, zone)
         assertEquals(LifetimeOption.TWO_HOURS, preset.lifetime)
-        assertEquals("17.10.2026", preset.untilDate)
+        assertEquals(LocalDate.of(2026, 10, 17), preset.untilDate)
     }
 
     @Test
@@ -160,17 +178,65 @@ class SpaceFormTest {
     }
 
     @Test
+    fun aLimitAboveTheDeviceCeilingIsAHardError() {
+        val eightGibCeiling = 8 * gib
+
+        assertEquals(
+            setOf(SettingsError.STORAGE_ABOVE_MAX),
+            valid(SpaceForm(name = "A", storage = StorageOption.SIXTEEN), eightGibCeiling).errors,
+        )
+        assertEquals(
+            setOf(SettingsError.STORAGE_ABOVE_MAX),
+            valid(SpaceForm(name = "A", storage = StorageOption.CUSTOM, storageCustom = "9"), eightGibCeiling).errors,
+        )
+        assertTrue(valid(SpaceForm(name = "A", storage = StorageOption.EIGHT), eightGibCeiling).errors.isEmpty())
+    }
+
+    @Test
+    fun onlyPresetsUpToTheCeilingAreSelectable() {
+        assertTrue(SpaceForm.isStorageAllowed(StorageOption.EIGHT, 8 * gib))
+        assertFalse(SpaceForm.isStorageAllowed(StorageOption.SIXTEEN, 8 * gib))
+        // Der eigene Wert ist kein Preset. Seine Grenze prüft die Domäne.
+        assertTrue(SpaceForm.isStorageAllowed(StorageOption.CUSTOM, 0))
+    }
+
+    @Test
+    fun aNewSpaceKeepsFourGibibyteWhenItFits() {
+        assertEquals(SpaceForm(), SpaceForm.forNewSpace(10 * gib))
+        assertEquals(SpaceForm(), SpaceForm.forNewSpace(4 * gib))
+    }
+
+    @Test
+    fun aNewSpacePreselectsTheLargestPresetBelowTheCeiling() {
+        assertEquals(StorageOption.TWO, SpaceForm.forNewSpace(3 * gib + gib / 2).storage)
+        // Genau auf der Grenze zählt die Stufe noch.
+        assertEquals(StorageOption.TWO, SpaceForm.forNewSpace(2 * gib).storage)
+        assertEquals(StorageOption.ONE, SpaceForm.forNewSpace(2 * gib - 1).storage)
+    }
+
+    @Test
+    fun aNewSpaceFallsBackToTheCeilingItselfWhenNoPresetFits() {
+        val onlyHalf = SpaceForm.forNewSpace(gib / 2)
+        assertEquals(StorageOption.CUSTOM, onlyHalf.storage)
+        assertEquals("0.5", onlyHalf.storageCustom)
+        // Unter 0,5 GiB gibt es keinen gültigen Wert. Das Feld bleibt leer, das Formular erklärt den Grund.
+        assertEquals("", SpaceForm.forNewSpace(0).storageCustom)
+    }
+
+    @Test
     fun aSpaceRoundTripsThroughTheForm() {
         val record = record(lifetime = Lifetime.Until(now + 3_600_000L), retentionDays = 45, storageBytes = gib / 2 * 3)
 
         val form = SpaceForm.from(record, zone)
 
         assertEquals(LifetimeOption.UNTIL, form.lifetime)
+        assertEquals(LocalDate.of(2026, 10, 16), form.untilDate)
+        assertEquals(LocalTime.of(13, 0), form.untilTime)
         assertEquals(RetentionOption.CUSTOM, form.retention)
         assertEquals("45", form.retentionCustom)
         assertEquals(StorageOption.CUSTOM, form.storage)
         assertEquals("1.5", form.storageCustom)
-        val back = form.toSettings(now, zone)
+        val back = form.toSettings(now, zone, noDeviceLimit)
         assertTrue(back.errors.isEmpty())
         assertEquals(record.settings, back.settings)
     }
@@ -181,8 +247,7 @@ class SpaceFormTest {
             record(
                 lifetime = Lifetime.Preset(LifetimePreset.THREE_DAYS),
                 retentionDays = 7,
-                storageBytes =
-                    8 * gib,
+                storageBytes = 8 * gib,
             )
 
         val form = SpaceForm.from(record, zone)
@@ -190,23 +255,24 @@ class SpaceFormTest {
         assertEquals(LifetimeOption.THREE_DAYS, form.lifetime)
         assertEquals(RetentionOption.ONE_WEEK, form.retention)
         assertEquals(StorageOption.EIGHT, form.storage)
-        assertEquals(record.settings, form.toSettings(now, zone).settings)
+        assertEquals(record.settings, form.toSettings(now, zone, noDeviceLimit).settings)
     }
 
     @Test
     fun changedFieldsNamesOnlyWhatChanged() {
         val before = SpaceForm(name = "A")
         assertEquals(setOf(SpaceField.NAME), changedFields(before, before.copy(name = "B")))
-        assertEquals(setOf(SpaceField.LIFETIME), changedFields(before, before.copy(untilTime = "10:00")))
+        assertEquals(setOf(SpaceField.LIFETIME), changedFields(before, before.copy(untilTime = LocalTime.of(10, 0))))
         assertEquals(emptySet<SpaceField>(), changedFields(before, before))
     }
 
     @Test
     fun everyErrorBelongsToItsField() {
         assertEquals(SpaceField.NAME, SettingsError.NAME_TOO_LONG.field())
-        assertEquals(SpaceField.LIFETIME, SettingsError.UNTIL_UNREADABLE.field())
+        assertEquals(SpaceField.LIFETIME, SettingsError.UNTIL_MISSING.field())
         assertEquals(SpaceField.RETENTION, SettingsError.RETENTION_OUT_OF_RANGE.field())
         assertEquals(SpaceField.STORAGE, SettingsError.STORAGE_OUT_OF_RANGE.field())
+        assertEquals(SpaceField.STORAGE, SettingsError.STORAGE_ABOVE_MAX.field())
         assertEquals(SpaceField.COLOR, SettingsError.COLOR_OUT_OF_RANGE.field())
         assertEquals(SpaceField.COVER, SettingsError.COVER_MISSING.field())
     }

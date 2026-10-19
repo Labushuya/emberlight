@@ -14,7 +14,7 @@
     <string name="space_detail_summary">Summary</string>
     <string name="space_detail_color">Color</string>
     <string name="space_detail_lifetime">Lifetime</string>
-    <string name="space_detail_retention">Retention after the end</string>
+    <string name="space_detail_retention">Keep after the end</string>
     <string name="space_detail_limit">Storage limit</string>
     <string name="space_detail_edit">Edit</string>
     <string name="space_detail_delete">Delete</string>
@@ -37,6 +37,11 @@
     <string name="space_section_name">Name</string>
     <string name="space_name_label">Name of the space</string>
     <string name="space_name_support">1 to 40 characters</string>
+    <string name="space_name_suggest">Suggest a name</string>
+    <string name="space_name_replace_title">Replace name?</string>
+    <string name="space_name_replace_text">Your name will be replaced with \"%1$s\".</string>
+    <string name="space_name_replace_confirm">Replace</string>
+    <string name="space_name_replace_dismiss">Keep mine</string>
     <string name="space_section_cover">Cover image</string>
     <string name="space_cover_none">No cover image. The color is shown instead.</string>
     <string name="space_cover_pick">Choose image</string>
@@ -65,8 +70,12 @@
     <string name="space_lifetime_until">Custom end</string>
     <string name="space_until_date">Date</string>
     <string name="space_until_time">Time</string>
-    <string name="space_until_support">Format: DD.MM.YYYY and HH:MM. At most 30 days ahead, and in the future.</string>
-    <string name="space_section_retention">Retention after the end</string>
+    <string name="space_until_pick_date">Choose date</string>
+    <string name="space_until_pick_time">Choose time</string>
+    <string name="space_until_support">At most 30 days ahead, and in the future.</string>
+    <string name="space_picker_done">Done</string>
+    <string name="space_section_retention">Keep after the end</string>
+    <string name="space_retention_explainer">After the end, the media stays only with you in the app. You choose what goes to your gallery; after that it is deleted automatically.</string>
     <string name="space_retention_immediate">Delete immediately</string>
     <string name="space_retention_one_day">1 day</string>
     <string name="space_retention_one_week">1 week</string>
@@ -76,11 +85,115 @@
     <string name="space_storage_gib">%1$s GiB</string>
     <string name="space_storage_custom">Custom</string>
     <string name="space_storage_custom_label">Limit in GiB (0.5 to 64)</string>
-    <string name="space_storage_warning">This limit is larger than the free storage of the device minus 2 GiB. The space may not fill up completely.</string>
+    <string name="space_storage_available">max. %1$s GiB available</string>
+    <string name="space_storage_not_enough">Not enough free storage, max. %1$s GiB</string>
+    <string name="space_storage_none_possible">There is not enough free storage on this device for a space. A space needs at least 0.5 GiB above a 2 GiB buffer, so 2.5 GiB free.</string>
     <plurals name="space_days">
         <item quantity="one">%1$d day</item>
         <item quantity="other">%1$d days</item>
     </plurals>
+
+    <!-- Wortlisten für Namensvorschläge (Adjektiv und Substantiv, Entscheidung vom 19.10.2026) -->
+    <string-array name="space_name_adjectives">
+        <item>Dancing</item>
+        <item>Glittering</item>
+        <item>Cheerful</item>
+        <item>Wild</item>
+        <item>Fluffy</item>
+        <item>Sleepy</item>
+        <item>Hungry</item>
+        <item>Singing</item>
+        <item>Springy</item>
+        <item>Giggling</item>
+        <item>Crazy</item>
+        <item>Cheeky</item>
+        <item>Brave</item>
+        <item>Cozy</item>
+        <item>Speedy</item>
+        <item>Glowing</item>
+        <item>Colorful</item>
+        <item>Playful</item>
+        <item>Curious</item>
+        <item>Silly</item>
+        <item>Shy</item>
+        <item>Golden</item>
+        <item>Starry</item>
+        <item>Sparkly</item>
+        <item>Bouncy</item>
+        <item>Squeaky</item>
+        <item>Happy</item>
+        <item>Wobbly</item>
+        <item>Shimmering</item>
+        <item>Roaring</item>
+        <item>Daring</item>
+        <item>Clever</item>
+        <item>Rolling</item>
+        <item>Amazed</item>
+        <item>Waving</item>
+        <item>Grinning</item>
+        <item>Sunny</item>
+        <item>Cuddly</item>
+        <item>Fiery</item>
+        <item>Groovy</item>
+        <item>Mysterious</item>
+        <item>Humming</item>
+        <item>Flying</item>
+        <item>Laughing</item>
+        <item>Dizzy</item>
+        <item>Snazzy</item>
+        <item>Jolly</item>
+        <item>Bubbly</item>
+    </string-array>
+    <string-array name="space_name_nouns">
+        <item>Raccoons</item>
+        <item>Gummy Bears</item>
+        <item>Penguins</item>
+        <item>Marmots</item>
+        <item>Kangaroos</item>
+        <item>Hedgehogs</item>
+        <item>Pandas</item>
+        <item>Otters</item>
+        <item>Badgers</item>
+        <item>Llamas</item>
+        <item>Tigers</item>
+        <item>Bunnies</item>
+        <item>Ducks</item>
+        <item>Geese</item>
+        <item>Cookies</item>
+        <item>Bananas</item>
+        <item>Pancakes</item>
+        <item>Balloons</item>
+        <item>Soap Bubbles</item>
+        <item>Fireflies</item>
+        <item>Stars</item>
+        <item>Clouds</item>
+        <item>Wizards</item>
+        <item>Pirates</item>
+        <item>Knights</item>
+        <item>Dragons</item>
+        <item>Unicorns</item>
+        <item>Crocodiles</item>
+        <item>Gnomes</item>
+        <item>Fire Trucks</item>
+        <item>Tractors</item>
+        <item>Rockets</item>
+        <item>Pumpkins</item>
+        <item>Lanterns</item>
+        <item>Drums</item>
+        <item>Bouncy Castles</item>
+        <item>Snowmen</item>
+        <item>Dinosaurs</item>
+        <item>Teddy Bears</item>
+        <item>Marbles</item>
+        <item>Guitars</item>
+        <item>Swings</item>
+        <item>Slides</item>
+        <item>Muffins</item>
+        <item>Tomatoes</item>
+        <item>Frogs</item>
+        <item>Mice</item>
+        <item>Sheep</item>
+    </string-array>
 
     <!-- Fehler am Feld -->
     <string name="space_error_name_empty">Please enter a name.</string>
@@ -88,9 +201,10 @@
     <string name="space_error_color">Please choose a color.</string>
     <string name="space_error_until_not_future">The end must be in the future.</string>
     <string name="space_error_until_too_far">At most 30 days ahead.</string>
-    <string name="space_error_until_unreadable">Date or time could not be read.</string>
+    <string name="space_error_until_missing">Please choose a date and a time.</string>
     <string name="space_error_retention">Between 1 and 90 days.</string>
     <string name="space_error_storage">Between 0.5 and 64 GiB.</string>
+    <string name="space_error_storage_above_max">More than the %1$s GiB available on this device.</string>
     <string name="space_error_cover_missing">The cover image was not found. Please choose it again.</string>
 
     <!-- Verwerfen -->

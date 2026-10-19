@@ -101,6 +101,9 @@ internal fun SpaceEditScreen(
             pickCover.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         },
         onRemoveCover = viewModel::removeCover,
+        onSuggestName = viewModel::onSuggestName,
+        onConfirmName = viewModel::confirmNameSuggestion,
+        onDismissName = viewModel::dismissNameSuggestion,
         onSave = viewModel::save,
         onClose = viewModel::requestClose,
         onConfirmDiscard = viewModel::confirmDiscard,
@@ -126,9 +129,13 @@ internal fun SpaceEditContent(
     onConfirmDiscard: () -> Unit,
     onDismissDiscard: () -> Unit,
     modifier: Modifier = Modifier,
+    onSuggestName: () -> Unit = {},
+    onConfirmName: () -> Unit = {},
+    onDismissName: () -> Unit = {},
 ) {
     val form = state.form
     val visible = state.visibleErrors()
+    val storageMax = state.storageMaxBytes
 
     fun errorFor(field: SpaceField): SettingsError? = visible.firstOrNull { it.field() == field }
 
@@ -201,6 +208,14 @@ internal fun SpaceEditContent(
                                 ?: stringResource(R.string.space_name_support),
                         )
                     },
+                    trailingIcon = {
+                        IconButton(onClick = onSuggestName) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_dice),
+                                contentDescription = stringResource(R.string.space_name_suggest),
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -232,26 +247,12 @@ internal fun SpaceEditContent(
                 )
                 if (form.lifetime == LifetimeOption.UNTIL) {
                     val lifetimeError = errorFor(SpaceField.LIFETIME)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = form.untilDate,
-                            onValueChange = { onChange(form.copy(untilDate = it)) },
-                            label = { Text(stringResource(R.string.space_until_date)) },
-                            singleLine = true,
-                            isError = lifetimeError != null,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                            modifier = Modifier.weight(1f),
-                        )
-                        OutlinedTextField(
-                            value = form.untilTime,
-                            onValueChange = { onChange(form.copy(untilTime = it)) },
-                            label = { Text(stringResource(R.string.space_until_time)) },
-                            singleLine = true,
-                            isError = lifetimeError != null,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    UntilPickers(
+                        date = form.untilDate,
+                        time = form.untilTime,
+                        onDate = { onChange(form.copy(untilDate = it)) },
+                        onTime = { onChange(form.copy(untilTime = it)) },
+                    )
                     if (lifetimeError != null) {
                         ErrorText(stringResource(lifetimeError.messageRes()))
                     } else {
@@ -266,6 +267,7 @@ internal fun SpaceEditContent(
                     selected = form.retention,
                     onSelect = { onChange(form.copy(retention = it)) },
                 )
+                SupportText(stringResource(R.string.space_retention_explainer))
                 if (form.retention == RetentionOption.CUSTOM) {
                     val retentionError = errorFor(SpaceField.RETENTION)?.let { stringResource(it.messageRes()) }
                     OutlinedTextField(
@@ -282,6 +284,13 @@ internal fun SpaceEditContent(
             }
 
             FormSection(stringResource(R.string.space_section_storage)) {
+                // Harte Grenze (Entscheidung 2): Voreinstellungen über der Obergrenze sind ausgegraut, eigene Werte sind ein Fehler.
+                val storageError = errorFor(SpaceField.STORAGE)?.let { settingsErrorText(it, storageMax) }
+                if (!state.canCreateAnySpace) {
+                    ErrorText(stringResource(R.string.space_storage_none_possible))
+                } else {
+                    SupportText(stringResource(R.string.space_storage_available, formatGib(storageMax)))
+                }
                 ChoiceChips(
                     options =
                         StorageOption.entries.map { option ->
@@ -292,10 +301,13 @@ internal fun SpaceEditContent(
                                 )
                         },
                     selected = form.storage,
+                    enabled = { option -> SpaceForm.isStorageAllowed(option, storageMax) },
                     onSelect = { onChange(form.copy(storage = it)) },
                 )
+                if (StorageOption.entries.any { !SpaceForm.isStorageAllowed(it, storageMax) }) {
+                    SupportText(stringResource(R.string.space_storage_not_enough, formatGib(storageMax)))
+                }
                 if (form.storage == StorageOption.CUSTOM) {
-                    val storageError = errorFor(SpaceField.STORAGE)?.let { stringResource(it.messageRes()) }
                     OutlinedTextField(
                         value = form.storageCustom,
                         onValueChange = { onChange(form.copy(storageCustom = it)) },
@@ -303,17 +315,10 @@ internal fun SpaceEditContent(
                         singleLine = true,
                         isError = storageError != null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        supportingText = { storageError?.let { Text(it) } },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                if (state.storageWarning) {
-                    Text(
-                        text = stringResource(R.string.space_storage_warning),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
+                storageError?.let { ErrorText(it) }
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -332,6 +337,25 @@ internal fun SpaceEditContent(
             dismissButton = {
                 TextButton(onClick = onDismissDiscard) {
                     Text(stringResource(R.string.space_discard_dismiss))
+                }
+            },
+        )
+    }
+
+    // Der Würfel ersetzt einen eigenen Namen erst nach Bestätigung (Entscheidung 1).
+    state.pendingName?.let { suggestion ->
+        AlertDialog(
+            onDismissRequest = onDismissName,
+            title = { Text(stringResource(R.string.space_name_replace_title)) },
+            text = { Text(stringResource(R.string.space_name_replace_text, suggestion)) },
+            confirmButton = {
+                TextButton(onClick = onConfirmName) {
+                    Text(stringResource(R.string.space_name_replace_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissName) {
+                    Text(stringResource(R.string.space_name_replace_dismiss))
                 }
             },
         )
@@ -425,13 +449,17 @@ private fun ColorChoice(
     }
 }
 
-/** Auswahl aus festen Werten als Chips in einer Gruppe. */
+/**
+ * Auswahl aus festen Werten als Chips in einer Gruppe. [enabled] sperrt einzelne Werte, sie bleiben sichtbar und
+ * ausgegraut (Speicherlimit über der Obergrenze).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun <T> ChoiceChips(
     options: List<Pair<T, String>>,
     selected: T,
     onSelect: (T) -> Unit,
+    enabled: (T) -> Boolean = { true },
 ) {
     FlowRow(
         modifier = Modifier.fillMaxWidth().selectableGroup(),
@@ -443,6 +471,7 @@ private fun <T> ChoiceChips(
                 selected = option == selected,
                 onClick = { onSelect(option) },
                 label = { Text(label) },
+                enabled = enabled(option),
             )
         }
     }

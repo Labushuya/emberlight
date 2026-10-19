@@ -5,12 +5,17 @@ package io.github.labushuya.emberlight.feature.space
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
+import io.github.labushuya.emberlight.feature.space.form.LifetimeOption
+import io.github.labushuya.emberlight.feature.space.form.NameIdeas
 import io.github.labushuya.emberlight.feature.space.form.SpaceField
 import io.github.labushuya.emberlight.feature.space.form.SpaceForm
+import io.github.labushuya.emberlight.feature.space.form.StorageOption
 import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
+import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.github.labushuya.emberlight.share.space.management.CoverResult
+import io.github.labushuya.emberlight.share.space.management.Lifetime
 import io.github.labushuya.emberlight.share.space.management.SettingsError
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.management.SpaceDefaults
@@ -37,6 +42,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import kotlin.random.Random
 
 /**
  * Formular-ViewModel (Paket 3.2): Anlegen, Speichern mit Fehlern, Rückfrage beim Verlassen, Titelbild-Übernahme und der
@@ -51,13 +61,17 @@ class SpaceEditViewModelTest {
     private lateinit var spacesDir: File
     private lateinit var database: SpacesDatabase
     private lateinit var repository: SpaceRepository
+    private val gib = 1024L * 1024L * 1024L
+
+    /** Freier Speicher des Geräts in diesem Test. Ohne Vorgabe reicht er für alle Stufen. */
+    private var freeBytes = 64 * gib
 
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         spacesDir = folder.newFolder("spaces")
         database = SpacesDatabase.open(context, spacesDir)
-        repository = SpaceRepository(database, SpaceCoverStore(spacesDir))
+        repository = SpaceRepository(database, SpaceCoverStore(spacesDir), spacesDir, StorageProbe { freeBytes })
     }
 
     @After
@@ -77,7 +91,7 @@ class SpaceEditViewModelTest {
                     if (routeId != null) put(ARG_ID, routeId)
                 },
             )
-        return SpaceEditViewModel(handle, repository, context)
+        return SpaceEditViewModel(handle, repository, Random(SEED), context)
     }
 
     private fun awaitState(
@@ -304,7 +318,133 @@ class SpaceEditViewModelTest {
         assertFalse(state.dirty)
     }
 
+    @Test
+    fun theDiceFillsAnEmptyNameAtOnceWithTheSuggestionFromTheSeededSource() {
+        val vm = viewModel()
+        awaitLoaded(vm)
+
+        vm.onSuggestName()
+
+        val state = awaitState(vm) { it.form.name.isNotEmpty() }
+        val (adjectives, nouns) = wordLists()
+        assertEquals(NameIdeas.suggest(adjectives, nouns, Random(SEED)), state.form.name)
+        assertNull(state.pendingName)
+    }
+
+    @Test
+    fun theDiceAsksBeforeReplacingAnOwnNameAndKeepsItOnDismiss() {
+        val vm = viewModel()
+        awaitLoaded(vm)
+        vm.onFormChange(
+            vm.state.value.form
+                .copy(name = "Eigen"),
+        )
+        awaitState(vm) { it.form.name == "Eigen" }
+
+        vm.onSuggestName()
+        val asked = awaitState(vm) { it.pendingName != null }
+        assertEquals("Eigen", asked.form.name)
+
+        vm.dismissNameSuggestion()
+        val kept = awaitState(vm) { it.pendingName == null }
+        assertEquals("Eigen", kept.form.name)
+    }
+
+    @Test
+    fun confirmingTheSuggestionReplacesTheOwnName() {
+        val vm = viewModel()
+        awaitLoaded(vm)
+        vm.onFormChange(
+            vm.state.value.form
+                .copy(name = "Eigen"),
+        )
+        vm.onSuggestName()
+        val pending = awaitState(vm) { it.pendingName != null }.pendingName!!
+
+        vm.confirmNameSuggestion()
+
+        val state = awaitState(vm) { it.pendingName == null }
+        assertEquals(pending, state.form.name)
+        // Der Vorschlag bleibt editierbar und ist gültig.
+        assertTrue(state.errors.isEmpty())
+    }
+
+    @Test
+    fun aNewSpaceWithoutRoomForFourGibibytePreselectsTheLargestFittingPreset() {
+        // 4,5 GiB frei: 2,5 GiB sind die Grenze, also passt die Stufe 2 GiB.
+        freeBytes = 4 * gib + gib / 2
+
+        val state = awaitLoaded(viewModel())
+
+        assertEquals(2 * gib + gib / 2, state.storageMaxBytes)
+        assertEquals(StorageOption.TWO, state.form.storage)
+        assertEquals(setOf(SettingsError.NAME_EMPTY), state.errors)
+    }
+
+    @Test
+    fun aLimitAboveTheCeilingBlocksSavingAndNothingIsWritten() {
+        freeBytes = 10 * gib
+        val vm = viewModel()
+        awaitLoaded(vm)
+
+        vm.onFormChange(SpaceForm(name = "Abend", storage = StorageOption.SIXTEEN))
+
+        val state = awaitState(vm) { it.errors.contains(SettingsError.STORAGE_ABOVE_MAX) }
+        assertFalse(state.canSave)
+        assertEquals(8 * gib, state.storageMaxBytes)
+        vm.save()
+        assertNull(runBlocking { repository.find(SpaceId.parse(DRAFT)!!) })
+    }
+
+    @Test
+    fun aCeilingThatShrankSinceOpeningIsCheckedAgainAndShownAtSave() {
+        val vm = viewModel()
+        awaitLoaded(vm)
+        vm.onFormChange(SpaceForm(name = "Abend", storage = StorageOption.EIGHT))
+        awaitState(vm) { it.canSave }
+
+        // Das Gerät ist voller geworden: die Obergrenze liegt jetzt bei 3 GiB.
+        freeBytes = 5 * gib
+        vm.save()
+
+        val state = awaitState(vm) { it.saveFailed }
+        assertTrue(state.errors.contains(SettingsError.STORAGE_ABOVE_MAX))
+        assertEquals(3 * gib, state.storageMaxBytes)
+        assertNull(runBlocking { repository.find(SpaceId.parse(DRAFT)!!) })
+    }
+
+    @Test
+    fun aCustomEndChosenWithThePickersIsSavedAsThatInstant() {
+        val zone = ZoneId.systemDefault()
+        val day = LocalDate.now(zone).plusDays(1)
+        val vm = viewModel()
+        awaitLoaded(vm)
+        vm.onFormChange(
+            SpaceForm(
+                name = "Abend",
+                lifetime = LifetimeOption.UNTIL,
+                untilDate = day,
+                untilTime = LocalTime.of(22, 30),
+            ),
+        )
+        awaitState(vm) { it.canSave }
+
+        vm.save()
+
+        awaitFinished(vm)
+        val expected = ZonedDateTime.of(day, LocalTime.of(22, 30), zone).toInstant().toEpochMilli()
+        assertEquals(
+            Lifetime.Until(expected),
+            runBlocking { repository.find(SpaceId.parse(DRAFT)!!) }?.settings?.lifetime,
+        )
+    }
+
+    private fun wordLists(): Pair<List<String>, List<String>> =
+        context.resources.getStringArray(R.array.space_name_adjectives).toList() to
+            context.resources.getStringArray(R.array.space_name_nouns).toList()
+
     private companion object {
+        const val SEED = 42
         const val DRAFT = "DDDDDDDDDDDDDDDDDDDDDD"
         const val SAVED_ID = "EEEEEEEEEEEEEEEEEEEEEE"
         const val ACTIVE_ID = "FFFFFFFFFFFFFFFFFFFFFF"

@@ -11,6 +11,10 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.compose.material3)
+    // Titelbilder (Paket 3.2): Coil lädt die Datei aus dem Space-Speicher, verkleinert und mit EXIF-Ausrichtung.
+    // Keine Netzwerk-Module, keine Galerie-Medien.
+    implementation(libs.coil.core)
+    implementation(libs.coil.compose)
 
     testImplementation(libs.kotlinx.coroutines.test)
 }

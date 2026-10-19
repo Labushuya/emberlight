@@ -4,9 +4,14 @@ import androidx.room.withTransaction
 import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
+import io.github.labushuya.emberlight.share.space.StorageProbe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
@@ -32,19 +37,44 @@ sealed interface SaveResult {
  * im Space-Speicher. Der Speicher gehört nur zu einem Space: Löschen entfernt Datenbankeinträge und Verzeichnis gemeinsam.
  *
  * Bearbeiten ist nur im Entwurf erlaubt. Ein Space mit Status [SpaceStatus.ACTIVE] nimmt keine Änderung mehr an (Paket 3.3).
+ *
+ * Beim ersten Zugriff je Prozess räumt das Repository verwaiste Verzeichnisse im Space-Ordner auf ([spacesDir], siehe
+ * [OrphanSpaceDirectories]). Der Lauf liegt vor jeder Schreibung, daher kann er keinen Entwurf dieser Sitzung treffen.
+ *
+ * [freeSpace] liefert den freien Speicher des Geräts. Daraus folgt die harte Obergrenze des Speicherlimits (Paket 3.2).
  */
 class SpaceRepository(
     private val database: SpacesDatabase,
     private val covers: SpaceCoverStore,
+    private val spacesDir: File,
+    private val freeSpace: StorageProbe,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     private val dao = database.spaces()
+    private val startupLock = Mutex()
 
-    fun observeAll(): Flow<List<SpaceRecord>> = dao.observeAll().map { rows -> rows.map { it.toRecord() } }
+    @Volatile
+    private var swept = false
 
-    fun observe(id: SpaceId): Flow<SpaceRecord?> = dao.observe(id.value).map { row -> row?.toRecord() }
+    /** Obergrenze des Speicherlimits auf diesem Gerät, jetzt gemessen. Ein Space braucht mindestens 0,5 GiB davon. */
+    fun storageCeilingBytes(): Long = SpaceRules.maxStorageBytes(freeSpace.usableBytes())
 
-    suspend fun find(id: SpaceId): SpaceRecord? = dao.find(id.value)?.toRecord()
+    fun observeAll(): Flow<List<SpaceRecord>> =
+        flow {
+            ensureSwept()
+            emitAll(dao.observeAll().map { rows -> rows.map { it.toRecord() } })
+        }
+
+    fun observe(id: SpaceId): Flow<SpaceRecord?> =
+        flow {
+            ensureSwept()
+            emitAll(dao.observe(id.value).map { row -> row?.toRecord() })
+        }
+
+    suspend fun find(id: SpaceId): SpaceRecord? {
+        ensureSwept()
+        return dao.find(id.value)?.toRecord()
+    }
 
     /** Legt einen neuen Entwurf unter [id] an. Die ID kommt von der Oberfläche, damit das Titelbild schon vorher ablegbar ist. */
     suspend fun create(
@@ -52,6 +82,7 @@ class SpaceRepository(
         settings: SpaceSettings,
         coverSha256: String?,
     ): SaveResult {
+        ensureSwept()
         if (dao.find(id.value) != null) return SaveResult.NotEditable
         return write(id, settings, coverSha256, createdAt = null)
     }
@@ -62,6 +93,7 @@ class SpaceRepository(
         settings: SpaceSettings,
         coverSha256: String?,
     ): SaveResult {
+        ensureSwept()
         val existing = dao.find(id.value)?.toRecord() ?: return SaveResult.NotFound
         if (existing.status != SpaceStatus.DRAFT) return SaveResult.NotEditable
         return write(id, settings, coverSha256, createdAt = existing.createdAt)
@@ -72,6 +104,7 @@ class SpaceRepository(
      * Verzeichnis). Liefert `false`, wenn es den Space nicht gibt.
      */
     suspend fun delete(id: SpaceId): Boolean {
+        ensureSwept()
         if (dao.find(id.value) == null) return false
         database.withTransaction {
             dao.deleteMediaOf(id.value)
@@ -86,6 +119,7 @@ class SpaceRepository(
      * es einen gespeicherten Space mit dieser ID, bleibt alles unberührt.
      */
     suspend fun discardUnsaved(id: SpaceId) {
+        ensureSwept()
         if (dao.find(id.value) == null) covers.deleteSpace(id)
     }
 
@@ -93,7 +127,10 @@ class SpaceRepository(
     suspend fun storeCover(
         id: SpaceId,
         input: InputStream,
-    ): CoverResult = covers.store(id, input)
+    ): CoverResult {
+        ensureSwept()
+        return covers.store(id, input)
+    }
 
     /** Pfad eines Titelbilds für die Anzeige. */
     fun coverFile(
@@ -117,7 +154,9 @@ class SpaceRepository(
     ): SaveResult {
         val normalized = settings.copy(name = SpaceRules.normalizeName(settings.name))
         val now = nowMillis()
-        val errors = SpaceRules.validate(normalized, now).toMutableSet()
+        // Erneute Prüfung beim Speichern: Der Speicher des Geräts kann sich seit dem Öffnen des Formulars geändert haben.
+        val ceiling = withContext(Dispatchers.IO) { storageCeilingBytes() }
+        val errors = SpaceRules.validate(normalized, now, ceiling).toMutableSet()
         if (coverSha256 != null && !withContext(Dispatchers.IO) { covers.exists(id, coverSha256) }) {
             errors += SettingsError.COVER_MISSING
         }
@@ -141,6 +180,18 @@ class SpaceRepository(
         // Nach dem Speichern bleibt nur das Titelbild, das der Space nun verweist. Ein ersetztes Bild verschwindet.
         covers.retainOnly(id, setOfNotNull(coverSha256))
         return SaveResult.Saved(row.toRecord())
+    }
+
+    /** Einmal je Prozess vor dem ersten Zugriff: verwaiste Verzeichnisse entfernen (siehe [OrphanSpaceDirectories]). */
+    private suspend fun ensureSwept() {
+        if (swept) return
+        startupLock.withLock {
+            if (swept) return
+            withContext(Dispatchers.IO) {
+                OrphanSpaceDirectories.sweep(spacesDir, dao.allIds().toSet())
+            }
+            swept = true
+        }
     }
 
     private fun SpaceEntity.toRecord(): SpaceRecord =

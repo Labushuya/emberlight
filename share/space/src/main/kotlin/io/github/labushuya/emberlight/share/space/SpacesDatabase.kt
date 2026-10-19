@@ -155,6 +155,10 @@ interface SpaceDao {
     @Query("SELECT * FROM space WHERE id = :id")
     suspend fun find(id: String): SpaceEntity?
 
+    /** Alle bekannten Kennungen, für die Bereinigung verwaister Verzeichnisse. */
+    @Query("SELECT id FROM space")
+    suspend fun allIds(): List<String>
+
     @Query("SELECT * FROM space WHERE id = :id")
     fun observe(id: String): Flow<SpaceEntity?>
 

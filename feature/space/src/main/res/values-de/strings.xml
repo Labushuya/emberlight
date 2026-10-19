@@ -14,7 +14,7 @@
     <string name="space_detail_summary">Zusammenfassung</string>
     <string name="space_detail_color">Farbe</string>
     <string name="space_detail_lifetime">Laufzeit</string>
-    <string name="space_detail_retention">Nachhaltefrist</string>
+    <string name="space_detail_retention">Aufbewahrung nach dem Ende</string>
     <string name="space_detail_limit">Speicherlimit</string>
     <string name="space_detail_edit">Bearbeiten</string>
     <string name="space_detail_delete">Löschen</string>
@@ -37,6 +37,11 @@
     <string name="space_section_name">Name</string>
     <string name="space_name_label">Name des Space</string>
     <string name="space_name_support">1 bis 40 Zeichen</string>
+    <string name="space_name_suggest">Namen vorschlagen</string>
+    <string name="space_name_replace_title">Namen ersetzen?</string>
+    <string name="space_name_replace_text">Dein eigener Name wird durch „%1$s“ ersetzt.</string>
+    <string name="space_name_replace_confirm">Ersetzen</string>
+    <string name="space_name_replace_dismiss">Eigenen behalten</string>
     <string name="space_section_cover">Titelbild</string>
     <string name="space_cover_none">Kein Titelbild. Stattdessen wird die Farbe gezeigt.</string>
     <string name="space_cover_pick">Bild wählen</string>
@@ -65,8 +70,12 @@
     <string name="space_lifetime_until">Eigenes Ende</string>
     <string name="space_until_date">Datum</string>
     <string name="space_until_time">Uhrzeit</string>
-    <string name="space_until_support">Format: TT.MM.JJJJ und HH:MM. Höchstens 30 Tage voraus, und nur in der Zukunft.</string>
-    <string name="space_section_retention">Nachhaltefrist</string>
+    <string name="space_until_pick_date">Datum wählen</string>
+    <string name="space_until_pick_time">Uhrzeit wählen</string>
+    <string name="space_until_support">Höchstens 30 Tage voraus, und nur in der Zukunft.</string>
+    <string name="space_picker_done">Fertig</string>
+    <string name="space_section_retention">Aufbewahrung nach dem Ende</string>
+    <string name="space_retention_explainer">Nach dem Ende bleiben die Medien nur bei dir in der App. Du wählst aus, was in deine Galerie soll; danach wird automatisch gelöscht.</string>
     <string name="space_retention_immediate">Sofort löschen</string>
     <string name="space_retention_one_day">1 Tag</string>
     <string name="space_retention_one_week">1 Woche</string>
@@ -76,11 +85,119 @@
     <string name="space_storage_gib">%1$s GiB</string>
     <string name="space_storage_custom">Eigenes</string>
     <string name="space_storage_custom_label">Limit in GiB (0,5 bis 64)</string>
-    <string name="space_storage_warning">Das Limit ist größer als der freie Speicher des Geräts abzüglich 2 GiB. Der Space füllt sich dann möglicherweise nicht vollständig.</string>
+    <string name="space_storage_available">max. %1$s GiB verfügbar</string>
+    <string name="space_storage_not_enough">Nicht genug freier Speicher, max. %1$s GiB</string>
+    <string name="space_storage_none_possible">Auf diesem Gerät ist zu wenig freier Speicher für einen Space. Ein Space braucht mindestens 0,5 GiB über dem Puffer von 2 GiB, also 2,5 GiB frei.</string>
     <plurals name="space_days">
         <item quantity="one">%1$d Tag</item>
         <item quantity="other">%1$d Tage</item>
     </plurals>
+
+    <!--
+        Wortlisten für Namensvorschläge (Entscheidung vom 19.10.2026). Adjektive stehen in der Form, die zu einem Plural ohne
+        Artikel passt (starke Deklination, Endung „-e“). Substantive im Plural. So ergibt jede Kombination einen richtigen Satz-
+        teil: „Tanzende Waschbären“, „Glitzernde Gummibärchen“.
+    -->
+    <string-array name="space_name_adjectives">
+        <item>Tanzende</item>
+        <item>Glitzernde</item>
+        <item>Fröhliche</item>
+        <item>Wilde</item>
+        <item>Flauschige</item>
+        <item>Müde</item>
+        <item>Hungrige</item>
+        <item>Singende</item>
+        <item>Springende</item>
+        <item>Kichernde</item>
+        <item>Verrückte</item>
+        <item>Freche</item>
+        <item>Mutige</item>
+        <item>Gemütliche</item>
+        <item>Schnelle</item>
+        <item>Leuchtende</item>
+        <item>Bunte</item>
+        <item>Verspielte</item>
+        <item>Neugierige</item>
+        <item>Lustige</item>
+        <item>Schüchterne</item>
+        <item>Goldene</item>
+        <item>Sternklare</item>
+        <item>Funkelnde</item>
+        <item>Knallige</item>
+        <item>Quietschige</item>
+        <item>Glückliche</item>
+        <item>Schräge</item>
+        <item>Zottelige</item>
+        <item>Rasende</item>
+        <item>Tapfere</item>
+        <item>Pfiffige</item>
+        <item>Schlaue</item>
+        <item>Hüpfende</item>
+        <item>Rollende</item>
+        <item>Staunende</item>
+        <item>Winkende</item>
+        <item>Grinsende</item>
+        <item>Sonnige</item>
+        <item>Kuschelige</item>
+        <item>Feurige</item>
+        <item>Tolle</item>
+        <item>Wackelige</item>
+        <item>Schillernde</item>
+        <item>Brummende</item>
+        <item>Flitzende</item>
+        <item>Fliegende</item>
+        <item>Lachende</item>
+    </string-array>
+    <string-array name="space_name_nouns">
+        <item>Waschbären</item>
+        <item>Gummibärchen</item>
+        <item>Pinguine</item>
+        <item>Murmeltiere</item>
+        <item>Kängurus</item>
+        <item>Igel</item>
+        <item>Pandas</item>
+        <item>Ottern</item>
+        <item>Dachse</item>
+        <item>Lamas</item>
+        <item>Tiger</item>
+        <item>Hasen</item>
+        <item>Enten</item>
+        <item>Gänse</item>
+        <item>Kekse</item>
+        <item>Bananen</item>
+        <item>Pfannkuchen</item>
+        <item>Luftballons</item>
+        <item>Seifenblasen</item>
+        <item>Glühwürmchen</item>
+        <item>Sterne</item>
+        <item>Wolken</item>
+        <item>Zauberer</item>
+        <item>Piraten</item>
+        <item>Ritter</item>
+        <item>Drachen</item>
+        <item>Einhörner</item>
+        <item>Krokodile</item>
+        <item>Gnome</item>
+        <item>Feuerwehrautos</item>
+        <item>Traktoren</item>
+        <item>Raketen</item>
+        <item>Kürbisse</item>
+        <item>Laternen</item>
+        <item>Trommeln</item>
+        <item>Hüpfburgen</item>
+        <item>Schneemänner</item>
+        <item>Dinosaurier</item>
+        <item>Teddybären</item>
+        <item>Murmeln</item>
+        <item>Gitarren</item>
+        <item>Schaukeln</item>
+        <item>Rutschen</item>
+        <item>Muffins</item>
+        <item>Tomaten</item>
+        <item>Frösche</item>
+        <item>Mäuse</item>
+        <item>Schafe</item>
+    </string-array>
 
     <!-- Fehler am Feld -->
     <string name="space_error_name_empty">Bitte gib einen Namen ein.</string>
@@ -88,9 +205,10 @@
     <string name="space_error_color">Bitte wähle eine Farbe.</string>
     <string name="space_error_until_not_future">Das Ende muss in der Zukunft liegen.</string>
     <string name="space_error_until_too_far">Höchstens 30 Tage voraus.</string>
-    <string name="space_error_until_unreadable">Datum oder Uhrzeit sind nicht lesbar.</string>
+    <string name="space_error_until_missing">Bitte wähle Datum und Uhrzeit.</string>
     <string name="space_error_retention">Zwischen 1 und 90 Tagen.</string>
     <string name="space_error_storage">Zwischen 0,5 und 64 GiB.</string>
+    <string name="space_error_storage_above_max">Mehr als die %1$s GiB, die auf diesem Gerät verfügbar sind.</string>
     <string name="space_error_cover_missing">Das Titelbild wurde nicht gefunden. Bitte wähle es erneut.</string>
 
     <!-- Verwerfen -->

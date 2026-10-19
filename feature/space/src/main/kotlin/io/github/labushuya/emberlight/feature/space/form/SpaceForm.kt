@@ -13,8 +13,6 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
-import java.time.format.ResolverStyle
 import kotlin.math.roundToLong
 
 private const val GIB = 1024L * 1024L * 1024L
@@ -33,7 +31,7 @@ enum class LifetimeOption(
     UNTIL(null),
 }
 
-/** Auswahl der Nachhaltefrist. [CUSTOM] liest die Tage aus dem Formular. */
+/** Auswahl der Aufbewahrung nach dem Ende. [CUSTOM] liest die Tage aus dem Formular. */
 enum class RetentionOption(
     val days: Int?,
 ) {
@@ -56,33 +54,38 @@ enum class StorageOption(
 }
 
 /**
- * Eingaben des Formulars für Anlegen und Bearbeiten (Paket 3.2). Die Felder bleiben Text, bis sie geprüft werden. Die
- * Umrechnung in die Domäne geschieht in [toSettings], die Standardwerte kommen aus [SpaceDefaults].
+ * Eingaben des Formulars für Anlegen und Bearbeiten (Paket 3.2). Die Felder bleiben Eingaben, bis sie geprüft werden.
+ * Datum und Uhrzeit kommen aus den Auswahldialogen und sind schon typisiert. Die Umrechnung in die Domäne geschieht in
+ * [toSettings], die Standardwerte kommen aus [SpaceDefaults].
  */
 data class SpaceForm(
     val name: String = "",
     val colorIndex: Int = SpaceDefaults.COLOR_INDEX,
     val lifetime: LifetimeOption = LifetimeOption.ONE_DAY,
-    val untilDate: String = "",
-    val untilTime: String = "",
+    val untilDate: LocalDate? = null,
+    val untilTime: LocalTime? = null,
     val retention: RetentionOption = RetentionOption.ONE_WEEK,
     val retentionCustom: String = "",
     val storage: StorageOption = StorageOption.FOUR,
     val storageCustom: String = "",
     val coverSha256: String? = null,
 ) {
-    /** Prüft und rechnet um. Felder mit Fehler bekommen für die übrige Prüfung einen gültigen Ersatzwert. */
+    /**
+     * Prüft und rechnet um. [maxStorageBytes] ist die Obergrenze des Speicherlimits auf diesem Gerät. Felder mit Fehler
+     * bekommen für die übrige Prüfung einen gültigen Ersatzwert.
+     */
     fun toSettings(
         nowMillis: Long,
         zone: ZoneId,
+        maxStorageBytes: Long,
     ): FormParse {
         val errors = mutableSetOf<SettingsError>()
         val lifetimeValue =
             when (val preset = lifetime.preset) {
                 null -> {
-                    val until = parseUntil(untilDate, untilTime, zone)
+                    val until = untilMillis(zone)
                     if (until == null) {
-                        errors += SettingsError.UNTIL_UNREADABLE
+                        errors += SettingsError.UNTIL_MISSING
                         Lifetime.Until(nowMillis + DAY_MILLIS)
                     } else {
                         Lifetime.Until(until)
@@ -112,10 +115,21 @@ data class SpaceForm(
                 retentionDays = retentionDays,
                 storageLimitBytes = storageBytes,
             )
-        errors += SpaceRules.validate(settings, nowMillis)
-        // Eine eigene Nachhaltefrist beginnt bei einem Tag. Null heißt im Formular „Sofort löschen“, nicht „Eigene“.
+        errors += SpaceRules.validate(settings, nowMillis, maxStorageBytes)
+        // Eine eigene Aufbewahrung beginnt bei einem Tag. Null heißt im Formular „Sofort löschen“, nicht „Eigene“.
         if (retention == RetentionOption.CUSTOM && retentionDays == 0) errors += SettingsError.RETENTION_OUT_OF_RANGE
         return FormParse(settings, errors)
+    }
+
+    /** Zeitpunkt des festen Endes in der Zeitzone des Geräts. `null`, solange Datum oder Uhrzeit fehlen. */
+    fun untilMillis(zone: ZoneId): Long? {
+        val date = untilDate ?: return null
+        val time = untilTime ?: return null
+        return LocalDateTime
+            .of(date, time)
+            .atZone(zone)
+            .toInstant()
+            .toEpochMilli()
     }
 
     /** Wählt eine Laufzeit. Für „Eigenes Ende“ wird ein Vorschlag eingetragen, wenn noch keiner da ist: morgen, gleiche Zeit. */
@@ -124,16 +138,46 @@ data class SpaceForm(
         nowMillis: Long,
         zone: ZoneId,
     ): SpaceForm {
-        if (option != LifetimeOption.UNTIL || untilDate.isNotBlank()) return copy(lifetime = option)
+        if (option != LifetimeOption.UNTIL || (untilDate != null && untilTime != null)) return copy(lifetime = option)
         val suggestion = ZonedDateTime.ofInstant(Instant.ofEpochMilli(nowMillis + DAY_MILLIS), zone)
         return copy(
             lifetime = option,
-            untilDate = DISPLAY_DATE.format(suggestion.toLocalDate()),
-            untilTime = DISPLAY_TIME.format(suggestion.toLocalTime().withSecond(0).withNano(0)),
+            untilDate = suggestion.toLocalDate(),
+            untilTime = suggestion.toLocalTime().withSecond(0).withNano(0),
         )
     }
 
     companion object {
+        /**
+         * Formular für einen neuen Space. Die Voreinstellung 4 GiB bleibt, außer sie liegt über der Obergrenze des Geräts:
+         * dann wird die größte zulässige Voreinstellung gewählt. Passt keine, bekommt das Feld den Wert der Obergrenze.
+         */
+        fun forNewSpace(maxStorageBytes: Long): SpaceForm {
+            val default = SpaceForm()
+            if (isStorageAllowed(StorageOption.FOUR, maxStorageBytes)) return default
+            val largest =
+                StorageOption.entries
+                    .filter { isStorageAllowed(it, maxStorageBytes) && it != StorageOption.CUSTOM }
+                    .maxByOrNull { it.gib ?: 0 }
+            if (largest != null) return default.copy(storage = largest)
+            // Keine Voreinstellung passt. Die Obergrenze selbst ist dann der gültige Wert, sofern es einen gibt.
+            val custom =
+                if (maxStorageBytes >=
+                    SpaceRules.STORAGE_MIN_BYTES
+                ) {
+                    formatGib(maxStorageBytes.toDouble() / GIB)
+                } else {
+                    ""
+                }
+            return default.copy(storage = StorageOption.CUSTOM, storageCustom = custom)
+        }
+
+        /** Eine Voreinstellung ist wählbar, wenn sie nicht über der Obergrenze liegt. Eigene Werte prüft [SpaceRules]. */
+        fun isStorageAllowed(
+            option: StorageOption,
+            maxStorageBytes: Long,
+        ): Boolean = option.gib?.let { it.toLong() * GIB <= maxStorageBytes } ?: true
+
         /** Formular für einen gespeicherten Space. Die Laufzeit mit festem Ende wird in Datum und Uhrzeit zerlegt. */
         fun from(
             record: SpaceRecord,
@@ -144,7 +188,7 @@ data class SpaceForm(
             val untilParts =
                 (lifetime as? Lifetime.Until)?.let { until ->
                     val local = ZonedDateTime.ofInstant(Instant.ofEpochMilli(until.epochMillis), zone)
-                    DISPLAY_DATE.format(local.toLocalDate()) to DISPLAY_TIME.format(local.toLocalTime())
+                    local.toLocalDate() to local.toLocalTime()
                 }
             val retention =
                 RetentionOption.entries.firstOrNull { it.days == settings.retentionDays } ?: RetentionOption.CUSTOM
@@ -166,8 +210,8 @@ data class SpaceForm(
                         }
                     }
                         ?: LifetimeOption.UNTIL,
-                untilDate = untilParts?.first.orEmpty(),
-                untilTime = untilParts?.second.orEmpty(),
+                untilDate = untilParts?.first,
+                untilTime = untilParts?.second,
                 retention = retention,
                 retentionCustom = if (retention == RetentionOption.CUSTOM) settings.retentionDays.toString() else "",
                 storage = storage,
@@ -201,32 +245,6 @@ data class SpaceForm(
                     ?.takeIf { it.isFinite() } ?: return null
             return (gib * GIB).roundToLong()
         }
-
-        /** Zeitpunkt aus Datum und Uhrzeit in der Zeitzone des Geräts. Unlesbare Eingaben liefern `null`. */
-        fun parseUntil(
-            date: String,
-            time: String,
-            zone: ZoneId,
-        ): Long? {
-            val day = runCatching { LocalDate.parse(date.trim(), INPUT_DATE) }.getOrNull() ?: return null
-            val clock = runCatching { LocalTime.parse(time.trim(), INPUT_TIME) }.getOrNull() ?: return null
-            return LocalDateTime
-                .of(day, clock)
-                .atZone(zone)
-                .toInstant()
-                .toEpochMilli()
-        }
-
-        /** Datum für die Anzeige im Formular (`TT.MM.JJJJ`). */
-        val DISPLAY_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.uuuu")
-
-        /** Uhrzeit für die Anzeige im Formular (`HH:mm`). */
-        val DISPLAY_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-
-        private val INPUT_DATE: DateTimeFormatter =
-            DateTimeFormatter.ofPattern("d.M.uuuu").withResolverStyle(ResolverStyle.STRICT)
-        private val INPUT_TIME: DateTimeFormatter =
-            DateTimeFormatter.ofPattern("H:mm").withResolverStyle(ResolverStyle.STRICT)
     }
 }
 
@@ -277,12 +295,14 @@ fun SettingsError.field(): SpaceField =
 
         SettingsError.UNTIL_NOT_IN_FUTURE,
         SettingsError.UNTIL_TOO_FAR,
-        SettingsError.UNTIL_UNREADABLE,
+        SettingsError.UNTIL_MISSING,
         -> SpaceField.LIFETIME
 
         SettingsError.RETENTION_OUT_OF_RANGE -> SpaceField.RETENTION
 
-        SettingsError.STORAGE_OUT_OF_RANGE -> SpaceField.STORAGE
+        SettingsError.STORAGE_OUT_OF_RANGE,
+        SettingsError.STORAGE_ABOVE_MAX,
+        -> SpaceField.STORAGE
 
         SettingsError.COVER_MISSING -> SpaceField.COVER
     }

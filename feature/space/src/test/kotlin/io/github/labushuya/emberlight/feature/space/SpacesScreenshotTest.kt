@@ -26,6 +26,8 @@ import org.robolectric.annotation.GraphicsMode
 import java.util.Locale
 import java.util.TimeZone
 
+private const val GIB = 1024L * 1024L * 1024L
+
 /**
  * Goldens der Spaces (Paket 3.2) in `src/test/screenshots` (ADR 0006). Zeitzone und Sprache sind fest, damit die Bilder
  * auf jedem Rechner gleich sind. Die Daten stehen in [SpaceFixtures].
@@ -106,6 +108,22 @@ class SpacesScreenshotTest {
     }
 
     @Test
+    @Config(qualifiers = "de-w412dp-h915dp")
+    fun detailPhoneGerman() {
+        capture(
+            {
+                SpaceDetailContent(
+                    record = SpaceFixtures.sampleSpaces().first(),
+                    coverFile = null,
+                    onEdit = {},
+                    onDelete = {},
+                )
+            },
+            "src/test/screenshots/SpaceDetail_phone_de.png",
+        )
+    }
+
+    @Test
     @Config(qualifiers = "en-w412dp-h915dp")
     fun editPhoneEnglish() {
         capture({ EditForm() }, "src/test/screenshots/SpaceEdit_phone_en.png")
@@ -155,6 +173,8 @@ class SpacesScreenshotTest {
                         form = SpaceForm(name = "Hochzeit Lena und Tom", colorIndex = 2),
                         initial = SpaceForm(),
                         touched = emptySet(),
+                        // Ein Gerät mit gut 14 GiB frei: 16 GiB ist ausgegraut, der Hinweis steht am Feld.
+                        storageMaxBytes = 12 * GIB,
                     ),
                 onChange = {},
                 onLifetime = {},

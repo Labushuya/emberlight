@@ -50,13 +50,16 @@ enum class SettingsError {
     COLOR_OUT_OF_RANGE,
     UNTIL_NOT_IN_FUTURE,
     UNTIL_TOO_FAR,
-    UNTIL_UNREADABLE,
+    UNTIL_MISSING,
     RETENTION_OUT_OF_RANGE,
     STORAGE_OUT_OF_RANGE,
+
+    /** Eigener Wert über der Obergrenze des Geräts. Harte Grenze, sperrt das Speichern (Paket 3.2, Entscheidung 2). */
+    STORAGE_ABOVE_MAX,
     COVER_MISSING,
 }
 
-/** Grenzen der Eingaben (Paket 3.2, Festlegung vom 18.10.2026). */
+/** Grenzen der Eingaben (Paket 3.2, Festlegung vom 18.10.2026, harte Speichergrenze vom 19.10.2026). */
 object SpaceRules {
     const val NAME_MAX_CHARS = 40
     const val ACCENT_COUNT = 8
@@ -65,16 +68,34 @@ object SpaceRules {
     const val STORAGE_MIN_BYTES = GIB / 2
     const val STORAGE_MAX_BYTES = 64 * GIB
 
-    /** Mindest-Restspeicher des Geräts, der nach dem Speicherlimit frei bleiben soll (Warnung, nicht blockierend). */
+    /** Schrittweite, auf die die Obergrenze des Speicherlimits abgerundet wird. */
+    const val STORAGE_STEP_BYTES = GIB / 2
+
+    /** Puffer, der nach dem Speicherlimit auf dem Gerät frei bleiben muss. Teil der Obergrenze, keine Reservierung. */
     const val DEVICE_RESERVE_BYTES = 2 * GIB
+
+    /**
+     * Obergrenze des Speicherlimits bei [freeBytes] freiem Speicher: frei minus [DEVICE_RESERVE_BYTES], abgerundet auf
+     * [STORAGE_STEP_BYTES]. Bleibt weniger als ein Schritt, ist die Grenze `0`, und kein Space lässt sich anlegen.
+     * Das Limit ist keine Reservierung. Die Prüfung läuft beim Speichern und beim Start (Paket 3.3).
+     */
+    fun maxStorageBytes(freeBytes: Long): Long {
+        val usable = freeBytes - DEVICE_RESERVE_BYTES
+        if (usable < STORAGE_STEP_BYTES) return 0L
+        return usable / STORAGE_STEP_BYTES * STORAGE_STEP_BYTES
+    }
 
     /** Name ohne führende und folgende Leerzeichen. Die Länge zählt Unicode-Zeichen, nicht UTF-16-Einheiten. */
     fun normalizeName(raw: String): String = raw.trim()
 
-    /** Prüft alle Felder. [nowMillis] ist der Bezugszeitpunkt für ein festes Ende. Liefert eine leere Menge bei Gültigkeit. */
+    /**
+     * Prüft alle Felder. [nowMillis] ist der Bezugszeitpunkt für ein festes Ende, [maxStorageBytes] die Obergrenze des
+     * Speicherlimits auf diesem Gerät (siehe [maxStorageBytes]). Liefert eine leere Menge bei Gültigkeit.
+     */
     fun validate(
         settings: SpaceSettings,
         nowMillis: Long,
+        maxStorageBytes: Long,
     ): Set<SettingsError> {
         val errors = mutableSetOf<SettingsError>()
         val name = normalizeName(settings.name)
@@ -96,15 +117,11 @@ object SpaceRules {
         if (settings.retentionDays !in 0..RETENTION_MAX_DAYS) errors += SettingsError.RETENTION_OUT_OF_RANGE
         if (settings.storageLimitBytes !in STORAGE_MIN_BYTES..STORAGE_MAX_BYTES) {
             errors += SettingsError.STORAGE_OUT_OF_RANGE
+        } else if (settings.storageLimitBytes > maxStorageBytes) {
+            errors += SettingsError.STORAGE_ABOVE_MAX
         }
         return errors
     }
-
-    /** Warnung: Das Limit übersteigt den freien Speicher abzüglich des Mindest-Restspeichers. */
-    fun exceedsFreeSpace(
-        storageLimitBytes: Long,
-        freeBytes: Long,
-    ): Boolean = storageLimitBytes > freeBytes - DEVICE_RESERVE_BYTES
 }
 
 /** Voreinstellungen beim Anlegen (Paket 3.2). Der Name ist bewusst leer, das Feld ist Pflicht. */
