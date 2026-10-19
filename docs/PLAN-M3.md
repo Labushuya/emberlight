@@ -1,6 +1,8 @@
 # Paketplan Meilenstein 3: Space im vorhandenen WLAN
 
-Stand: 18.10.2026. Der Plan ist von der Nutzerin bzw. dem Nutzer bestätigt. Die Pakete folgen aufeinander. Jedes Paket endet mit einem Gerätetest bzw. einem Testkatalog.
+Stand: 18.10.2026, Nachtrag 20.10.2026 (Entscheidungen zu Paket 3.2 und Designentscheidungen (a) bis (f)). Der Plan ist von der Nutzerin bzw. dem Nutzer bestätigt. Die Pakete folgen aufeinander. Jedes Paket endet mit einem Gerätetest bzw. einem Testkatalog.
+
+Entwürfe der Oberflächen (Mockups, nicht bindend) liegen in [docs/mockups/](mockups/README.md). Dort steht die Zuordnung der Bildschirme zu den Paketen.
 
 Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT.md), Abschnitt Spaces.
 
@@ -11,12 +13,12 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 | 3.0 ✅ | Server-Basis, Foreground-Service, ADR 0012 (#25) |
 | 3.1b (GPS-Entfernung, Einwilligung, Markierung; ADR 0015, Draft-PR #28, Umsetzung 19.10.2026; HEIC/HEIF/AVIF umgesetzt, CI-Gegenprobe offen bis grüner Lauf) | Standort beim Upload bereinigen, längenerhaltend, mit Prüfung danach; nicht bereinigbare Dateien nur mit Einwilligung; Markierung „Standort enthalten“. Umfang und Abweichungen: ADR 0015. |
 | 3.1 (3.1a umgesetzt, PR #26, Gerätetest offen) | Server-Härtung und Space-Speicher: nur WLAN, CIO-Grenzen, Upload- und Download-API, Inhaltsprüfung, Dedupe, Speicherlimit, GPS-Entfernung; ADR „Schutz gegen Manipulation“. Ohne UI. Lieferung in zwei PRs: **3.1a** (alles außer GPS) und **3.1b** (GPS-Entfernung). 3.1b muss vor dem ersten für Nutzer erreichbaren Upload (Paket 3.5) gemergt sein. Bis dahin ist der Server aus keiner Oberfläche erreichbar. Umfang 3.1a: ADR 0014, Abschnitt „Umfang 3.1a“. |
-| 3.2 | Space anlegen und verwalten (Name, Titelbild, Farbe, Laufzeit, Nachhaltefrist, Speicherlimit; Liste und Detail) |
-| 3.3 | Einrichtung und Betrieb: Laufzeitberechtigungen, Akku-Ausnahme, Hersteller-Freigabe (Honor zuerst), Ladegerät-Hinweis, Pausen-Erkennung, Start und Stopp in der App (Voraussetzung von 3.3, nicht von 3.1; siehe ADR 0012, Nachtrag), Start/Stopp-Abfolge über einen Kanal. Netzverlust: automatisches Fortsetzen, wenn dasselbe WLAN mit derselben IP zurückkommt; sonst Hinweis an den Gastgeber, weil sich der QR-Code ändert (ADR 0013). Release-Einstieg entsteht in 3.3 (Start aus der Oberfläche). Danach R8-Prüfung des Serverpfads im Release-Mapping (Routing-Pipeline `installEmberlightModule` muss im Release erhalten bleiben). Die R8-Prüfung bis dahin läuft über den benchmark-Build (ADR 0014, Umsetzung 3.1a) |
-| 3.4 | Einladung und Beitritt: QR-Code, Zugangsschlüssel pro Teilnehmer, Anzeigename, Gastgeber-Kennzeichnung |
+| 3.2 (umgesetzt 19.10.2026, PR siehe Branch `feature/m3-3.2-spaces-verwalten`, ADR 0016; Nachtrag 20.10.2026; Gerätetest offen) | Space anlegen und verwalten (Name, Titelbild, Farbe, Laufzeit, Aufbewahrung nach dem Ende, Speicherlimit; Liste, Formular und Detail; Titelbild über die Fotoauswahl mit Standort-Entfernung; Migration 2 → 3). Nur Entwürfe, kein Start. Nachtrag 20.10.2026: Namensvorschläge (Würfel), harte Obergrenze des Speicherlimits, Datum und Uhrzeit über Auswahldialoge, Titelbild-Anzeige mit Coil, Bereinigung verwaister Verzeichnisse. Umfang und Abweichungen: ADR 0016. |
+| 3.3 | Einrichtung und Betrieb: Laufzeitberechtigungen, Akku-Ausnahme, Hersteller-Freigabe (Honor zuerst), Ladegerät-Hinweis, Pausen-Erkennung, Start und Stopp in der App (Voraussetzung von 3.3, nicht von 3.1; siehe ADR 0012, Nachtrag), Start/Stopp-Abfolge über einen Kanal. Netzverlust: automatisches Fortsetzen, wenn dasselbe WLAN mit derselben IP zurückkommt; sonst Hinweis an den Gastgeber, weil sich der QR-Code ändert (ADR 0013). Release-Einstieg entsteht in 3.3 (Start aus der Oberfläche). Danach R8-Prüfung des Serverpfads im Release-Mapping (Routing-Pipeline `installEmberlightModule` muss im Release erhalten bleiben). Die R8-Prüfung bis dahin läuft über den benchmark-Build (ADR 0014, Umsetzung 3.1a). Vorgemerkt aus 3.2 (Nachtrag 20.10.2026): (1) Die beiden Room-Instanzen auf `spaces.db` (App und Server) werden zu einer gemeinsamen, prozessweiten Instanz zusammengeführt. Bis dahin gelten zwei Instanzen auf derselben Datei nicht als sauber. (2) Das Speicherlimit wird beim Start des Space geprüft. Das Limit ist keine Reservierung von Speicher. (3) Ein aktiver Space braucht einen Eintrag in der Tabelle `space`, sonst räumt die Bereinigung verwaister Verzeichnisse (ADR 0016) sein Verzeichnis weg. |
+| 3.4 | Einladung und Beitritt: QR-Code, Zugangsschlüssel pro Teilnehmer, Anzeigename, Gastgeber-Kennzeichnung. Designentscheidung (d), festgehalten 20.10.2026: Die Gäste-Beitrittsseite zeigt den Hinweis „Verbindung läuft direkt im WLAN zum Handy des Gastgebers, nicht über das Internet. Verschlüsselung folgt in einer späteren Version.“ |
 | vor 3.5 (Pflicht, nur dokumentiert) | Frühe Ablehnungen (401, 403, 413, 415, 429, 503), wenn der Body noch läuft, zuverlässig zustellen: „lingering close“. Nach der Antwort Body-Reste lesen und verwerfen, höchstens 2 s bzw. 1 MiB, dann schließen. Anlass: `REFUSED_BODY_LINGER_MS` greift laut Messung nicht zuverlässig, die Verbindung schließt teils nach 1–4 ms (ADR 0014, Korrekturen nach dem Gerätetest). Die Gästeseite prüft Größe und Speicher vorab (3.5). Nur dokumentiert, nicht umgesetzt. |
-| 3.5 | Gäste-Webseite: Upload, Download, Uploader-Anzeige |
-| 3.6 | Ende und Nachhalten: Ablauf erzwingen, Nachhaltefrist, Erinnerung mit Aktionen (Vorauswahl „nichts behalten“, Alles/Nichts auswählen), automatische Löschung |
+| 3.5 | Gäste-Webseite: Upload, Download, Uploader-Anzeige. Designentscheidung (e), festgehalten 20.10.2026: Zurückziehen eigener Uploads nur mit kurzer Bestätigung. Standort-Rückfrage mit den Knöpfen „Mit Standort hochladen“ bzw. „Nicht hochladen“. |
+| 3.6 | Ende und Nachhalten: Ablauf erzwingen, Aufbewahrung nach dem Ende (Feld heißt in der Oberfläche „Aufbewahrung nach dem Ende“, Begriff Nachhaltefrist im Konzept), Erinnerung mit Aktionen (Vorauswahl „nichts behalten“, Alles/Nichts auswählen), automatische Löschung. Designentscheidungen: (a) „Jetzt löschen“ in der Erinnerung nur mit Bestätigung. (f) Bei „Sofort löschen“ kommt die Erinnerung kurz **vor** dem Ende. |
 | 3.7 | Gezielte Übernahme in `Pictures/Emberlight/<Space>`, danach Release `v0.3.0`. Pflicht: „Über/Lizenzen“-Seite in der App mit Lizenzhinweisen aller mitgelieferten Bibliotheken (Apache-2.0 verlangt Lizenz bzw. NOTICE bei Weitergabe; ohne Play-Services-Plugin, z. B. AboutLibraries, prüfen), Hinweis auf GPL-3.0 und Link auf den Quellcode. Ausdrücklich nennen: die OFL-Schriften Fraunces und Inter (SIL OFL 1.1) mit Copyright-Zeile und Lizenztext aus `core/design/src/main/assets/licenses`. |
 
 ## Festgelegt
@@ -31,6 +33,19 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 - **Grenzwerte** (Dateigrößen, Speicherlimit, Restspeicher, Parallelität, Timeouts) wurden am 18.10.2026 von der Nutzerin bzw. dem Nutzer bestätigt (ADR 0013).
 - **Engine**: CIO. Die Entscheidung steht in ADR 0013 („Umsetzung 3.1a“), gestützt auf die Messung. Der Gerätetest fehlt noch.
 
+## Designentscheidungen (festgehalten am 20.10.2026)
+
+Die Umsetzung steht im jeweiligen Paket. Hier nur die Zuordnung.
+
+- **(a)** „Jetzt löschen“ in der Erinnerung nur mit Bestätigung. Paket 3.6.
+- **(b)** Die acht Akzentfarben, wie umgesetzt (Paket 3.2, `SpaceAccents`).
+- **(c)** Speicherlimit-Optionen über der Obergrenze des Geräts sind ausgegraut, mit Hinweis. Umgesetzt in Paket 3.2 (ADR 0016).
+- **(d)** Gäste-Beitrittsseite mit Hinweis zur Verbindung im WLAN (siehe Paket 3.4 und 3.5).
+- **(e)** Zurückziehen eigener Uploads mit kurzer Bestätigung. Standort-Rückfrage mit „Mit Standort hochladen“ bzw. „Nicht hochladen“. Paket 3.5.
+- **(f)** Bei „Sofort löschen“ kommt die Erinnerung kurz vor dem Ende. Paket 3.6.
+
+Entscheidungen 1 bis 4 vom 20.10.2026 (Namensvorschläge, harte Speichergrenze, Begriff „Aufbewahrung nach dem Ende“, Datum und Uhrzeit über Auswahldialoge) sind in Paket 3.2 umgesetzt, siehe ADR 0016.
+
 ## Entscheidungsdokumente
 
 - Paket 3.1: [ADR 0013](adr/0013-schutz-gegen-manipulation.md) (Schutz gegen Manipulation, Entwurf) und [ADR 0014](adr/0014-space-speicher-und-server-api.md) (Space-Speicher und Server-API, Entwurf).
@@ -40,4 +55,5 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 
 - **3.1a**: Die Pflicht-Tests aus [ADR 0012](adr/0012-lokaler-server.md) (Abschnitt „Pflicht vor Paket 3.1“) und die Tests aus ADR 0014 (Abschnitt „Teststrategie für 3.1a“). Dazu ein Gerätetest mit dem Debug-Einstieg aus ADR 0014.
 - **3.1b**: Tests der GPS-Entfernung je Format mit echten Beispieldateien, dazu Prüfung mit einem Fremdprogramm (z. B. ExifTool). Gerätetest mit Fotos und Videos aus der Galerie.
-- **3.2 bis 3.7**: Der Testkatalog wird zu Beginn des jeweiligen Pakets im Entwurf festgelegt.
+- **3.2**: Regeln und Voreinstellungen (`SpaceRulesTest`, `SpaceFormTest`), Titelbild-Pipeline (`SpaceCoverStoreTest`: Kopie, Standort entfernt, nicht bereinigbar abgewiesen, altes Bild beim Wechsel entfernt), Repository mit Löschen und Speicher (`SpaceRepositoryTest`), Migration 2 → 3 (`SpacesDatabaseMigrationToVersionThreeTest`), ViewModels und Compose-Tests für Liste, Formular und Detail, Goldens für Liste (leer und gefüllt), Formular und Detail auf Telefon und großem Display, deutsch und englisch. Gerätetest: Testkatalog in der PR-Beschreibung. Nachtrag 20.10.2026: Namensvorschläge (`NameIdeasTest`: feste Zufallsquelle, Wortlisten je Sprache mit mindestens 40 Einträgen, Länge und Grammatik), harte Obergrenze (`SpaceRulesTest`, `SpaceRepositoryTest`, `SpaceEditViewModelTest`), verwaiste Verzeichnisse (`OrphanSpaceDirectoriesTest`), Goldens `SpaceDetail_phone_de` neu, Formular de, en und Tablet neu.
+- **3.3 bis 3.7**: Der Testkatalog wird zu Beginn des jeweiligen Pakets im Entwurf festgelegt.

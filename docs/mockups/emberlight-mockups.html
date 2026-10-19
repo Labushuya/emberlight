@@ -1,0 +1,1152 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>emberlight: Design-Mockups Meilenstein 3 (Spaces)</title>
+<style>
+/* Design-Token: aus core/design (EmberlightPalette, EmberlightColorScheme, EmberlightTheme.kt).
+   Formen: Material-3-Standard-Shapes (Shapes()): extraSmall 4, small 8, medium 12, large 16, extraLarge 28 dp.
+   Schriften: Fraunces (Titel), Inter (Text), Dateien in ./fonts (SIL OFL 1.1). */
+@font-face { font-family: "Fraunces"; src: url("../../core/design/src/main/res/font/fraunces_roman.ttf") format("truetype"); font-weight: 100 900; font-style: normal; font-display: block; }
+@font-face { font-family: "Inter"; src: url("../../core/design/src/main/res/font/inter_roman.ttf") format("truetype"); font-weight: 100 900; font-style: normal; font-display: block; }
+
+:root {
+  --bg-deep: #0B0810;            /* BackgroundDeep */
+  --glow: #FF8A3D;               /* GlowOrange = primary */
+  --spark: #FFD08A;              /* SparkGold */
+  --inverse-primary: #A0461F;
+  --frame-brown: #2A1410;        /* FrameBrown = onPrimary */
+  --frame-gold: #FFC27A;         /* FrameGold = secondary */
+  --title: #F6E6D4;              /* TitleCream = onBackground / onSurface */
+  --tagline: #C9A88D;            /* Tagline = onSurfaceVariant */
+  --primary-container: #5C2414;
+  --on-primary-container: #FFD08A;
+  --on-primary: #2A1410;
+  --secondary-container: #4A3020;
+  --on-secondary-container: #FFE0B8;
+  --tertiary: #FF8F75;
+  --on-tertiary: #3A0F06;
+  --tertiary-container: #6B2414;
+  --on-tertiary-container: #FFDAD0;
+  --surface: #120C11;
+  --surface-variant: #2E2124;
+  --surface-bright: #2E2226;
+  --surface-lowest: #080609;
+  --surface-low: #170F14;
+  --surface-container: #1C1317;
+  --surface-high: #24191C;
+  --outline: #8C7262;
+  --outline-variant: #3D2E2A;
+  --error: #FFB4AB;
+  --error-container: #93000A;
+  --on-error-container: #FFDAD6;
+  --disabled: #A08A7C;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-text: "Inter", "Segoe UI", system-ui, Arial, sans-serif;
+  --r-xs: 4px; --r-s: 8px; --r-m: 12px; --r-l: 16px; --r-xl: 28px;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg-deep); color: var(--title); font-family: var(--font-text); }
+body {
+  margin: 0; min-height: 100vh; line-height: 1.5;
+  background:
+    radial-gradient(900px 520px at 88% -6%, rgba(255,138,61,.14), transparent 62%),
+    radial-gradient(700px 420px at -4% 105%, rgba(255,138,61,.08), transparent 60%),
+    var(--bg-deep);
+}
+:focus-visible { outline: 3px solid var(--spark); outline-offset: 2px; }
+a { color: var(--spark); }
+
+/* Seitenkopf und Inhaltsverzeichnis */
+.page-head { max-width: 1440px; margin: 0 auto; padding: 56px 32px 24px; }
+.page-head h1 { font-family: var(--font-display); font-weight: 300; font-size: 48px; line-height: 56px; margin: 0 0 12px; }
+.page-head .lead { color: var(--tagline); font-size: 17px; line-height: 26px; max-width: 900px; margin: 0 0 24px; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 10px; }
+.toc a { display: inline-block; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--outline-variant); color: var(--title); text-decoration: none; font-size: 14px; }
+.toc a:hover { border-color: var(--glow); }
+.toc .sub { color: var(--tagline); font-size: 13px; }
+.note { color: var(--tagline); font-size: 14px; line-height: 22px; max-width: 980px; margin: 20px 0 0; }
+
+.section { max-width: 1440px; margin: 0 auto; padding: 48px 32px; border-top: 1px solid var(--outline-variant); }
+.section > h2 { font-family: var(--font-display); font-weight: 300; font-size: 38px; line-height: 46px; margin: 0 0 8px; }
+.section > .intro { color: var(--tagline); margin: 0 0 32px; max-width: 900px; }
+.section h3 { font-family: var(--font-display); font-weight: 300; font-size: 26px; line-height: 32px; margin: 48px 0 8px; }
+.section h3 + .intro { margin-top: 0; }
+
+.fig-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 40px 32px; align-items: start; }
+.fig { margin: 0; display: flex; flex-direction: column; gap: 14px; }
+.fig figcaption { color: var(--tagline); font-size: 14px; line-height: 21px; max-width: 392px; }
+.fig figcaption strong { display: block; font-family: var(--font-display); font-weight: 400; font-size: 19px; line-height: 26px; color: var(--title); margin-bottom: 4px; }
+.pkg { display: inline-block; margin: 8px 0 0; padding: 2px 10px; border-radius: 999px; background: var(--secondary-container); color: var(--on-secondary-container); font-size: 12px; font-weight: 600; }
+.fig-wide { grid-column: 1 / -1; }
+.fig-wide figcaption { max-width: 900px; }
+.scroll-x { overflow-x: auto; padding-bottom: 12px; }
+
+/* Telefonrahmen 360 x 800 dp */
+.device { position: relative; border-radius: 52px; background: #070507; border: 1px solid #4A3A35; padding: 16px; box-shadow: inset 0 0 0 2px #15100f, 0 24px 60px rgba(0,0,0,.5); }
+.device.phone { width: 392px; height: 832px; }
+.device .punch { position: absolute; top: 9px; left: 50%; transform: translateX(-50%); width: 12px; height: 12px; border-radius: 50%; background: #000; z-index: 6; }
+.screen { position: relative; width: 360px; height: 800px; border-radius: 36px; overflow: hidden; background: var(--bg-deep); display: flex; flex-direction: column; color: var(--title); }
+.sbar { flex: none; height: 32px; display: flex; justify-content: space-between; align-items: center; padding: 0 24px; font-size: 13px; font-weight: 600; }
+.sbar .sys { display: flex; gap: 6px; align-items: center; }
+.sbar .i { width: 16px; height: 16px; }
+.gesture { flex: none; height: 20px; display: flex; align-items: center; justify-content: center; }
+.gesture::after { content: ""; width: 120px; height: 4px; border-radius: 2px; background: var(--title); opacity: .6; }
+.content { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 16px 16px; scrollbar-width: thin; scrollbar-color: var(--outline-variant) transparent; }
+.content.pad { padding: 12px 16px; }
+
+/* Icons */
+.i { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; display: inline-block; vertical-align: middle; }
+.i.f { fill: currentColor; stroke: none; }
+.i.s { width: 16px; height: 16px; }
+
+/* App-Leiste */
+.appbar { flex: none; height: 64px; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 4px; background: var(--surface); }
+.appbar .ttl { flex: 1; min-width: 0; padding-left: 8px; }
+.appbar .ttl b { display: block; font-family: var(--font-display); font-weight: 300; font-size: 22px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.appbar .ttl small { display: block; font-size: 12px; line-height: 16px; color: var(--tagline); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ib { width: 40px; height: 40px; border-radius: 50%; border: 0; background: none; color: var(--title); display: inline-grid; place-items: center; flex: none; padding: 0; }
+.ib.tint { background: var(--secondary-container); color: var(--on-secondary-container); }
+.navbar { flex: none; height: 80px; background: var(--surface-container); display: flex; justify-content: space-around; align-items: flex-start; padding-top: 12px; }
+.navitem { width: 80px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--tagline); }
+.navitem .ind { position: relative; width: 64px; height: 32px; border-radius: 16px; display: grid; place-items: center; }
+.navitem.on { color: var(--title); }
+.navitem.on .ind { background: var(--secondary-container); color: var(--on-secondary-container); }
+.navitem .nd { position: absolute; top: 2px; right: 14px; width: 9px; height: 9px; border-radius: 50%; background: var(--error); box-shadow: 0 0 0 2px var(--surface-container); }
+
+/* Bausteine */
+.card { background: var(--surface-container); border-radius: var(--r-l); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.card + .card { margin-top: 12px; }
+.card .name { font-family: var(--font-display); font-weight: 300; font-size: 20px; line-height: 26px; margin: 0; }
+.card .row { display: flex; align-items: center; gap: 8px; }
+.card .row .name { flex: 1; min-width: 0; }
+.meta { margin: 0; color: var(--tagline); font-size: 13px; line-height: 18px; }
+.meta.sm { font-size: 12px; line-height: 16px; }
+.help { margin: 4px 0 0; color: var(--tagline); font-size: 13px; line-height: 19px; }
+.help b { color: var(--title); font-weight: 600; }
+.grp { font-size: 14px; line-height: 20px; font-weight: 600; margin: 20px 0 8px; color: var(--title); }
+.grp span { font-weight: 400; color: var(--tagline); margin-left: 6px; }
+.dot { width: 14px; height: 14px; border-radius: 50%; background: var(--acc, var(--glow)); flex: none; }
+.st { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--r-s); font-size: 12px; line-height: 16px; font-weight: 600; white-space: nowrap; flex: none; }
+.st.live { background: var(--primary-container); color: var(--on-primary-container); }
+.st.draft { background: var(--surface-variant); color: var(--title); }
+.st.keep { background: var(--tertiary-container); color: var(--on-tertiary-container); }
+.st.ended { background: var(--surface-bright); color: var(--title); }
+.bar { height: 6px; border-radius: 3px; background: var(--surface-variant); overflow: hidden; margin: 4px 0; }
+.bar > i { display: block; height: 100%; background: var(--glow); border-radius: 3px; }
+.badge { display: inline-block; padding: 1px 6px; border-radius: var(--r-xs); background: var(--tertiary-container); color: var(--on-tertiary-container); font-size: 11px; line-height: 16px; font-weight: 600; white-space: nowrap; }
+.mk-loc { display: inline-block; padding: 2px 6px; border-radius: var(--r-xs); background: var(--tertiary); color: var(--on-tertiary); font-size: 10px; line-height: 14px; font-weight: 700; white-space: nowrap; }
+
+.btn { height: 40px; border-radius: 999px; padding: 0 24px; border: 0; font: 500 14px/20px var(--font-text); display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; background: var(--glow); color: var(--on-primary); }
+.btn.tonal { background: var(--secondary-container); color: var(--on-secondary-container); }
+.btn.text { background: none; color: var(--glow); padding: 0 12px; }
+.btn.outline { background: none; color: var(--glow); border: 1px solid var(--outline); }
+.btn.danger { background: none; color: var(--error); border: 1px solid var(--outline); }
+.btn.danger-fill { background: var(--error-container); color: var(--on-error-container); }
+.btn.wide { width: 100%; }
+.btn.sm { height: 32px; padding: 0 14px; font-size: 13px; }
+.btn[disabled] { background: var(--surface-variant); color: #9C8577; }
+.btn .i { width: 18px; height: 18px; }
+
+.field { position: relative; border: 1px solid var(--outline); border-radius: var(--r-xs) var(--r-xs) 0 0; padding: 8px 56px 8px 16px; min-height: 56px; background: var(--surface-low); }
+.field.focus { border: 2px solid var(--glow); padding: 7px 55px 7px 15px; }
+.field label { display: block; font-size: 12px; line-height: 16px; color: var(--glow); }
+.field .val { font-size: 16px; line-height: 24px; color: var(--title); }
+.field .dice { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--secondary-container); color: var(--on-secondary-container); display: grid; place-items: center; padding: 0; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--r-s); border: 1px solid var(--outline); background: none; color: var(--tagline); font: 500 14px/20px var(--font-text); white-space: nowrap; }
+.chip.sel { background: var(--secondary-container); color: var(--on-secondary-container); border-color: transparent; }
+.chip.dis { border-style: dashed; border-color: var(--outline-variant); color: var(--disabled); }
+.chip .i { width: 18px; height: 18px; }
+.opt { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-m); background: var(--surface-container); margin-bottom: 8px; }
+.opt .radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--tagline); flex: none; margin-top: 2px; position: relative; }
+.opt.sel { background: var(--secondary-container); color: var(--on-secondary-container); }
+.opt.sel .radio { border-color: var(--glow); }
+.opt.sel .radio::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--glow); }
+.opt b { display: block; font-size: 14px; line-height: 20px; font-weight: 600; }
+.opt small { display: block; font-size: 12px; line-height: 17px; color: var(--tagline); }
+.opt.sel small { color: var(--on-secondary-container); opacity: .9; }
+
+.swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 8px; }
+.sw-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--tagline); }
+.sw { position: relative; width: 44px; height: 44px; border-radius: 50%; border: 0; padding: 0; background: var(--c); }
+.sw.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--title); }
+.sw.on::after { content: ""; position: absolute; inset: 0; margin: auto; width: 12px; height: 12px; border-radius: 50%; background: var(--frame-brown); }
+.sw-wrap.on { color: var(--title); font-weight: 600; }
+
+.dlg-wrap { position: absolute; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,.6); }
+.dlg { width: 100%; background: var(--surface-high); border-radius: var(--r-xl); padding: 24px; box-shadow: 0 12px 32px rgba(0,0,0,.5); }
+.dlg h4 { font-family: var(--font-display); font-weight: 300; font-size: 24px; line-height: 32px; margin: 0 0 12px; }
+.dlg p { margin: 0 0 24px; font-size: 14px; line-height: 20px; color: var(--tagline); }
+.dlg .acts { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+
+.banner { display: flex; gap: 12px; padding: 14px 16px; border-radius: var(--r-l); background: var(--surface-high); border-left: 4px solid var(--tertiary); margin-bottom: 12px; }
+.banner b { display: block; font-size: 14px; line-height: 20px; font-weight: 600; }
+.banner p { margin: 4px 0 8px; font-size: 13px; line-height: 19px; color: var(--tagline); }
+.banner .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.steps { display: flex; flex-wrap: wrap; gap: 6px 8px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--tagline); margin: 4px 0 12px; }
+.steps span { padding: 3px 8px; border-radius: var(--r-s); background: var(--surface-container); }
+.steps span.done { color: var(--title); }
+.steps span.now { background: var(--tertiary-container); color: var(--on-tertiary-container); font-weight: 700; }
+
+.hero-num { font-family: var(--font-display); font-weight: 300; font-size: 34px; line-height: 40px; margin: 0; }
+
+/* Medien-Kacheln */
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.tile { position: relative; aspect-ratio: 1; border-radius: var(--r-s); overflow: hidden; background: var(--surface-variant); }
+.tile .ph { position: absolute; inset: 0; }
+.tile .lbl { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 6px 4px; background: linear-gradient(transparent, rgba(0,0,0,.8)); font-size: 11px; line-height: 14px; font-weight: 500; color: var(--title); display: flex; align-items: center; gap: 4px; }
+.tile .lbl .i { width: 12px; height: 12px; }
+.tile .mk { position: absolute; left: 6px; top: 6px; }
+.tile .ck { position: absolute; right: 6px; top: 6px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(246,230,212,.9); background: rgba(0,0,0,.35); display: grid; place-items: center; color: var(--on-primary); }
+.tile .ck.on { background: var(--glow); border-color: var(--glow); }
+.tile .ck.on .i { width: 14px; height: 14px; stroke-width: 3; }
+.tile.sel { outline: 3px solid var(--glow); outline-offset: -3px; }
+.av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 600; background: var(--secondary-container); color: var(--on-secondary-container); flex: none; }
+.person { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
+.person .nm { flex: 1; font-size: 14px; line-height: 20px; font-weight: 500; }
+.person .nm small { display: block; font-size: 12px; color: var(--tagline); font-weight: 400; }
+
+/* Platzhalter-Fotos (Verläufe, keine Fremdbilder) */
+.p1 { background: radial-gradient(circle at 72% 28%, #FFD08A 0 10%, transparent 30%), linear-gradient(160deg, #A9532A, #3A1A12 72%); }
+.p2 { background: radial-gradient(circle at 30% 70%, #FF8A3D 0 14%, transparent 36%), linear-gradient(200deg, #5C2414, #1C1317); }
+.p3 { background: linear-gradient(135deg, #F2C14E, #B5572E 60%, #2A1410); }
+.p4 { background: radial-gradient(circle at 50% 40%, #FFE0B8 0 8%, transparent 30%), linear-gradient(180deg, #6B3A5A, #2A1420); }
+.p5 { background: linear-gradient(160deg, #9DBF8E, #2F4A3D 70%, #0F1A16); }
+.p6 { background: radial-gradient(circle at 65% 60%, #3F9AA6 0 12%, transparent 34%), linear-gradient(180deg, #1B2F3A, #0B1418); }
+.p7 { background: linear-gradient(120deg, #A895D6, #5B3F7A 55%, #1E1430); }
+.p8 { background: radial-gradient(circle at 20% 30%, #FF8F75 0 12%, transparent 35%), linear-gradient(170deg, #7A2E1C, #2A1410); }
+.p9 { background: linear-gradient(200deg, #E58FA0, #7A3350 60%, #2A1420); }
+.p10 { background: radial-gradient(circle at 50% 82%, #FFC27A 0 18%, transparent 46%), linear-gradient(180deg, #2A1410, #0B0810); }
+.p11 { background: radial-gradient(circle at 50% 50%, #FFD08A 0 6%, transparent 22%), radial-gradient(circle at 50% 50%, #FF8A3D22 0 40%, transparent 70%), linear-gradient(180deg, #120C11, #2A1410); }
+.wallpaper { background: radial-gradient(circle at 80% 90%, #FF8A3D 0 8%, transparent 40%), linear-gradient(180deg, #1B1218, #0B0810 70%); }
+
+/* QR-Platzhalter */
+.qr-box { width: 168px; height: 168px; border-radius: var(--r-m); background: #FFF8F0; padding: 8px; flex: none; }
+.qr-box svg { width: 100%; height: 100%; display: block; }
+
+/* Erinnerungs-Benachrichtigung */
+.shade { background: var(--surface-high); padding: 12px 12px 16px; border-radius: 0 0 var(--r-xl) var(--r-xl); }
+.shade .hd { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--tagline); padding: 4px 4px 10px; }
+.notif { background: var(--surface-container); border-radius: var(--r-l); padding: 14px; }
+.notif .top { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--tagline); }
+.notif .ico { width: 24px; height: 24px; border-radius: 50%; background: var(--primary-container); color: var(--spark); display: grid; place-items: center; }
+.notif .ico .i { width: 16px; height: 16px; }
+.notif h4 { margin: 8px 0 4px; font-size: 15px; line-height: 21px; font-weight: 600; }
+.notif p { margin: 0 0 8px; font-size: 14px; line-height: 20px; color: var(--tagline); }
+.notif .acts { display: flex; justify-content: space-between; border-top: 1px solid var(--outline-variant); padding-top: 4px; margin-top: 6px; }
+.notif .acts span { font-size: 13px; font-weight: 600; color: var(--glow); padding: 10px 6px; }
+.notif .acts span.danger { color: var(--error); }
+.apps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 8px; padding: 20px 16px; justify-items: center; font-size: 11px; color: var(--title); }
+.app-ic { position: relative; width: 52px; height: 52px; border-radius: 16px; background: #2a1d24; display: grid; place-items: center; color: var(--spark); }
+.app-ic.em { background: #3A1A12; }
+.app-ic .nd { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: var(--error); box-shadow: 0 0 0 2px var(--bg-deep); }
+
+/* Innendisplay (Foldable) */
+.device.fold { width: 800px; height: 640px; border-radius: 30px; padding: 14px; }
+.screen.wide { width: 772px; height: 612px; border-radius: 20px; flex-direction: column; }
+.screen.wide .split { flex: 1; min-height: 0; display: flex; }
+.pane-list { width: 280px; flex: none; border-right: 1px solid var(--outline-variant); display: flex; flex-direction: column; min-height: 0; }
+.pane-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.wide .sbar { height: 28px; padding: 0 20px; }
+.wide .appbar { height: 56px; }
+.pane-list .content, .pane-detail .content { padding: 12px 16px 16px; }
+.setting { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--outline-variant); font-size: 14px; line-height: 20px; }
+.setting span:first-child { color: var(--tagline); }
+.setting span:last-child { text-align: right; font-weight: 500; }
+
+/* Einrichtung */
+.check-item { display: flex; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--outline-variant); }
+.check-item .ic { width: 32px; height: 32px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--surface-variant); color: var(--tagline); }
+.check-item .ic.ok { background: var(--primary-container); color: var(--on-primary-container); }
+.check-item .ic.open { background: var(--secondary-container); color: var(--on-secondary-container); }
+.check-item .ic .i { width: 18px; height: 18px; }
+.check-item b { display: block; font-size: 15px; line-height: 21px; font-weight: 600; }
+.check-item p { margin: 2px 0 8px; font-size: 13px; line-height: 19px; color: var(--tagline); }
+.check-item .done { font-size: 12px; color: var(--spark); font-weight: 600; }
+
+/* Browser-Rahmen und Gäste-Webseite */
+.bframe { border-radius: 16px; overflow: hidden; border: 1px solid #4A3A35; background: var(--bg-deep); display: flex; flex-direction: column; box-shadow: 0 24px 60px rgba(0,0,0,.45); }
+.bframe.bm { width: 390px; height: 800px; }
+.bframe.bd { width: 1280px; height: 820px; }
+.bchrome { flex: none; height: 48px; background: var(--surface-container); display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+.bchrome .tab { height: 30px; padding: 0 12px; border-radius: 8px 8px 0 0; background: var(--surface-high); font-size: 12px; color: var(--title); display: flex; align-items: center; gap: 6px; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bchrome .url { flex: 1; min-width: 0; height: 30px; border-radius: 15px; background: var(--surface); display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 13px; color: var(--tagline); white-space: nowrap; overflow: hidden; }
+.bchrome .url .i { width: 14px; height: 14px; }
+.wpage { position: relative; flex: 1; min-height: 0; overflow-y: auto; background: var(--bg-deep); scrollbar-width: thin; scrollbar-color: var(--outline-variant) transparent; }
+.wtop { position: sticky; top: 0; z-index: 3; background: var(--surface); border-bottom: 1px solid var(--outline-variant); padding: 12px 16px; display: flex; align-items: center; gap: 10px; min-height: 56px; }
+.wtop .logo { font-family: var(--font-display); font-weight: 300; font-size: 20px; line-height: 24px; white-space: nowrap; }
+.wtop .logo .i { width: 20px; height: 20px; color: var(--glow); vertical-align: -4px; }
+.wtop .sp { flex: 1; min-width: 0; }
+.wtop h2 { margin: 0; font-family: var(--font-display); font-weight: 300; font-size: 19px; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wtop p { margin: 0; font-size: 13px; line-height: 18px; color: var(--tagline); }
+.wbody { padding: 20px 16px 28px; }
+.wbody p { margin: 0 0 14px; font-size: 16px; line-height: 24px; color: var(--title); }
+.wbtn { min-height: 48px; border-radius: 999px; padding: 0 22px; border: 0; background: var(--glow); color: var(--on-primary); font: 600 15px/20px var(--font-text); display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+.wbtn.sec { background: var(--secondary-container); color: var(--on-secondary-container); }
+.wbtn.ghost { background: none; color: var(--title); border: 1px solid var(--outline); min-height: 40px; font-size: 14px; }
+.wbtn.danger { background: none; color: var(--error); border: 1px solid var(--outline); min-height: 48px; }
+.wbtn.text { background: none; color: var(--glow); padding: 0 10px; min-height: 40px; }
+.wbtn.wide { width: 100%; }
+.wbtn.sm { min-height: 36px; padding: 0 14px; font-size: 14px; }
+.wbtn .i { width: 20px; height: 20px; }
+.wfield { display: block; margin: 8px 0 6px; }
+.wfield span { display: block; font-size: 14px; line-height: 20px; font-weight: 600; margin-bottom: 6px; }
+.wfield input { width: 100%; height: 52px; border-radius: var(--r-s); border: 1px solid var(--outline); background: var(--surface-low); color: var(--title); font: 400 17px/24px var(--font-text); padding: 0 14px; }
+.wfield input::placeholder { color: var(--tagline); opacity: 1; }
+.wfield input:focus { outline: 3px solid var(--spark); outline-offset: 1px; }
+.hint-w { font-size: 14px !important; line-height: 20px !important; color: var(--tagline) !important; }
+.wnote { display: flex; gap: 12px; padding: 14px; border-radius: var(--r-l); background: var(--surface-container); margin-top: 24px; }
+.wnote .i { color: var(--spark); margin-top: 2px; }
+.wnote p { font-size: 14px !important; line-height: 21px !important; color: var(--tagline) !important; margin: 0 0 8px !important; }
+.wnote p:last-child { margin: 0 !important; }
+.wnote strong { color: var(--title); font-weight: 600; }
+.hero { position: relative; height: 200px; overflow: hidden; }
+.hero .ph { position: absolute; inset: 0; }
+.hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,8,16,0) 30%, rgba(11,8,16,.95)); }
+.hero .txt { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 1; }
+.hero .eb { font-size: 12px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: var(--spark); font-weight: 600; margin: 0 0 4px; }
+.hero h2 { margin: 0; font-family: var(--font-display); font-weight: 300; font-size: 30px; line-height: 36px; }
+.hero .mt { margin: 6px 0 0; font-size: 14px; line-height: 20px; color: var(--title); opacity: .9; }
+.wstorage { padding: 12px 16px 8px; }
+.wstorage .bar { margin: 6px 0; height: 8px; border-radius: 4px; }
+.wstorage p { margin: 0; font-size: 13px; line-height: 18px; color: var(--tagline); }
+.wtools { display: flex; align-items: center; gap: 8px; padding: 8px 16px 12px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--outline); border-radius: 999px; overflow: hidden; }
+.seg button { height: 36px; padding: 0 16px; border: 0; background: none; color: var(--title); font: 500 14px/20px var(--font-text); }
+.seg button[aria-pressed="true"] { background: var(--secondary-container); color: var(--on-secondary-container); }
+.wgrid { list-style: none; margin: 0; padding: 0 16px 120px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.wgrid.d5 { grid-template-columns: repeat(5, 1fr); padding: 0 0 24px; gap: 16px; }
+.wcard { min-width: 0; }
+.wtile { position: relative; aspect-ratio: 1; border-radius: var(--r-m); overflow: hidden; }
+.wtile .ph { position: absolute; inset: 0; }
+.wtile .ck { position: absolute; right: 8px; top: 8px; width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(246,230,212,.95); background: rgba(0,0,0,.35); display: grid; place-items: center; color: var(--on-primary); }
+.wtile .ck.on { background: var(--glow); border-color: var(--glow); }
+.wtile .ck .i { width: 16px; height: 16px; stroke-width: 3; }
+.wtile .mk { position: absolute; left: 8px; top: 8px; }
+.wtile .vid { position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px; border-radius: 999px; background: rgba(0,0,0,.6); font-size: 12px; font-weight: 600; color: var(--title); }
+.wtile .vid .i { width: 14px; height: 14px; }
+.wcap { margin: 6px 2px 0; font-size: 13px; line-height: 18px; color: var(--tagline); }
+.wcap b { color: var(--title); font-weight: 600; }
+.wcap .mine { color: var(--spark); font-weight: 600; }
+.wdock { position: sticky; bottom: 0; z-index: 3; background: var(--surface); border-top: 1px solid var(--outline-variant); padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.wdock p { margin: 0; flex: 1; font-size: 14px; line-height: 20px; }
+.wfab { position: absolute; right: 16px; bottom: 84px; z-index: 4; height: 56px; padding: 0 20px 0 16px; border-radius: var(--r-l); border: 0; background: var(--primary-container); color: var(--on-primary-container); font: 600 15px/20px var(--font-text); display: inline-flex; align-items: center; gap: 10px; box-shadow: 0 8px 20px rgba(0,0,0,.45); }
+.wfab .i { width: 22px; height: 22px; }
+.wsheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; background: var(--surface-high); border-radius: 28px 28px 0 0; padding: 20px 16px 24px; }
+.wsheet h3 { margin: 0 0 12px; font-family: var(--font-display); font-weight: 300; font-size: 22px; line-height: 28px; }
+.up-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--outline-variant); }
+.up-row .ico { width: 36px; height: 36px; border-radius: var(--r-s); background: var(--surface-variant); display: grid; place-items: center; color: var(--tagline); flex: none; }
+.up-row .ico .i { width: 18px; height: 18px; }
+.up-row .tx { flex: 1; min-width: 0; }
+.up-row .tx b { display: block; font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-row .tx small { display: block; font-size: 12px; line-height: 17px; color: var(--tagline); }
+.up-row .tx small.warn { color: var(--tertiary); font-weight: 600; }
+.up-row .tx .bar { margin: 6px 0 0; }
+.up-row .ok { color: var(--spark); }
+.up-row .ok .i { width: 20px; height: 20px; }
+.wdlg { position: absolute; left: 16px; right: 16px; top: 50%; transform: translateY(-50%); z-index: 6; background: var(--surface-high); border-radius: 28px; padding: 24px; box-shadow: 0 12px 32px rgba(0,0,0,.55); }
+.wdlg h4 { margin: 0 0 12px; font-family: var(--font-display); font-weight: 300; font-size: 23px; line-height: 30px; }
+.wdlg p { margin: 0 0 22px; font-size: 14px; line-height: 21px; color: var(--tagline); }
+.wdlg .acts { display: flex; flex-direction: column; gap: 8px; }
+.scrim { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.62); }
+.viewer { position: relative; height: 380px; overflow: hidden; }
+.viewer .ph { position: absolute; inset: 0; }
+.kv { margin: 0; }
+.kv div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--outline-variant); font-size: 14px; line-height: 20px; }
+.kv dt { color: var(--tagline); }
+.kv dd { margin: 0; text-align: right; font-weight: 500; }
+.end-wrap { text-align: center; padding: 44px 24px 32px; display: flex; flex-direction: column; align-items: center; }
+.end-wrap .flame { width: 96px; height: 96px; border-radius: 50%; background: radial-gradient(circle, #FF8A3D55 0%, transparent 70%); display: grid; place-items: center; color: var(--spark); margin-bottom: 20px; }
+.end-wrap .flame .i { width: 56px; height: 56px; }
+.end-wrap h1 { margin: 0 0 14px; font-family: var(--font-display); font-weight: 300; font-size: 34px; line-height: 40px; }
+.end-wrap p { margin: 0 0 12px; font-size: 16px; line-height: 24px; color: var(--tagline); }
+.end-wrap .sum { margin-top: 20px; padding: 14px 16px; border-radius: var(--r-l); background: var(--surface-container); width: 100%; font-size: 14px; line-height: 20px; color: var(--title); }
+
+/* Desktop-Hauptseite */
+.dtop { display: flex; align-items: center; gap: 16px; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--outline-variant); }
+.dtop .logo { font-family: var(--font-display); font-weight: 300; font-size: 22px; white-space: nowrap; }
+.dtop .logo .i { width: 22px; height: 22px; color: var(--glow); vertical-align: -5px; }
+.dtop h2 { margin: 0; flex: 1; font-family: var(--font-display); font-weight: 300; font-size: 22px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 999px; background: var(--surface-container); font-size: 14px; white-space: nowrap; }
+.pill .i { width: 18px; height: 18px; }
+.dlayout { display: flex; min-height: 0; flex: 1; }
+.dside { width: 300px; flex: none; padding: 24px; border-right: 1px solid var(--outline-variant); display: flex; flex-direction: column; gap: 22px; overflow: hidden; }
+.dside h3 { margin: 0 0 8px; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--tagline); letter-spacing: .02em; text-transform: uppercase; }
+.dside p { margin: 0; font-size: 14px; line-height: 20px; }
+.dside .person { padding: 4px 0; }
+.dmain { flex: 1; min-width: 0; padding: 20px 24px; overflow: hidden; }
+.dtools { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.dtools .sp { flex: 1; }
+.ddrop { display: flex; align-items: center; justify-content: center; gap: 14px; height: 88px; border-radius: var(--r-l); border: 2px dashed var(--glow); background: rgba(255,138,61,.1); color: var(--title); margin-bottom: 18px; }
+.ddrop .i { width: 28px; height: 28px; color: var(--glow); }
+.ddrop b { font-weight: 600; }
+.ddrop small { display: block; color: var(--tagline); font-size: 13px; }
+.dcap { font-size: 13px; line-height: 18px; color: var(--tagline); margin: 6px 2px 0; }
+.dcap b { color: var(--title); font-weight: 600; }
+.dnote { font-size: 13px !important; line-height: 19px !important; color: var(--tagline) !important; padding: 12px 14px; border-radius: var(--r-m); background: var(--surface-container); }
+.dnote b { color: var(--title); }
+.dcard-bar .bar { height: 8px; border-radius: 4px; margin: 8px 0 6px; }
+
+.ico-circle { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--primary-container); color: var(--on-primary-container); flex: none; }
+.legend-list { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--tagline); margin: 16px 0 0; }
+.legend-list span { display: inline-flex; align-items: center; gap: 6px; }
+</style>
+</head>
+<body>
+
+<!-- Icon-Sprite (Inline-SVG). Navigation-Icons: Pfade aus core/design/res/drawable (Material Symbols Rounded, Apache-2.0). -->
+<svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <pattern id="qrm" width="3" height="3" patternUnits="userSpaceOnUse">
+      <rect width="2" height="1" fill="#1A0F0C"/><rect x="0" y="2" width="1" height="1" fill="#1A0F0C"/><rect x="2" y="2" width="1" height="1" fill="#1A0F0C"/>
+    </pattern>
+  </defs>
+  <symbol id="qr-demo" viewBox="0 0 29 29">
+    <rect width="29" height="29" fill="#FFF8F0"/>
+    <path fill="#1A0F0C" fill-rule="evenodd" d="M0 0h7v7H0zM1 1v5h5V1zM22 0h7v7h-7zM23 1v5h5V1zM0 22h7v7H0zM1 23v5h5v-5z"/>
+    <rect x="2" y="2" width="3" height="3" fill="#1A0F0C"/>
+    <rect x="24" y="2" width="3" height="3" fill="#1A0F0C"/>
+    <rect x="2" y="24" width="3" height="3" fill="#1A0F0C"/>
+    <rect x="9" y="9" width="12" height="12" fill="url(#qrm)"/>
+    <rect x="9" y="0" width="1" height="6" fill="#1A0F0C"/>
+    <rect x="0" y="9" width="6" height="1" fill="#1A0F0C"/>
+  </symbol>
+  <symbol id="i-groups" viewBox="0 0 960 960"><path d="M40,720Q23,720 11.5,708.5Q0,697 0,680L0,657Q0,614 44,587Q88,560 160,560Q173,560 185,560.5Q197,561 208,563Q194,584 187,607Q180,630 180,655L180,720L40,720ZM280,720Q263,720 251.5,708.5Q240,697 240,680L240,655Q240,623 257.5,596.5Q275,570 307,550Q339,530 383.5,520Q428,510 480,510Q533,510 577.5,520Q622,530 654,550Q686,570 703,596.5Q720,623 720,655L720,680Q720,697 708.5,708.5Q697,720 680,720L280,720ZM780,720L780,655Q780,629 773.5,606Q767,583 754,563Q765,561 776.5,560.5Q788,560 800,560Q872,560 916,586.5Q960,613 960,657L960,680Q960,697 948.5,708.5Q937,720 920,720L780,720ZM160,520Q127,520 103.5,496.5Q80,473 80,440Q80,406 103.5,383Q127,360 160,360Q194,360 217,383Q240,406 240,440Q240,473 217,496.5Q194,520 160,520ZM800,520Q767,520 743.5,496.5Q720,473 720,440Q720,406 743.5,383Q767,360 800,360Q834,360 857,383Q880,406 880,440Q880,473 857,496.5Q834,520 800,520ZM480,480Q430,480 395,445Q360,410 360,360Q360,309 395,274.5Q430,240 480,240Q531,240 565.5,274.5Q600,309 600,360Q600,410 565.5,445Q531,480 480,480Z"/></symbol>
+  <symbol id="i-groups-o" viewBox="0 0 960 960"><path d="M40,720Q23,720 11.5,708.5Q0,697 0,680L0,657Q0,614 44,587Q88,560 160,560Q173,560 185,560.5Q197,561 208,563Q194,584 187,607Q180,630 180,655L180,720L40,720ZM280,720Q263,720 251.5,708.5Q240,697 240,680L240,655Q240,623 257.5,596.5Q275,570 307,550Q339,530 383.5,520Q428,510 480,510Q533,510 577.5,520Q622,530 654,550Q686,570 703,596.5Q720,623 720,655L720,680Q720,697 708.5,708.5Q697,720 680,720L280,720ZM780,720L780,655Q780,629 773.5,606Q767,583 754,563Q765,561 776.5,560.5Q788,560 800,560Q872,560 916,586.5Q960,613 960,657L960,680Q960,697 948.5,708.5Q937,720 920,720L780,720ZM325,640L636,640L636,640Q626,620 580.5,605Q535,590 480,590Q425,590 379.5,605Q334,620 325,640L325,640ZM160,520Q127,520 103.5,496.5Q80,473 80,440Q80,406 103.5,383Q127,360 160,360Q194,360 217,383Q240,406 240,440Q240,473 217,496.5Q194,520 160,520ZM800,520Q767,520 743.5,496.5Q720,473 720,440Q720,406 743.5,383Q767,360 800,360Q834,360 857,383Q880,406 880,440Q880,473 857,496.5Q834,520 800,520ZM480,480Q430,480 395,445Q360,410 360,360Q360,309 395,274.5Q430,240 480,240Q531,240 565.5,274.5Q600,309 600,360Q600,410 565.5,445Q531,480 480,480ZM480,400Q497,400 508.5,388.5Q520,377 520,360Q520,343 508.5,331.5Q497,320 480,320Q463,320 451.5,331.5Q440,343 440,360Q440,377 451.5,388.5Q463,400 480,400Z"/></symbol>
+  <symbol id="i-photo" viewBox="0 0 960 960"><path d="M360,560L760,560L622,380L530,500L468,420L360,560ZM320,720Q287,720 263.5,696.5Q240,673 240,640L240,160Q240,127 263.5,103.5Q287,80 320,80L800,80Q833,80 856.5,103.5Q880,127 880,160L880,640Q880,673 856.5,696.5Q833,720 800,720L320,720ZM320,640L800,640Q800,640 800,640Q800,640 800,640L800,160Q800,160 800,160Q800,160 800,160L320,160Q320,160 320,160Q320,160 320,160L320,640Q320,640 320,640Q320,640 320,640ZM160,880Q127,880 103.5,856.5Q80,833 80,800L80,240L160,240L160,800Q160,800 160,800Q160,800 160,800L720,800L720,880L160,880ZM320,160L800,160Q800,160 800,160Q800,160 800,160L800,640Q800,640 800,640Q800,640 800,640L320,640Q320,640 320,640Q320,640 320,640L320,160Q320,160 320,160Q320,160 320,160Z"/></symbol>
+  <symbol id="i-photo-o" viewBox="0 0 960 960"><path d="M530,500L484,440Q478,432 468,432Q458,432 452,440L385,528Q377,538 382.5,549Q388,560 401,560L719,560Q732,560 737.5,549Q743,538 735,528L638,401Q632,393 622,393Q612,393 606,401L530,500ZM320,720Q287,720 263.5,696.5Q240,673 240,640L240,160Q240,127 263.5,103.5Q287,80 320,80L800,80Q833,80 856.5,103.5Q880,127 880,160L880,640Q880,673 856.5,696.5Q833,720 800,720L320,720ZM320,640L800,640Q800,640 800,640Q800,640 800,640L800,160Q800,160 800,160Q800,160 800,160L320,160Q320,160 320,160Q320,160 320,160L320,640Q320,640 320,640Q320,640 320,640ZM160,880Q127,880 103.5,856.5Q80,833 80,800L80,280Q80,263 91.5,251.5Q103,240 120,240Q137,240 148.5,251.5Q160,263 160,280L160,800Q160,800 160,800Q160,800 160,800L680,800Q697,800 708.5,811.5Q720,823 720,840Q720,857 708.5,868.5Q697,880 680,880L160,880ZM320,160L320,160Q320,160 320,160Q320,160 320,160L320,640Q320,640 320,640Q320,640 320,640L320,640Q320,640 320,640Q320,640 320,640L320,160Q320,160 320,160Q320,160 320,160Z"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 2.8c.9 3.4 5.2 5.4 5.2 10.6a5.2 5.2 0 0 1-10.4 0c0-2.6 1.4-4.3 2.6-5.4.2 1.9 1 3 2.1 3.6C11.4 8.9 11.3 5.6 12 2.8z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><circle cx="8.3" cy="8.3" r="1.3" fill="currentColor" stroke="none"/><circle cx="15.7" cy="8.3" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="8.3" cy="15.7" r="1.3" fill="currentColor" stroke="none"/><circle cx="15.7" cy="15.7" r="1.3" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19h14"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 20V9m0 0l-4.5 4.5M12 9l4.5 4.5M5 4h14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 11v6M14 11v6M6.5 7l.8 12.2A2 2 0 009.3 21h5.4a2 2 0 002-1.8L17.5 7M9.5 7V4.5h5V7"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0113 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></symbol>
+  <symbol id="i-pin-off" viewBox="0 0 24 24"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0113 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/><path d="M3.5 3.5l17 17"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15zM10 20.5a2 2 0 004 0"/></symbol>
+  <symbol id="i-battery" viewBox="0 0 24 24"><rect x="3" y="8" width="16" height="8" rx="2"/><path d="M21 11v2"/><path d="M6 11h7" stroke-width="2.5"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 0119 0M5.5 12.5a9.5 9.5 0 0113 0M8.7 16a5 5 0 016.6 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3.5L2.5 20h19z"/><path d="M12 10v4M12 17v.01"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></symbol>
+  <symbol id="i-storage" viewBox="0 0 24 24"><path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3zM4 6c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 01-10 0zM12 16v5"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="19" r="1.6" fill="currentColor"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-lock-open" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 017.7-1.5"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9"/></symbol>
+</svg>
+
+<header class="page-head">
+  <h1>emberlight: Design-Mockups Meilenstein 3 (Spaces)</h1>
+  <p class="lead">Android-App und Gäste-Webseite für die Pakete 3.2 bis 3.7 aus <code>docs/PLAN-M3.md</code>. Dunkles Design mit Glut-Akzent, Fraunces für Titel und Inter für Text, wie im App-Theme (ADR 0003). Alle Namen, Dateinamen und Zeiten sind erfunden. Fotos sind farbige Platzhalter.</p>
+  <nav class="toc" aria-label="Inhalt">
+    <ol>
+      <li><a href="#android">Android-App</a></li>
+      <li><a href="#android-1">1 Navigation</a></li>
+      <li><a href="#android-2">2 Space anlegen</a></li>
+      <li><a href="#android-3">3 Einrichtung</a></li>
+      <li><a href="#android-4">4 Laufender Space</a></li>
+      <li><a href="#android-5">5 Pausiert</a></li>
+      <li><a href="#android-6">6 Aufbewahrung</a></li>
+      <li><a href="#android-7">7 Erinnerung</a></li>
+      <li><a href="#android-8">8 Über und Lizenzen</a></li>
+      <li><a href="#android-fold">Foldable</a></li>
+      <li><a href="#gaeste">Gäste-Webseite</a></li>
+      <li><a href="#web-1">Beitritt</a></li>
+      <li><a href="#web-2">Hauptseite</a></li>
+      <li><a href="#web-3">Upload</a></li>
+      <li><a href="#web-4">Detail</a></li>
+      <li><a href="#web-5">Beendet</a></li>
+      <li><a href="#web-desk">Desktop</a></li>
+    </ol>
+  </nav>
+  <p class="note">Hinweis zu den Werten: Farben, Radien und Schriftgrößen stammen aus <code>core/design</code> (Material-3-Standardwerte für Formen und Typografie). Die acht Akzentfarben sind ein Vorschlag, im Theme gibt es dafür noch keine Tokens.</p>
+  <div class="legend-list" aria-label="Legende">
+    <span><span class="pkg" style="margin:0">Paket</span> Zuordnung unter jedem Mockup</span>
+    <span><span class="mk-loc">Standort enthalten</span> Markierung aus ADR 0015</span>
+    <span><span class="badge">Gastgeber</span> Kennzeichen der Gastgeberin bzw. des Gastgebers</span>
+  </div>
+</header>
+
+<main>
+
+<!-- ============================ ANDROID-APP ============================ -->
+<section class="section" id="android" aria-labelledby="h-android">
+  <h2 id="h-android">Android-App</h2>
+  <p class="intro">Telefonrahmen ca. 360 × 800 dp, dunkles Design. Lange Bildschirme lassen sich im Rahmen scrollen. Die Rahmen sind Zeichnungen, keine Gerätefotos.</p>
+
+  <div class="fig-grid">
+
+    <!-- 1 Navigation -->
+    <figure class="fig" id="android-1">
+      <div class="device phone"><span class="punch"></span>
+        <div class="screen">
+          <div class="sbar"><span>19:48</span><span class="sys"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg><svg class="i" aria-hidden="true"><use href="#i-battery"/></svg></span></div>
+          <header class="appbar">
+            <div class="ttl"><b>Spaces</b><small>Galerie und Spaces, getrennt</small></div>
+            <button class="ib" type="button" aria-label="Space anlegen"><svg class="i"><use href="#i-plus"/></svg></button>
+          </header>
+          <div class="content pad">
+            <article class="card">
+              <div class="row"><span class="dot" style="--acc:#FF8A3D" aria-hidden="true"></span><p class="name">Sommerfest im Garten</p><span class="st live">Läuft</span></div>
+              <p class="meta">Noch 3 h 12 min · 7 Teilnehmer · 24 Medien</p>
+              <div class="bar" role="img" aria-label="Speicher 30 Prozent belegt"><i style="width:30%"></i></div>
+              <p class="meta sm">1,2 von 4 GiB belegt</p>
+            </article>
+            <article class="card">
+              <div class="row"><span class="dot" style="--acc:#9DBF8E" aria-hidden="true"></span><p class="name">Tanzende Waschbären</p><span class="st draft">Entwurf</span></div>
+              <p class="meta">Laufzeit 1 Tag · noch nicht gestartet</p>
+            </article>
+            <article class="card">
+              <div class="row"><span class="dot" style="--acc:#B5572E" aria-hidden="true"></span><p class="name">Abschluss-Party Oktober</p><span class="st keep">Aufbewahrung</span></div>
+              <p class="meta">Wird in 6 Tagen gelöscht · nichts ausgewählt</p>
+            </article>
+          </div>
+          <nav class="navbar" aria-label="Hauptnavigation">
+            <div class="navitem"><span class="ind"><svg class="i f"><use href="#i-photo-o"/></svg></span>Galerie</div>
+            <div class="navitem on" aria-current="page"><span class="ind"><svg class="i f"><use href="#i-groups"/></svg><span class="nd" aria-label="Hinweis"></span></span>Spaces</div>
+          </nav>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <figcaption><strong>1 Navigation mit Galerie und Spaces</strong>Zwei Reiter unten. Die Spaces-Liste zeigt einen laufenden Space, einen Entwurf und einen in der Aufbewahrung. Der Punkt am Reiter weist auf eine fällige Erinnerung hin.<br><span class="pkg">Paket 3.2</span></figcaption>
+    </figure>
+
+    <!-- 2 Space anlegen -->
+    <figure class="fig" id="android-2">
+      <div class="device phone"><span class="punch"></span>
+        <div class="screen">
+          <div class="sbar"><span>18:02</span><span class="sys"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg><svg class="i" aria-hidden="true"><use href="#i-battery"/></svg></span></div>
+          <header class="appbar">
+            <button class="ib" type="button" aria-label="Zurück"><svg class="i"><use href="#i-back"/></svg></button>
+            <div class="ttl"><b>Neuer Space</b></div>
+            <button class="btn text" type="button">Anlegen</button>
+          </header>
+          <div class="content">
+            <div class="field focus">
+              <label for="f-name">Name</label>
+              <div class="val" id="f-name">Tanzende Waschbären</div>
+              <button class="dice" type="button" aria-label="Namensvorschlag würfeln"><svg class="i"><use href="#i-dice"/></svg></button>
+            </div>
+            <p class="help">Frei änderbar. Der Würfel schlägt lustige Namen vor.</p>
+
+            <p class="grp">Titelbild <span>optional</span></p>
+            <div style="display:flex;gap:12px;align-items:center">
+              <div class="tile p2" style="width:72px;height:72px;aspect-ratio:auto;flex:none;border-radius:8px"><span class="ph p2" style="position:absolute;inset:0"></span></div>
+              <div style="flex:1"><button class="btn tonal sm" type="button">Bild wählen</button><p class="help" style="margin-top:6px">Wird kopiert. Der Standort wird dabei entfernt.</p></div>
+            </div>
+
+            <p class="grp">Farbe</p>
+            <div class="swatches" role="radiogroup" aria-label="Akzentfarbe">
+              <div class="sw-wrap on"><button class="sw on" type="button" style="--c:#FF8A3D" role="radio" aria-checked="true" aria-label="Glut"></button>Glut</div>
+              <div class="sw-wrap"><button class="sw" type="button" style="--c:#F2C14E" role="radio" aria-checked="false" aria-label="Gold"></button>Gold</div>
+              <div class="sw-wrap"><button class="sw" type="button" style="--c:#B5572E" role="radio" aria-checked="false" aria-label="Kupfer"></button>Kupfer</div>
+              <div class="sw-wrap"><button class="sw" type="button" style="--c:#E58FA0" role="radio" aria-checked="false" aria-label="Rosé"></button>Rosé</div>
+              <div class="sw-wrap"><button class="sw" type="button" style="--c:#9DBF8E" role="radio" aria-checked="false" aria-label="Salbei"></button>Salbei</div>
+              <div class="sw-wrap"><button class="sw" type="button" style="--c:#3F9AA6" role="radio" aria-checked="false" aria-label="Petrol"></button>Petrol</div>
+              <div class="sw-wrap"><button class="sw" type="button" style="--c:#A895D6" role="radio" aria-checked="false" aria-label="Flieder"></button>Flieder</div>
+              <div class="sw-wrap"><button class="sw" type="button" style="--c:#5B6FB5" role="radio" aria-checked="false" aria-label="Nachtblau"></button>Nachtblau</div>
+            </div>
+
+            <p class="grp">Laufzeit</p>
+            <div class="chips" role="group" aria-label="Laufzeit">
+              <span class="chip">2 h</span><span class="chip">6 h</span><span class="chip">12 h</span><span class="chip sel" aria-pressed="true"><svg class="i"><use href="#i-check"/></svg>1 Tag</span><span class="chip">3 Tage</span><span class="chip">1 Woche</span><span class="chip">Eigene</span>
+            </div>
+
+            <p class="grp">Aufbewahrung nach dem Ende</p>
+            <p class="help">Die Medien bleiben nach dem Ende so lange auf diesem Gerät. Danach wählst du aus, was in deine Galerie kommt. Der Rest wird gelöscht.</p>
+            <div style="margin-top:10px">
+              <div class="opt"><span class="radio"></span><div><b>Sofort löschen</b><small>Nach dem Ende ist alles weg.</small></div></div>
+              <div class="opt"><span class="radio"></span><div><b>1 Tag</b></div></div>
+              <div class="opt sel" aria-checked="true"><span class="radio"></span><div><b>1 Woche</b><small>Du hast 7 Tage Zeit, bevor alles gelöscht wird.</small></div></div>
+              <div class="opt"><span class="radio"></span><div><b>Eigene</b><small>Frist in Tagen angeben.</small></div></div>
+            </div>
+
+            <p class="grp">Speicherlimit</p>
+            <div class="chips" role="group" aria-label="Speicherlimit">
+              <span class="chip">1 GiB</span><span class="chip">2 GiB</span><span class="chip sel"><svg class="i"><use href="#i-check"/></svg>4 GiB</span><span class="chip">8 GiB</span><span class="chip dis" aria-disabled="true">16 GiB</span><span class="chip">Eigene</span>
+            </div>
+            <p class="help"><b>max. 11,4 GiB verfügbar</b>: 13,4 GiB sind frei, 2 GiB bleiben als Puffer. 16 GiB liegt darüber und ist nicht wählbar.</p>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <figcaption><strong>2 Space anlegen</strong>Name mit Würfel, Titelbild (kopiert, Standort entfernt), 8 Akzentfarben, Laufzeit, Aufbewahrung nach dem Ende mit Erklärtext und das Speicherlimit mit angezeigtem Maximum. Das Formular scrollt im Rahmen.<br><span class="pkg">Paket 3.2</span></figcaption>
+    </figure>
+
+    <!-- 3 Einrichtung -->
+    <figure class="fig" id="android-3">
+      <div class="device phone"><span class="punch"></span>
+        <div class="screen">
+          <div class="sbar"><span>17:40</span><span class="sys"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg><svg class="i" aria-hidden="true"><use href="#i-battery"/></svg></span></div>
+          <header class="appbar">
+            <button class="ib" type="button" aria-label="Zurück"><svg class="i"><use href="#i-back"/></svg></button>
+            <div class="ttl"><b>Einrichtung</b><small>Vor dem ersten Start</small></div>
+          </header>
+          <div class="content">
+            <p class="meta" style="font-size:14px;line-height:21px;color:var(--title);margin:4px 0 8px">Damit der Space auch bei gesperrtem Bildschirm läuft, sind ein paar Einstellungen nötig. Du kannst sie jetzt erledigen oder später.</p>
+
+            <div class="check-item">
+              <span class="ic ok"><svg class="i"><use href="#i-check"/></svg></span>
+              <div><b>Benachrichtigungen</b><p>Für die Erinnerung zum Nachhalten.</p><span class="done">Erlaubt</span></div>
+            </div>
+            <div class="check-item">
+              <span class="ic open"><svg class="i"><use href="#i-battery"/></svg></span>
+              <div><b>Akku-Ausnahme</b><p>Damit Android den Dienst im Akkubetrieb weiterlaufen lässt.</p><button class="btn sm outline" type="button">Einstellung öffnen</button></div>
+            </div>
+            <div class="check-item">
+              <span class="ic open"><svg class="i"><use href="#i-open"/></svg></span>
+              <div><b>Hintergrund bei Honor</b><p>Auf Honor-Geräten zusätzlich unter „App-Start“ die Hintergrund-Freigabe setzen. Andere Hersteller: deren Hinweis folgen.</p><button class="btn sm outline" type="button">Zu App-Start</button></div>
+            </div>
+            <div class="check-item">
+              <span class="ic open"><svg class="i"><use href="#i-wifi"/></svg></span>
+              <div><b>Lokales Netzwerk</b><p>Damit Gäste im WLAN den Space erreichen.</p><button class="btn sm tonal" type="button">Erlauben</button></div>
+            </div>
+            <div class="check-item">
+              <span class="ic"><svg class="i"><use href="#i-plug"/></svg></span>
+              <div><b>Ladegerät</b><p>Bei langen Spaces am Strom lassen. Ist das Gerät aus, ist der Space für alle nicht erreichbar.</p></div>
+            </div>
+            <p class="help" style="margin-top:12px">3 Punkte offen. Erkennt emberlight später eine Pause, zeigt es einen Hinweis mit dem Weg zur Einstellung.</p>
+          </div>
+          <div style="flex:none;display:flex;justify-content:flex-end;gap:8px;padding:8px 16px 12px;background:var(--surface-container)">
+            <button class="btn text" type="button">Später</button>
+            <button class="btn" type="button">Weiter</button>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <figcaption><strong>3 Einrichtung vor dem ersten Start</strong>Checkliste: Akku-Ausnahme, Hersteller-Freigabe (Honor zuerst), Benachrichtigungen, lokales Netzwerk, Ladegerät-Hinweis. Erledigtes ist markiert.<br><span class="pkg">Paket 3.3</span></figcaption>
+    </figure>
+
+    <!-- 4 Laufender Space -->
+    <figure class="fig" id="android-4">
+      <div class="device phone"><span class="punch"></span>
+        <div class="screen">
+          <div class="sbar"><span>19:48</span><span class="sys"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg><svg class="i" aria-hidden="true"><use href="#i-battery"/></svg></span></div>
+          <header class="appbar">
+            <button class="ib" type="button" aria-label="Zurück"><svg class="i"><use href="#i-back"/></svg></button>
+            <div class="ttl"><b>Sommerfest im Garten</b><small>Läuft · Du bist Gastgeberin</small></div>
+            <button class="ib" type="button" aria-label="Mehr"><svg class="i"><use href="#i-more"/></svg></button>
+          </header>
+          <div class="content">
+            <article class="card" aria-label="QR-Code zum Beitritt">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">
+                <div class="qr-box" role="img" aria-label="Beispiel-QR-Code, kein gültiger Code" style="width:176px;height:176px"><svg viewBox="0 0 29 29"><use href="#qr-demo"/></svg></div>
+                <span class="st draft">Beispiel, kein gültiger Code</span>
+                <p class="meta sm">Gäste scannen den Code oder öffnen den Link:</p>
+                <p class="meta" style="color:var(--title);font-weight:600">http://192.0.2.10:8080</p>
+              </div>
+            </article>
+
+            <article class="card">
+              <p class="meta sm">Restzeit</p>
+              <p class="hero-num">3 h 12 min</p>
+              <p class="meta">Endet um 23:00 Uhr · gestartet um 17:00</p>
+            </article>
+
+            <article class="card">
+              <div class="row"><p class="name" style="font-size:17px;line-height:24px;font-family:var(--font-text);font-weight:600">Speicher</p><span class="meta sm" style="margin-left:auto">1,2 von 4 GiB</span></div>
+              <div class="bar" role="img" aria-label="30 Prozent belegt"><i style="width:30%"></i></div>
+              <p class="meta sm">Ab 80 % erscheint eine Warnung. Neue Uploads werden bei vollem Limit abgelehnt.</p>
+            </article>
+
+            <p class="grp" style="margin-top:20px">Teilnehmer <span>7</span></p>
+            <div class="person"><span class="av">MA</span><span class="nm">Mia <span class="badge" style="margin-left:4px">Gastgeberin</span><small>Du</small></span></div>
+            <div class="person"><span class="av">JO</span><span class="nm">Jonas<small>Gast</small></span></div>
+            <div class="person"><span class="av">LE</span><span class="nm">Lena<small>Gast</small></span></div>
+            <div class="person"><span class="av">OM</span><span class="nm">Omar<small>Gast</small></span></div>
+            <p class="meta sm">+ 3 weitere</p>
+
+            <p class="grp" style="margin-top:20px">Medien <span>24</span></p>
+            <div class="grid3">
+              <div class="tile"><span class="ph p1" style="position:absolute;inset:0"></span><span class="mk"><span class="mk-loc">Standort enthalten</span></span><span class="lbl">von Omar</span></div>
+              <div class="tile"><span class="ph p3" style="position:absolute;inset:0"></span><span class="lbl">von Lena</span></div>
+              <div class="tile"><span class="ph p6" style="position:absolute;inset:0"></span><span class="lbl"><svg class="i"><use href="#i-play"/></svg>0:42 · von Jonas</span></div>
+              <div class="tile"><span class="ph p8" style="position:absolute;inset:0"></span><span class="lbl">von Tanja</span></div>
+              <div class="tile"><span class="ph p5" style="position:absolute;inset:0"></span><span class="lbl">von Ben</span></div>
+              <div class="tile"><span class="ph p9" style="position:absolute;inset:0"></span><span class="lbl">von Mia</span></div>
+            </div>
+            <p class="meta sm" style="margin-top:8px">Als Gastgeberin entfernst du jedes Medium. Gäste entfernen nur eigene Uploads.</p>
+
+            <button class="btn danger wide" type="button" style="margin-top:20px">Space beenden</button>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <figcaption><strong>4 Laufender Space (Gastgeberin)</strong>Großer QR-Code (Beispiel, kein gültiger Code), Restzeit, Speicherbalken, Teilnehmerliste mit Gastgeber-Kennzeichen, Medienraster mit Uploader und der Markierung „Standort enthalten“. Unten „Space beenden“, siehe 4b.<br><span class="pkg">Pakete 3.3, 3.4, 3.5</span></figcaption>
+    </figure>
+
+    <!-- 4b Space beenden: Bestätigung -->
+    <figure class="fig" id="android-4b">
+      <div class="device phone"><span class="punch"></span>
+        <div class="screen">
+          <div class="sbar"><span>19:49</span><span class="sys"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg><svg class="i" aria-hidden="true"><use href="#i-battery"/></svg></span></div>
+          <header class="appbar">
+            <button class="ib" type="button" aria-label="Zurück"><svg class="i"><use href="#i-back"/></svg></button>
+            <div class="ttl"><b>Sommerfest im Garten</b><small>Läuft · noch 3 h 11 min</small></div>
+          </header>
+          <div class="content">
+            <article class="card"><p class="meta sm">Restzeit</p><p class="hero-num">3 h 11 min</p></article>
+            <div class="grid3" style="margin-top:12px;opacity:.5">
+              <div class="tile"><span class="ph p1" style="position:absolute;inset:0"></span></div>
+              <div class="tile"><span class="ph p3" style="position:absolute;inset:0"></span></div>
+              <div class="tile"><span class="ph p6" style="position:absolute;inset:0"></span></div>
+              <div class="tile"><span class="ph p8" style="position:absolute;inset:0"></span></div>
+              <div class="tile"><span class="ph p5" style="position:absolute;inset:0"></span></div>
+              <div class="tile"><span class="ph p9" style="position:absolute;inset:0"></span></div>
+            </div>
+          </div>
+          <div class="dlg-wrap" role="dialog" aria-modal="true" aria-labelledby="dlg-end-t">
+            <div class="dlg">
+              <h4 id="dlg-end-t">Space jetzt beenden?</h4>
+              <p>Gäste können danach nicht mehr hochladen oder herunterladen. Alle Zugangsschlüssel werden ungültig. Die Medien bleiben 1 Woche auf diesem Gerät (bis 26.10.), dann wird gelöscht, was du nicht übernimmst.</p>
+              <div class="acts">
+                <button class="btn text" type="button">Abbrechen</button>
+                <button class="btn danger-fill" type="button">Space beenden</button>
+              </div>
+            </div>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <figcaption><strong>4b Space beenden mit Bestätigung</strong>Der Knopf im Laufenden Space öffnet diese Bestätigung. Sie nennt, was mit Gästen und Medien passiert. Die Aktion ist nicht rückgängig zu machen.<br><span class="pkg">Paket 3.3 (Start und Stopp in der App)</span></figcaption>
+    </figure>
+
+    <!-- 5 Pausiert -->
+    <figure class="fig" id="android-5">
+      <div class="device phone"><span class="punch"></span>
+        <div class="screen">
+          <div class="sbar"><span>19:52</span><span class="sys"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg><svg class="i" aria-hidden="true"><use href="#i-battery"/></svg></span></div>
+          <header class="appbar">
+            <button class="ib" type="button" aria-label="Zurück"><svg class="i"><use href="#i-back"/></svg></button>
+            <div class="ttl"><b>Sommerfest im Garten</b><small>Läuft · Pause erkannt</small></div>
+          </header>
+          <div class="content">
+            <div class="banner" role="status">
+              <svg class="i" style="color:var(--tertiary);margin-top:2px" aria-hidden="true"><use href="#i-warn"/></svg>
+              <div>
+                <b>Android hat emberlight pausiert</b>
+                <p>Seit 19:31 erreichen Gäste den Space nicht. Das Gerät hat den Dienst im Hintergrund angehalten. So lässt sich das ändern: Akku-Einstellungen für emberlight öffnen und den Hintergrundbetrieb erlauben.</p>
+                <div class="acts">
+                  <button class="btn sm" type="button">Einstellung öffnen</button>
+                  <button class="btn sm text" type="button">Ausblenden</button>
+                </div>
+              </div>
+            </div>
+            <article class="card">
+              <div class="row"><span class="st live">Läuft</span><span class="meta sm" style="margin-left:auto">Pause erkannt</span></div>
+              <p class="hero-num">3 h 9 min</p>
+              <p class="meta">Restzeit · endet um 23:00 Uhr</p>
+            </article>
+            <article class="card">
+              <p class="meta sm">Speicher</p>
+              <div class="bar" role="img" aria-label="30 Prozent belegt"><i style="width:30%"></i></div>
+              <p class="meta sm">1,2 von 4 GiB belegt</p>
+            </article>
+            <p class="meta sm" style="margin-top:12px">Der Hinweis bleibt, bis der Dienst wieder läuft. Der QR-Code bleibt gleich, solange dasselbe WLAN mit derselben Adresse genutzt wird.</p>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <figcaption><strong>5 Hinweis „Pausiert erkannt“</strong>Banner oben, wenn Android den Dienst angehalten hat. Er nennt den Zeitpunkt und den Weg zur Einstellung. Der Text folgt der Vorgabe „Android hat emberlight pausiert“.<br><span class="pkg">Paket 3.3</span></figcaption>
+    </figure>
+
+    <!-- 6 Aufbewahrung -->
+    <figure class="fig" id="android-6">
+      <div class="device phone"><span class="punch"></span>
+        <div class="screen">
+          <div class="sbar"><span>09:14</span><span class="sys"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg><svg class="i" aria-hidden="true"><use href="#i-battery"/></svg></span></div>
+          <header class="appbar">
+            <button class="ib" type="button" aria-label="Zurück"><svg class="i"><use href="#i-back"/></svg></button>
+            <div class="ttl"><b>Abschluss-Party Oktober</b><small>Beendet · Aufbewahrung</small></div>
+          </header>
+          <div class="content">
+            <div class="steps" aria-label="Phasen">
+              <span class="done">Entwurf ✓</span><span class="done">Läuft ✓</span><span class="done">Beendet ✓</span><span class="now">Aufbewahrung</span><span>Gelöscht</span>
+            </div>
+            <article class="card">
+              <div class="row"><p class="name" style="font-size:20px">Wird in 6 Tagen gelöscht</p></div>
+              <p class="meta">Am 25.10. wird gelöscht, was bis dahin nicht übernommen ist.</p>
+              <div class="bar" role="img" aria-label="6 von 7 Tagen übrig"><i style="width:86%"></i></div>
+            </article>
+            <p class="help" style="margin:12px 0 4px;color:var(--title);font-size:14px;line-height:20px">Wähle aus, was in deine Galerie kommt: <b>Pictures/Emberlight/Abschluss-Party Oktober</b>. Vorauswahl ist nichts.</p>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0">
+              <span class="meta" style="color:var(--title);font-weight:500;white-space:nowrap">3 von 9 ausgewählt</span>
+              <span style="display:flex;gap:4px"><button class="btn text sm" type="button">Alle auswählen</button><button class="btn text sm" type="button">Nichts auswählen</button></span>
+            </div>
+            <div class="grid3">
+              <div class="tile sel"><span class="ph p4" style="position:absolute;inset:0"></span><span class="ck on"><svg class="i"><use href="#i-check"/></svg></span><span class="lbl">von Lena</span></div>
+              <div class="tile"><span class="ph p2" style="position:absolute;inset:0"></span><span class="ck"></span><span class="lbl">von Jonas</span></div>
+              <div class="tile sel"><span class="ph p10" style="position:absolute;inset:0"></span><span class="ck on"><svg class="i"><use href="#i-check"/></svg></span><span class="lbl">von Mia</span></div>
+              <div class="tile"><span class="ph p7" style="position:absolute;inset:0"></span><span class="ck"></span><span class="lbl">von Ben</span></div>
+              <div class="tile"><span class="ph p5" style="position:absolute;inset:0"></span><span class="ck"></span><span class="lbl">von Tanja</span></div>
+              <div class="tile sel"><span class="ph p3" style="position:absolute;inset:0"></span><span class="ck on"><svg class="i"><use href="#i-check"/></svg></span><span class="lbl"><svg class="i"><use href="#i-play"/></svg>0:31 · von Omar</span></div>
+              <div class="tile"><span class="ph p9" style="position:absolute;inset:0"></span><span class="ck"></span><span class="lbl">von Sofie</span></div>
+              <div class="tile"><span class="ph p8" style="position:absolute;inset:0"></span><span class="ck"></span><span class="lbl">von Lena</span></div>
+              <div class="tile"><span class="ph p1" style="position:absolute;inset:0"></span><span class="ck"></span><span class="lbl">von Jonas</span></div>
+            </div>
+          </div>
+          <div style="flex:none;padding:12px 16px;background:var(--surface-container);display:flex;flex-direction:column;gap:4px;align-items:stretch">
+            <button class="btn wide" type="button">In Galerie übernehmen (3)</button>
+            <button class="btn text" type="button" style="align-self:center">Frist ändern</button>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <figcaption><strong>6 Beendet und Aufbewahrung</strong>Phasenleiste, Restfrist mit Erklärung, Auswahlraster ohne Vorauswahl, „Alle auswählen“ und „Nichts auswählen“. Der Knopf zählt die Auswahl. Übernommen wird nach <code>Pictures/Emberlight/&lt;Space&gt;</code>.<br><span class="pkg">Paket 3.6 (Nachhalten), Paket 3.7 (Übernahme)</span></figcaption>
+    </figure>
+
+    <!-- 7 Erinnerung -->
+    <figure class="fig" id="android-7">
+      <div class="device phone"><span class="punch"></span>
+        <div class="screen wallpaper">
+          <div class="sbar"><span>09:10</span><span class="sys"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg><svg class="i" aria-hidden="true"><use href="#i-battery"/></svg></span></div>
+          <div class="shade">
+            <div class="hd"><span>Benachrichtigungen</span><span>Löschen</span></div>
+            <div class="notif" role="alert">
+              <div class="top"><span class="ico"><svg class="i f"><use href="#i-flame"/></svg></span><span>emberlight · Nachhalten</span><span style="margin-left:auto">jetzt</span></div>
+              <h4>Abschluss-Party Oktober wird bald gelöscht</h4>
+              <p>Noch 6 Tage. Wähle aus, was du behalten willst. Ohne Auswahl wird alles gelöscht.</p>
+              <div class="acts"><span>Ansehen</span><span>Verlängern</span><span class="danger">Jetzt löschen</span></div>
+            </div>
+          </div>
+          <div class="apps" aria-hidden="true">
+            <span><span class="app-ic"><svg class="i"><use href="#i-share"/></svg></span>Dateien</span>
+            <span><span class="app-ic"><svg class="i f"><use href="#i-photo-o"/></svg></span>Fotos</span>
+            <span><span class="app-ic em"><svg class="i f"><use href="#i-flame"/></svg><span class="nd"></span></span>emberlight</span>
+            <span><span class="app-ic"><svg class="i"><use href="#i-gear"/></svg></span>Einstellungen</span>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <figcaption><strong>7 Erinnerung zum Nachhalten</strong>Mock der Android-Benachrichtigung mit den Aktionen Ansehen, Verlängern und Jetzt löschen. Unten am App-Symbol ein Hinweispunkt. „Jetzt löschen“ ist mit Bestätigung gedacht, siehe Designfragen.<br><span class="pkg">Paket 3.6</span></figcaption>
+    </figure>
+
+    <!-- 8 Über und Lizenzen -->
+    <figure class="fig" id="android-8">
+      <div class="device phone"><span class="punch"></span>
+        <div class="screen">
+          <div class="sbar"><span>20:05</span><span class="sys"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg><svg class="i" aria-hidden="true"><use href="#i-battery"/></svg></span></div>
+          <header class="appbar">
+            <button class="ib" type="button" aria-label="Zurück"><svg class="i"><use href="#i-back"/></svg></button>
+            <div class="ttl"><b>Über emberlight</b></div>
+          </header>
+          <div class="content">
+            <div style="text-align:center;padding:12px 0 16px">
+              <div style="width:72px;height:72px;border-radius:50%;margin:0 auto 10px;background:radial-gradient(circle,#FF8A3D55 0%,transparent 70%);display:grid;place-items:center;color:var(--spark)"><svg class="i f" style="width:40px;height:40px"><use href="#i-flame"/></svg></div>
+              <p style="margin:0;font-family:var(--font-display);font-weight:300;font-size:28px;line-height:34px">emberlight</p>
+              <p class="meta">Version 0.3.0-dev</p>
+              <p class="meta" style="margin-top:8px;font-family:var(--font-display);font-style:normal;color:var(--tagline)">Teile den Abend mit allen, die dabei waren.</p>
+            </div>
+            <article class="card">
+              <p class="meta sm">Lizenz</p>
+              <p class="name" style="font-family:var(--font-text);font-size:15px;line-height:21px;font-weight:600">GPL-3.0</p>
+              <p class="meta">Quellcode auf GitHub. Keine Konten, keine Cloud, kein Tracking.</p>
+            </article>
+            <article class="card">
+              <p class="meta sm">Schriften (SIL Open Font License 1.1)</p>
+              <p class="meta" style="color:var(--title)">Fraunces, Copyright 2018 The Fraunces Project Authors</p>
+              <p class="meta" style="color:var(--title)">Inter, Copyright 2016 The Inter Project Authors</p>
+              <div><button class="btn sm outline" type="button">Lizenztexte</button></div>
+            </article>
+            <article class="card">
+              <p class="meta sm">Bibliotheken und Icons</p>
+              <p class="meta">Jetpack Compose, Material 3, Ktor, Coil, Media3, ZXing, Hilt, Room, kotlinx.serialization (Apache-2.0). Icons: Material Symbols (Apache-2.0).</p>
+              <div><button class="btn sm outline" type="button">Vollständige Liste</button></div>
+            </article>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <figcaption><strong>8 Über und Lizenzen</strong>Lizenzhinweise aller mitgelieferten Bibliotheken, die OFL-Schriften mit Copyright-Zeile und Lizenztext, GPL-3.0 mit Quellcode-Link. Die Liste ist Pflicht laut Plan und wird mit AboutLibraries oder einer eigenen Liste erstellt.<br><span class="pkg">Paket 3.7</span></figcaption>
+    </figure>
+
+  </div>
+
+  <!-- Foldable -->
+  <h3 id="android-fold">Foldable: Innendisplay</h3>
+  <p class="intro">Aufgeklapptes Gerät: Liste und Detail nebeneinander. Maße ca. 772 × 612 dp.</p>
+  <figure class="fig fig-wide" id="android-foldable">
+    <div class="device fold">
+      <div class="screen wide">
+        <div class="sbar"><span>19:48</span><span class="sys"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg><svg class="i" aria-hidden="true"><use href="#i-battery"/></svg></span></div>
+        <div class="split">
+          <div class="pane-list">
+            <header class="appbar" style="height:56px"><div class="ttl"><b style="font-size:20px">Spaces</b></div><button class="ib" type="button" aria-label="Space anlegen"><svg class="i"><use href="#i-plus"/></svg></button></header>
+            <div class="content">
+              <article class="card" style="background:var(--secondary-container);color:var(--on-secondary-container)">
+                <div class="row"><span class="dot" style="--acc:#FF8A3D" aria-hidden="true"></span><p class="name" style="color:var(--on-secondary-container)">Sommerfest im Garten</p></div>
+                <p class="meta" style="color:var(--on-secondary-container)">Läuft · noch 3 h 12 min</p>
+              </article>
+              <article class="card" style="margin-top:8px">
+                <div class="row"><span class="dot" style="--acc:#9DBF8E" aria-hidden="true"></span><p class="name" style="font-size:18px;line-height:24px">Tanzende Waschbären</p></div>
+                <p class="meta">Entwurf · Laufzeit 1 Tag</p>
+              </article>
+              <article class="card" style="margin-top:8px">
+                <div class="row"><span class="dot" style="--acc:#B5572E" aria-hidden="true"></span><p class="name" style="font-size:18px;line-height:24px">Abschluss-Party Oktober</p></div>
+                <p class="meta">Aufbewahrung · 6 Tage</p>
+              </article>
+            </div>
+          </div>
+          <div class="pane-detail">
+            <header class="appbar" style="height:56px;background:var(--surface-container)"><div class="ttl"><b style="font-size:20px">Sommerfest im Garten</b><small>Läuft · Details und Einstellungen</small></div><span class="st live" style="margin-right:12px">Läuft</span></header>
+            <div class="content" style="display:flex;gap:20px;align-items:flex-start">
+              <div style="flex:none">
+                <div class="qr-box" role="img" aria-label="Beispiel-QR-Code, kein gültiger Code" style="width:150px;height:150px"><svg viewBox="0 0 29 29"><use href="#qr-demo"/></svg></div>
+                <p class="meta sm" style="width:166px;margin-top:6px">Beispiel, kein gültiger Code</p>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div class="setting"><span>Laufzeit</span><span>6 h · 17:00 bis 23:00</span></div>
+                <div class="setting"><span>Aufbewahrung nach dem Ende</span><span>1 Woche</span></div>
+                <div class="setting"><span>Speicherlimit</span><span>4 GiB · 1,2 belegt</span></div>
+                <div class="setting"><span>Farbe</span><span>Glut</span></div>
+                <div class="setting"><span>Titelbild</span><span>kopiert, Standort entfernt</span></div>
+                <div class="setting"><span>Teilnehmer</span><span>7 · Gastgeberin: Mia</span></div>
+                <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+                  <button class="btn tonal" type="button">Bearbeiten</button>
+                  <button class="btn danger" type="button">Space beenden</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="gesture"></div>
+      </div>
+    </div>
+    <figcaption><strong>Innendisplay: Liste und Detail</strong>Links die Spaces-Liste, rechts das Detail mit Einstellungen und QR-Code. Die Breite ersetzt den Wechsel zwischen zwei Bildschirmen.<br><span class="pkg">Paket 3.2</span></figcaption>
+  </figure>
+</section>
+
+<!-- ============================ GÄSTE-WEBSEITE ============================ -->
+<section class="section" id="gaeste" aria-labelledby="h-gaeste">
+  <h2 id="h-gaeste">Gäste-Webseite</h2>
+  <p class="intro">Die Seite läuft im Browser der Gäste, ohne App und ohne Konto. Sie nutzt dieselben Farben und Schriften wie die App, ist aber für Browser gebaut: Links, Buttons, Tastatur. Beispiel-Adresse aus dem reservierten Dokumentationsbereich 192.0.2.0/24.</p>
+
+  <h3 style="margin-top:8px">Mobil (ca. 390 px)</h3>
+  <div class="fig-grid">
+
+    <!-- W1 Beitritt -->
+    <figure class="fig" id="web-1">
+      <div class="bframe bm">
+        <div class="bchrome"><span class="url"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>192.0.2.10:8080/einladung</span></div>
+        <div class="wpage">
+          <div class="hero">
+            <span class="ph p2"></span>
+            <div class="txt"><p class="eb">Einladung</p><h2>Sommerfest im Garten</h2><p class="mt">Gastgeberin Mia · Läuft noch 3 h 12 min</p></div>
+          </div>
+          <div class="wbody">
+            <p>Du bist eingeladen, Fotos und Videos dieses Space zu teilen. Alle Teilnehmer sehen alle Medien und können sie herunterladen.</p>
+            <label class="wfield"><span>Dein Name</span><input type="text" value="Jonas" autocomplete="nickname" aria-describedby="h-name"></label>
+            <p class="hint-w" id="h-name">Der Name ist für alle im Space sichtbar und darf nur einmal vergeben sein.</p>
+            <div style="margin-top:20px"><button class="wbtn wide" type="button">Beitreten</button></div>
+            <div class="wnote">
+              <svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>
+              <div>
+                <p><strong>Datenschutz.</strong> Die Dateien liegen auf dem Gerät von Mia. Standortdaten (GPS) entfernen wir beim Hochladen. Lässt sich das nicht sicher, fragen wir dich vorher.</p>
+                <p><strong>Verbunden bleiben.</strong> Der Space ist nur in diesem WLAN erreichbar.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption><strong>W1 Beitritt</strong>Name des Space, Titelbild bzw. Farbe, Feld „Dein Name“, Knopf „Beitreten“, Hinweis zu Datenschutz und Standort. Die Adresse zeigt die Verbindung im eigenen WLAN.<br><span class="pkg">Paket 3.4</span></figcaption>
+    </figure>
+
+    <!-- W2 Hauptseite -->
+    <figure class="fig" id="web-2">
+      <div class="bframe bm">
+        <div class="bchrome"><span class="url"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg>192.0.2.10:8080/space</span></div>
+        <div class="wpage">
+          <header class="wtop"><div class="sp"><h2>Sommerfest im Garten</h2><p>Noch 3 h 12 min · Gastgeberin Mia</p></div></header>
+          <div class="wstorage">
+            <div class="bar" role="img" aria-label="1,2 von 4 GiB belegt"><i style="width:30%"></i></div>
+            <p>1,2 von 4 GiB belegt</p>
+          </div>
+          <div class="wtools">
+            <div class="seg" role="group" aria-label="Filter"><button type="button" aria-pressed="true">Alle</button><button type="button" aria-pressed="false">Meine</button></div>
+            <button class="wbtn ghost sm" type="button" aria-pressed="false">Auswählen</button>
+          </div>
+          <ul class="wgrid" style="padding-bottom:132px">
+            <li class="wcard"><div class="wtile"><span class="ph p4"></span><span class="ck"></span></div><p class="wcap"><b>von Lena</b> · 19:21</p></li>
+            <li class="wcard"><div class="wtile"><span class="ph p3"></span><span class="ck on"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span></div><p class="wcap"><b>von Mia</b> <span class="badge">Gastgeberin</span></p></li>
+            <li class="wcard"><div class="wtile"><span class="ph p6"></span><span class="mk"><span class="mk-loc">Standort enthalten</span></span><span class="ck"></span></div><p class="wcap"><b>von Omar</b> · 19:33</p></li>
+            <li class="wcard"><div class="wtile"><span class="ph p2"></span><span class="vid"><svg class="i" aria-hidden="true"><use href="#i-play"/></svg>0:42</span><span class="ck on"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span></div><p class="wcap"><b>von Jonas</b> <span class="mine">von dir</span></p></li>
+            <li class="wcard"><div class="wtile"><span class="ph p5"></span><span class="ck"></span></div><p class="wcap"><b>von Tanja</b> · 19:40</p></li>
+            <li class="wcard"><div class="wtile"><span class="ph p8"></span><span class="ck"></span></div><p class="wcap"><b>von Ben</b> · 19:44</p></li>
+          </ul>
+          <div class="wdock" style="position:absolute;left:0;right:0;bottom:0">
+            <p><b>2 ausgewählt</b></p>
+            <button class="wbtn sm" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Herunterladen (2)</button>
+          </div>
+          <button class="wfab" style="bottom:84px;position:absolute" type="button"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg>Hochladen</button>
+        </div>
+      </div>
+      <figcaption><strong>W2 Space-Hauptseite</strong>Medienraster mit „von &lt;Name&gt;“ und dem Gastgeber-Kennzeichen, Filter Alle und Meine, Mehrfachauswahl mit Download, Hochladen-Knopf, Restzeit und Speicheranzeige. Die Markierung „Standort enthalten“ steht auf dem Medium.<br><span class="pkg">Pakete 3.5 und 3.6 (Restzeit, Speicher)</span></figcaption>
+    </figure>
+
+    <!-- W3 Upload mit Standort-Rückfrage -->
+    <figure class="fig" id="web-3">
+      <div class="bframe bm">
+        <div class="bchrome"><span class="url"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg>192.0.2.10:8080/space</span></div>
+        <div class="wpage">
+          <header class="wtop"><div class="sp"><h2>Sommerfest im Garten</h2><p>Hochladen läuft</p></div></header>
+          <div style="height:300px;padding:16px;opacity:.35" aria-hidden="true"><div class="wgrid" style="padding:0"><span class="wtile p1" style="display:block"></span><span class="wtile p3" style="display:block"></span><span class="wtile p6" style="display:block"></span><span class="wtile p8" style="display:block"></span></div></div>
+          <div class="scrim" aria-hidden="true"></div>
+          <div class="wsheet">
+            <h3>Hochladen · 2 von 5 fertig</h3>
+            <div class="up-row"><span class="ico"><svg class="i"><use href="#i-file"/></svg></span><div class="tx"><b>IMG_2041.jpg</b><small>4,2 MB · fertig</small></div><span class="ok"><svg class="i" aria-label="fertig" role="img"><use href="#i-check-circle"/></svg></span></div>
+            <div class="up-row"><span class="ico"><svg class="i"><use href="#i-file"/></svg></span><div class="tx"><b>VID_0093.mp4</b><small>128 MB · 58 %</small><div class="bar" role="img" aria-label="58 Prozent"><i style="width:58%"></i></div></div></div>
+            <div class="up-row"><span class="ico"><svg class="i"><use href="#i-file"/></svg></span><div class="tx"><b>IMG_2044.jpg</b><small>3,8 MB · wartet</small></div></div>
+            <div class="up-row"><span class="ico"><svg class="i"><use href="#i-pin-off"/></svg></span><div class="tx"><b>IMG_2046.heic</b><small class="warn">Standort-Rückfrage</small></div></div>
+            <div class="up-row" style="border-bottom:0"><span class="ico"><svg class="i"><use href="#i-file"/></svg></span><div class="tx"><b>IMG_2050.jpg</b><small>2,9 MB · fertig</small></div><span class="ok"><svg class="i" aria-label="fertig" role="img"><use href="#i-check-circle"/></svg></span></div>
+          </div>
+          <div class="wdlg" role="alertdialog" aria-modal="true" aria-labelledby="dlg-loc-t" aria-describedby="dlg-loc-d">
+            <h4 id="dlg-loc-t">Standort kann nicht entfernt werden. Trotzdem mit Standort hochladen?</h4>
+            <p id="dlg-loc-d">IMG_2046.heic lässt sich nicht sicher bereinigen. Bei „Ja“ wird die Datei unverändert gespeichert und in der Liste mit „Standort enthalten“ markiert. Bei „Nein“ wird sie nicht hochgeladen.</p>
+            <div class="acts">
+              <button class="wbtn wide" type="button">Ja, mit Standort hochladen</button>
+              <button class="wbtn ghost wide" type="button">Nein, nicht hochladen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption><strong>W3 Upload mit mehreren Dateien</strong>Fortschritt pro Datei, gemischte Zustände, und die Standort-Rückfrage für eine HEIC-Datei. Bei Ja wird sie unverändert hochgeladen und markiert.<br><span class="pkg">Paket 3.5 mit Paket 3.1b (Standort)</span></figcaption>
+    </figure>
+
+    <!-- W4 Detail -->
+    <figure class="fig" id="web-4">
+      <div class="bframe bm">
+        <div class="bchrome"><span class="url"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg>192.0.2.10:8080/medium/41</span></div>
+        <div class="wpage">
+          <header class="wtop"><button class="wbtn ghost sm" type="button" aria-label="Zurück zur Übersicht"><svg class="i" aria-hidden="true"><use href="#i-back"/></svg></button><div class="sp"><h2>IMG_2041.jpg</h2><p>von dir · 19:21</p></div></header>
+          <div class="viewer"><span class="ph p1"></span></div>
+          <div class="wbody" style="padding-top:16px">
+            <dl class="kv">
+              <div><dt>Hochgeladen von</dt><dd>Jonas (du)</dd></div>
+              <div><dt>Zeit</dt><dd>19:21 Uhr</dd></div>
+              <div><dt>Größe und Typ</dt><dd>4,2 MB · JPEG</dd></div>
+              <div><dt>Standort</dt><dd>entfernt</dd></div>
+            </dl>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:20px">
+              <button class="wbtn wide" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Herunterladen</button>
+              <button class="wbtn danger wide" type="button"><svg class="i" aria-hidden="true"><use href="#i-undo"/></svg>Zurückziehen</button>
+            </div>
+            <p class="hint-w" style="margin-top:12px">Zurückziehen entfernt das Medium für alle im Space. Das geht nur bei deinen eigenen Uploads. Heruntergeladene Kopien bleiben auf deinem Gerät.</p>
+          </div>
+        </div>
+      </div>
+      <figcaption><strong>W4 Detail eines Mediums</strong>Download und „Zurückziehen“, der Knopf erscheint nur bei eigenen Uploads. Kennzeichen „Standort entfernt“ in den Angaben.<br><span class="pkg">Paket 3.5</span></figcaption>
+    </figure>
+
+    <!-- W5 Beendet -->
+    <figure class="fig" id="web-5">
+      <div class="bframe bm">
+        <div class="bchrome"><span class="url"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>192.0.2.10:8080/ende</span></div>
+        <div class="wpage">
+          <header class="wtop"><div class="sp"><h2>Sommerfest im Garten</h2><p>Beendet</p></div></header>
+          <div class="end-wrap">
+            <div class="flame" aria-hidden="true"><svg class="i f"><use href="#i-flame"/></svg></div>
+            <h1>Space beendet – danke fürs Teilen!</h1>
+            <p>Mia hat den Space beendet. Hochladen und Herunterladen sind nicht mehr möglich, und diese Seite wird nicht mehr aktualisiert.</p>
+            <p>Was du schon heruntergeladen hast, bleibt bei dir.</p>
+            <div class="sum">7 Teilnehmer · 24 Medien<br>Du kannst diese Seite jetzt schließen.</div>
+          </div>
+        </div>
+      </div>
+      <figcaption><strong>W5 Space beendet</strong>Die Seite nach dem Ende. Der Server ist aus, Zugangsschlüssel sind ungültig. Die Seite sagt, was bleibt.<br><span class="pkg">Paket 3.6</span></figcaption>
+    </figure>
+
+  </div>
+
+  <h3 id="web-desk">Desktop (ca. 1280 px): Hauptseite</h3>
+  <p class="intro">Breite Ansicht mit Teilnehmern links und dem Raster rechts. Die Ablagezone zeigt den Zustand beim Ziehen einer Datei (Drag &amp; Drop).</p>
+  <figure class="fig fig-wide">
+    <div class="scroll-x">
+      <div class="bframe bd" style="min-width:1280px">
+        <div class="bchrome"><span class="tab">emberlight · Sommerfest im Garten</span><span class="url"><svg class="i" aria-hidden="true"><use href="#i-wifi"/></svg>192.0.2.10:8080/space</span></div>
+        <div class="wpage" style="display:flex;flex-direction:column">
+          <header class="dtop">
+            <span class="logo"><svg class="i f" aria-hidden="true"><use href="#i-flame"/></svg> emberlight</span>
+            <h2>Sommerfest im Garten</h2>
+            <span class="pill"><svg class="i" aria-hidden="true"><use href="#i-timer"/></svg>Noch 3 h 12 min</span>
+            <span class="pill">Name: Jonas</span>
+          </header>
+          <div class="dlayout">
+            <aside class="dside" aria-label="Space-Info">
+              <div>
+                <h3>Space</h3>
+                <p>Gastgeberin Mia · Endet um 23:00 Uhr</p>
+                <div class="dcard-bar"><div class="bar" role="img" aria-label="1,2 von 4 GiB belegt"><i style="width:30%"></i></div></div>
+                <p class="meta sm" style="font-size:13px">1,2 von 4 GiB belegt · Warnung ab 80 %</p>
+              </div>
+              <div>
+                <h3>Teilnehmer (7)</h3>
+                <div class="person"><span class="av">MA</span><span class="nm">Mia <span class="badge">Gastgeberin</span></span></div>
+                <div class="person"><span class="av">JO</span><span class="nm">Jonas <small style="display:inline;color:var(--spark)">du</small></span></div>
+                <div class="person"><span class="av">LE</span><span class="nm">Lena</span></div>
+                <div class="person"><span class="av">OM</span><span class="nm">Omar</span></div>
+                <div class="person"><span class="av">TA</span><span class="nm">Tanja</span></div>
+                <div class="person"><span class="av">BE</span><span class="nm">Ben</span></div>
+                <div class="person"><span class="av">SO</span><span class="nm">Sofie</span></div>
+              </div>
+              <p class="dnote"><b>Datenschutz.</b> Standortdaten entfernen wir beim Hochladen. Lässt sich das nicht sicher, fragen wir vorher. Markierte Medien zeigen „Standort enthalten“.</p>
+            </aside>
+            <main class="dmain">
+              <div class="dtools">
+                <div class="seg" role="group" aria-label="Filter"><button type="button" aria-pressed="true">Alle</button><button type="button" aria-pressed="false">Meine</button></div>
+                <button class="wbtn ghost sm" type="button" aria-pressed="false">Auswählen</button>
+                <span class="sp"></span>
+                <button class="wbtn ghost sm" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Ausgewählte herunterladen (2)</button>
+                <button class="wbtn sm" type="button"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg>Hochladen</button>
+              </div>
+              <div class="ddrop" role="region" aria-label="Ablagezone">
+                <svg class="i" aria-hidden="true"><use href="#i-upload"/></svg>
+                <div><b>Zum Hochladen loslassen</b><small>Fotos und Videos. Der Standort wird dabei entfernt.</small></div>
+              </div>
+              <ul class="wgrid d5" style="margin:0;padding:0;list-style:none">
+                <li class="wcard"><div class="wtile"><span class="ph p4"></span><span class="ck"></span></div><p class="dcap"><b>von Lena</b> · 19:21</p></li>
+                <li class="wcard"><div class="wtile"><span class="ph p3"></span><span class="ck on"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span></div><p class="dcap"><b>von Mia</b> <span class="badge">Gastgeberin</span></p></li>
+                <li class="wcard"><div class="wtile"><span class="ph p6"></span><span class="mk"><span class="mk-loc">Standort enthalten</span></span><span class="ck"></span></div><p class="dcap"><b>von Omar</b> · 19:33</p></li>
+                <li class="wcard"><div class="wtile"><span class="ph p2"></span><span class="vid"><svg class="i" aria-hidden="true"><use href="#i-play"/></svg>0:42</span><span class="ck on"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span></div><p class="dcap"><b>von Jonas</b> <span class="mine">von dir</span></p></li>
+                <li class="wcard"><div class="wtile"><span class="ph p5"></span><span class="ck"></span></div><p class="dcap"><b>von Tanja</b> · 19:40</p></li>
+                <li class="wcard"><div class="wtile"><span class="ph p8"></span><span class="ck"></span></div><p class="dcap"><b>von Ben</b> · 19:44</p></li>
+                <li class="wcard"><div class="wtile"><span class="ph p9"></span><span class="ck"></span></div><p class="dcap"><b>von Sofie</b> · 19:47</p></li>
+                <li class="wcard"><div class="wtile"><span class="ph p1"></span><span class="ck"></span></div><p class="dcap"><b>von Lena</b> · 20:02</p></li>
+                <li class="wcard"><div class="wtile"><span class="ph p7"></span><span class="ck"></span></div><p class="dcap"><b>von Omar</b> · 20:10</p></li>
+                <li class="wcard"><div class="wtile"><span class="ph p10"></span><span class="ck"></span></div><p class="dcap"><b>von Mia</b> <span class="badge">Gastgeberin</span></p></li>
+              </ul>
+            </main>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption><strong>D1 Hauptseite am PC</strong>Die Ablagezone ist im Zustand „Ziehen“ gezeigt. Ohne Ziehen steht dort derselbe Text als ruhige Fläche. Dieselben Bausteine wie auf dem Handy, nur mit Seitenleiste.<br><span class="pkg">Paket 3.5</span></figcaption>
+  </figure>
+</section>
+
+</main>
+
+<footer class="section" style="padding-bottom:64px">
+  <p class="note">Zeichnungen für die Abstimmung, keine Auslieferung. Schriften: Fraunces und Inter, SIL OFL 1.1 (Lizenztexte im Ordner <code>fonts</code>). Icons: Material Symbols Rounded (Apache-2.0), Navigations-Icons aus <code>core/design</code>. Weitere Icons selbst gezeichnet.</p>
+</footer>
+
+</body>
+</html>

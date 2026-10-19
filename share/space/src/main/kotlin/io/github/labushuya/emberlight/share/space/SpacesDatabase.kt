@@ -16,6 +16,7 @@ import androidx.room.RoomDatabase
 import androidx.room.Upsert
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import kotlinx.coroutines.flow.Flow
 import java.io.File
 
 /** Teilnehmer im Space. Der Hash des Zugangsschlüssels liegt hier, nie der Schlüssel selbst (ADR 0013). */
@@ -130,18 +131,82 @@ interface ParticipantDao {
     suspend fun findById(id: String): ParticipantEntity?
 }
 
+/** Eigenschaften eines Space (Paket 3.2, ADR 0016). Die Laufzeit ist entweder eine Dauer oder ein festes Ende. */
+@Entity(tableName = "space")
+data class SpaceEntity(
+    @PrimaryKey @ColumnInfo(name = "id") val id: String,
+    @ColumnInfo(name = "name") val name: String,
+    @ColumnInfo(name = "color_index") val colorIndex: Int,
+    @ColumnInfo(name = "cover_sha256") val coverSha256: String?,
+    @ColumnInfo(name = "lifetime_preset") val lifetimePreset: String?,
+    @ColumnInfo(name = "lifetime_until") val lifetimeUntil: Long?,
+    @ColumnInfo(name = "retention_days") val retentionDays: Int,
+    @ColumnInfo(name = "storage_limit_bytes") val storageLimitBytes: Long,
+    @ColumnInfo(name = "status") val status: String,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+)
+
+@Dao
+interface SpaceDao {
+    @Upsert
+    suspend fun upsert(space: SpaceEntity)
+
+    @Query("SELECT * FROM space WHERE id = :id")
+    suspend fun find(id: String): SpaceEntity?
+
+    /** Alle bekannten Kennungen, für die Bereinigung verwaister Verzeichnisse. */
+    @Query("SELECT id FROM space")
+    suspend fun allIds(): List<String>
+
+    @Query("SELECT * FROM space WHERE id = :id")
+    fun observe(id: String): Flow<SpaceEntity?>
+
+    @Query("SELECT * FROM space ORDER BY created_at DESC, id")
+    fun observeAll(): Flow<List<SpaceEntity>>
+
+    @Query("DELETE FROM space WHERE id = :id")
+    suspend fun delete(id: String): Int
+
+    @Query("DELETE FROM media WHERE space_id = :spaceId")
+    suspend fun deleteMediaOf(spaceId: String): Int
+}
+
 /**
  * Index des Space in Room (ADR 0014, Persistenz). Die Datei heißt `spaces.db` und liegt unter `noBackupFilesDir`, nie
  * unter `databases/`, damit sie aus Backups und Geräte-Übertragungen herausfällt.
  */
-@Database(entities = [MediaEntity::class, ParticipantEntity::class], version = 2, exportSchema = false)
+@Database(
+    entities = [MediaEntity::class, ParticipantEntity::class, SpaceEntity::class],
+    version = 3,
+    exportSchema = false,
+)
 abstract class SpacesDatabase : RoomDatabase() {
     abstract fun media(): MediaDao
 
     abstract fun participants(): ParticipantDao
 
+    abstract fun spaces(): SpaceDao
+
     companion object {
         const val FILE_NAME = "spaces.db"
+
+        /**
+         * Version 2 → 3 (Paket 3.2): Tabelle `space` mit den Eigenschaften des Space. Additiv, bestehende Medien bleiben
+         * unberührt. Die Definition entspricht dem Schema, das Room aus [SpaceEntity] ableitet.
+         */
+        val MIGRATION_2_3: Migration =
+            object : Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `space` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                            "`color_index` INTEGER NOT NULL, `cover_sha256` TEXT, `lifetime_preset` TEXT, " +
+                            "`lifetime_until` INTEGER, `retention_days` INTEGER NOT NULL, " +
+                            "`storage_limit_bytes` INTEGER NOT NULL, `status` TEXT NOT NULL, " +
+                            "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+                    )
+                }
+            }
 
         /**
          * Version 1 → 2 (Paket 3.1b): Markierung `location_kept` und Verarbeitungsversion. Bestehende Medien bekommen
@@ -166,7 +231,7 @@ abstract class SpacesDatabase : RoomDatabase() {
             spacesDir.mkdirs()
             return Room
                 .databaseBuilder(IndexLocationContext(context, spacesDir), SpacesDatabase::class.java, FILE_NAME)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
         }
     }

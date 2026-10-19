@@ -140,7 +140,7 @@ class EmberlightAlbumNavigationTest {
     }
 
     private fun assertSpacesShown() {
-        composeRule.awaitDisplayed(hasText(context.getString(SpaceR.string.feature_space_title)) and isHeading())
+        composeRule.awaitDisplayed(hasText(context.getString(SpaceR.string.space_empty_title)) and isHeading())
     }
 
     /** Ein Reiter oder Navigationseintrag: auswählbar und mit dem Text. */
