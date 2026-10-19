@@ -1,8 +1,11 @@
 package io.github.labushuya.emberlight
 
+import android.content.Context
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ActivityScenario
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import dagger.hilt.android.testing.HiltAndroidRule
@@ -10,6 +13,7 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import dagger.hilt.android.testing.HiltTestApplication
 import io.github.labushuya.emberlight.testing.FakeMediaRepository
 import io.github.labushuya.emberlight.testing.TestImageLoader
+import io.github.labushuya.emberlight.testing.awaitDisplayed
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -18,6 +22,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import javax.inject.Inject
+import io.github.labushuya.emberlight.feature.gallery.R as GalleryR
 
 /**
  * Screenshots der gesamten App mit der Zeitleiste auf festen Daten. Goldens liegen in `src/test/screenshots`
@@ -74,6 +79,13 @@ class EmberlightAppScreenshotTest {
 
     private fun captureApp(path: String) {
         scenario = ActivityScenario.launch(MainActivity::class.java)
+        // Die Zeitleiste wird auf dem Default-Dispatcher gruppiert und erst danach gezeigt. Erst die Überschrift des ersten
+        // Tages zeigt, dass sie steht. Vorher fängt die Aufnahme den Ladezustand ein.
+        val todayHeader =
+            ApplicationProvider.getApplicationContext<Context>().getString(
+                GalleryR.string.feature_gallery_header_today,
+            )
+        composeRule.awaitDisplayed(hasText(todayHeader))
         composeRule.waitForIdle()
         composeRule.onRoot().captureRoboImage(path)
     }

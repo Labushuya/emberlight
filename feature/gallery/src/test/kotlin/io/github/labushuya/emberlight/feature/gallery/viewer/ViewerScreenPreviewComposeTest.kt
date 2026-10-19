@@ -49,15 +49,21 @@ class ViewerScreenPreviewComposeTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val viewerItems = TimelineFixtures.sampleItems().map { it.toViewerItem() }
     private val photo = viewerItems.first { it.type == ViewerMediaType.IMAGE }
-    private val fakes = ScreenPreviewFakes()
+    private var fakes = ScreenPreviewFakes()
     private val marks = mutableListOf<String>()
     private val pageScreens = mutableListOf<Boolean>()
 
     @Before
     fun setUp() {
-        SingletonImageLoader.reset()
-        SingletonImageLoader.setSafe { ctx -> fakes.loader(ctx) }
+        installLoader(synchronous = false)
         ViewerTrace.output = { line -> marks += line.substringBefore(" id=") }
+    }
+
+    /** Setzt den Singleton-Loader auf die Fakes dieses Tests. Ohne [synchronous] läuft er auf Hintergrund-Threads. */
+    private fun installLoader(synchronous: Boolean) {
+        SingletonImageLoader.reset()
+        fakes = ScreenPreviewFakes(synchronous)
+        SingletonImageLoader.setSafe { ctx -> fakes.loader(ctx) }
     }
 
     @After
@@ -68,10 +74,14 @@ class ViewerScreenPreviewComposeTest {
 
     /**
      * Der Hero bleibt stehen, bis die Seite ihr Bild meldet. Diese Seite zeigt nie etwas, der Hero läuft also bis zum Rückfall.
-     * Die Vorschau liegt schon im Speicher-Cache, damit ihre Ankunft nicht von der Ladezeit abhängt.
+     * Die Vorschau liegt schon im Speicher-Cache, damit ihre Ankunft nicht von der Ladezeit abhängt. Der Loader läuft dabei auf
+     * dem Haupt-Dispatcher des Tests. Mit einem Hintergrund-Thread hängt die Ankunft an der realen Zeit: Ist sie unter Last
+     * langsam, rückt der Test-Scheduler die virtuelle Zeit schon bis zum Rückfall des Hero (1 Sekunde) vor, und die Vorschau
+     * kommt zu spät.
      */
     @Test
     fun theHeroTakesTheScreenPreviewOnceItIsInTheCache() {
+        installLoader(synchronous = true)
         cacheScreenPreview(photo)
 
         composeRule.setContent { OpenedViewer(viewerItems, photo.id, noPageImageSources) }

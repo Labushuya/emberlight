@@ -10,19 +10,27 @@ import coil3.fetch.ImageFetchResult
 import coil3.request.Options
 import io.github.labushuya.emberlight.core.media.thumbnail.MediaThumbnail
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 
 /**
  * Lader für die Vorschau in Bildschirmgröße in Tests. Er liefert ein echtes Bitmap als `BitmapImage`, wie das System es liefert.
  * Jede Anfrage wird gezählt. Mit [gate] wartet jede Anfrage, bis der Test das Gate öffnet. So lässt sich die Ankunft der
  * Vorschau zeitlich festlegen, etwa in die Öffnen-Animation.
+ *
+ * Mit [synchronous] laufen die Anfragen auf dem Haupt-Dispatcher des Tests statt auf einem Hintergrund-Thread. Die Ankunft
+ * hängt dann nicht an der realen Zeit, sondern an der Reihenfolge im Test-Scheduler. Der Hero-Test braucht das, siehe
+ * `ViewerScreenPreviewComposeTest`.
  */
-internal class ScreenPreviewFakes {
+internal class ScreenPreviewFakes(
+    private val synchronous: Boolean = false,
+) {
     val requested = mutableListOf<String>()
     var gate: CompletableDeferred<Unit>? = null
 
     fun loader(context: Context): ImageLoader =
         ImageLoader
             .Builder(context)
+            .apply { if (synchronous) interceptorCoroutineContext(Dispatchers.Main.immediate) }
             .components {
                 add(
                     object : Fetcher.Factory<MediaThumbnail> {
