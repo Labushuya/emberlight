@@ -23,6 +23,15 @@ internal object MediaFixtures {
 
     fun ftyp(brand: String): ByteArray = box("ftyp", ascii(brand) + ByteArray(4))
 
+    /**
+     * HEIC mit einem `meta`, dessen Handler nicht `pict` ist. Der Standort lässt sich dort nicht prüfen, die Datei ist
+     * nicht bereinigbar (ADR 0015, `unsupported`).
+     */
+    fun unremovableHeic(): ByteArray {
+        val handler = box("hdlr", ByteArray(8) + ascii("vide") + ByteArray(13))
+        return ftyp("heic") + box("meta", ByteArray(4) + handler) + box("mdat", ByteArray(16))
+    }
+
     fun mp4(): ByteArray = ftyp("isom") + box("moov", box("free", ByteArray(8))) + box("mdat", ByteArray(16))
 
     fun ascii(text: String): ByteArray = text.toByteArray(Charsets.ISO_8859_1)

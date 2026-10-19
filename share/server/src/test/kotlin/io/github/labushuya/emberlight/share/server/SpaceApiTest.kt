@@ -398,7 +398,7 @@ class SpaceApiTest {
     fun locationNotRemovableIs422WithReasonAndStoresNothing() =
         testApplication {
             install()
-            val heic = MediaFixtures.ftyp("heic") + MediaFixtures.box("mdat", ByteArray(16))
+            val heic = MediaFixtures.unremovableHeic()
 
             val response = client.upload("tok-guest-0123456789", heic, name = "foto.heic")
 
@@ -415,7 +415,7 @@ class SpaceApiTest {
     fun keepLocationHeaderStoresTheFileUnchangedAndMarksIt() =
         testApplication {
             install()
-            val heic = MediaFixtures.ftyp("heic") + MediaFixtures.box("mdat", ByteArray(16))
+            val heic = MediaFixtures.unremovableHeic()
 
             val response =
                 client.post("/api/v1/media") {

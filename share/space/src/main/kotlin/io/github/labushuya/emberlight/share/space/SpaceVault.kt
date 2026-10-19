@@ -12,7 +12,6 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 import java.util.Base64
@@ -163,8 +162,8 @@ class SpaceVault internal constructor(
 
     /**
      * Nimmt einen Upload entgegen. Die Reihenfolge entspricht ADR 0013 und ADR 0015: Kopf lesen und erkennen, Größe und
-     * Budget prüfen, streamen und zählen, Struktur prüfen, Standort entfernen (oder mit Einwilligung unverändert
-     * behalten), dann über die verarbeiteten Bytes hashen, Dedupe und atomar übernehmen. Bei jeder Ablehnung und jedem
+     * Budget prüfen, streamen und zählen (dabei entsteht der SHA-256 der Bytes), Struktur prüfen, Standort entfernen (oder mit Einwilligung unverändert
+     * behalten; Plan/Apply, ohne Sicherungskopie, ADR 0015), Dedupe und atomar übernehmen. Bei jeder Ablehnung und jedem
      * Abbruch bleibt keine Teildatei zurück. Ein Abbruch durch [ChunkSource] wird weitergereicht.
      *
      * [keepLocation] ist die Einwilligung. Sie wirkt nur, wenn der Standort nicht sicher entfernt werden kann.
@@ -189,15 +188,12 @@ class SpaceVault internal constructor(
         if (budget.bytes <= 0) return IngestResult.Rejected(budget.reason)
 
         val temp = storage.newTempPath()
-        // Nur mit Einwilligung: Sicherungskopie des Originals, falls die Bereinigung halb schreibt und scheitert.
-        val backup = if (keepLocation) storage.newTempPath() else null
         try {
-            val size = writeBody(temp, source, buffer, head, Limit(maxBytes, budget))
+            // Der Hash des Stroms entsteht beim Schreiben. Bleibt die Datei unverändert, gilt er weiter (ADR 0015).
+            val (size, streamedSha256) = writeBody(temp, source, buffer, head, Limit(maxBytes, budget))
             if (!structureIsValid(format, temp, size)) throw Rejection(RejectReason.UnsupportedType)
-            if (backup != null) withContext(Dispatchers.IO) { Files.copy(temp, backup) }
-            val kept = removeLocationOrKeep(temp, backup, format, keepLocation)
-            val sha256 = withContext(Dispatchers.IO) { sha256Of(temp) }
-            return commit(uploader, rawFileName, format, sha256, size, temp, kept)
+            val outcome = removeLocationOrKeep(temp, format, keepLocation, streamedSha256)
+            return commit(uploader, rawFileName, format, outcome.sha256, size, temp, outcome.locationKept)
         } catch (rejection: Rejection) {
             Files.deleteIfExists(temp)
             return IngestResult.Rejected(rejection.reason)
@@ -205,31 +201,35 @@ class SpaceVault internal constructor(
             // Abbruch durch Timeout, Verbindungsende oder Ausnahme: die Teildatei verschwindet in jedem Fall.
             Files.deleteIfExists(temp)
             throw failure
-        } finally {
-            backup?.let { Files.deleteIfExists(it) }
         }
     }
 
+    /** Ergebnis der Standortprüfung: Hash der verarbeiteten Bytes und ob der Standort mit Einwilligung blieb. */
+    private class Scrubbed(
+        val sha256: String,
+        val locationKept: Boolean,
+    )
+
     /**
-     * Bereinigt den Standort in [temp]. Liefert `true`, wenn der Standort mit Einwilligung unverändert bleibt. Ohne
-     * Einwilligung lehnt es mit [Rejection] ab. Mit Einwilligung stellt es das Original aus [backup] wieder her.
+     * Bereinigt den Standort in [temp] nach Plan/Apply (ADR 0015): Die Datei wird nur geschrieben, wenn alles
+     * bereinigbar ist. Ohne Einwilligung lehnt es bei nicht bereinigbarer Datei mit [Rejection] ab. Mit Einwilligung
+     * bleibt die Datei unverändert und ungeschrieben, der Standort gilt als behalten.
      */
     private suspend fun removeLocationOrKeep(
         temp: Path,
-        backup: Path?,
         format: DetectedFormat,
         keepLocation: Boolean,
-    ): Boolean {
-        val outcome = withContext(Dispatchers.IO) { LocationScrubber.scrub(temp.toFile(), format) }
+        streamedSha256: String,
+    ): Scrubbed {
+        val outcome = withContext(Dispatchers.IO) { LocationScrubber.scrub(temp.toFile(), format, streamedSha256) }
         return when (outcome) {
             is LocationScrubResult.Clean -> {
-                false
+                Scrubbed(outcome.sha256, locationKept = false)
             }
 
             is LocationScrubResult.NotRemovable -> {
-                if (!keepLocation || backup == null) throw Rejection(RejectReason.LocationNotRemovable(outcome.reason))
-                withContext(Dispatchers.IO) { Files.move(backup, temp, StandardCopyOption.REPLACE_EXISTING) }
-                true
+                if (!keepLocation) throw Rejection(RejectReason.LocationNotRemovable(outcome.reason))
+                Scrubbed(streamedSha256, locationKept = true)
             }
         }
     }
@@ -337,8 +337,9 @@ class SpaceVault internal constructor(
         buffer: ByteArray,
         head: Int,
         limit: Limit,
-    ): Long =
+    ): Pair<Long, String> =
         withContext(Dispatchers.IO) {
+            val digest = MessageDigest.getInstance(SHA_256)
             Files.newOutputStream(target, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE).use { out ->
                 var written = 0L
                 var length = head
@@ -346,12 +347,13 @@ class SpaceVault internal constructor(
                     if (length > 0) {
                         written += length
                         limit.check(written)
+                        digest.update(buffer, 0, length)
                         out.write(buffer, 0, length)
                     }
                     length = source.read(buffer, 0, buffer.size)
                     if (length < 0) break
                 }
-                written
+                written to digest.digest().toHex()
             }
         }
 
@@ -477,20 +479,6 @@ class SpaceVault internal constructor(
             createdAt = createdAt,
             locationKept = locationKept,
         )
-
-    /** SHA-256 über die Bytes der Datei, gestreamt. Der Hash gilt für die verarbeiteten Bytes (ADR 0015, Reihenfolge). */
-    private fun sha256Of(path: Path): String {
-        val digest = MessageDigest.getInstance(SHA_256)
-        Files.newInputStream(path).use { input ->
-            val chunk = ByteArray(BUFFER_BYTES)
-            while (true) {
-                val read = input.read(chunk)
-                if (read < 0) break
-                digest.update(chunk, 0, read)
-            }
-        }
-        return digest.digest().toHex()
-    }
 
     /** Obergrenze für Bytes in dieser Anfrage: die Medienart-Grenze und das Budget aus Speicher und Gerät. */
     private inner class Limit(

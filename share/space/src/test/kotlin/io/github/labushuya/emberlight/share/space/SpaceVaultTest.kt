@@ -169,6 +169,15 @@ class SpaceVaultTest {
         assertTrue(record.locationKept)
         assertEquals(bytes.size.toLong(), record.sizeBytes)
         assertArrayEquals(bytes, File(spacesDir, "${space.value}/${record.sha256}").readBytes())
+        // Plan/Apply ohne Sicherungskopie: Im Space-Ordner liegt genau die eine Datei, keine Temp-Kopie.
+        assertEquals(listOf(record.sha256), storedFiles())
+        assertEquals(
+            java.security.MessageDigest
+                .getInstance("SHA-256")
+                .digest(bytes)
+                .joinToString("") { "%02x".format(it) },
+            record.sha256,
+        )
     }
 
     @Test

@@ -167,6 +167,6 @@ internal object TiffScrubber {
         val size = scalar(pass, length, end, big)
         if (size == 0L) return
         pass.bounds(start, size, end)
-        JpegScrubber.scrubImage(pass, start, start + size, depth + 1)
+        JpegScrubber.scrubEmbedded(pass, start, start + size, depth + 1)
     }
 }

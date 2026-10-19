@@ -2,6 +2,8 @@ package io.github.labushuya.emberlight.share.space.location
 
 import java.io.ByteArrayOutputStream
 import java.io.RandomAccessFile
+import java.security.MessageDigest
+import java.util.SortedSet
 import java.util.zip.DataFormatException
 import java.util.zip.Inflater
 
@@ -98,27 +100,98 @@ internal class MemoryStore(
 }
 
 /**
+ * Plan statt Sicherungskopie (ADR 0015, Plan/Apply). Die Überschreib-Bereiche liegen nur im Speicher, die Datei bleibt
+ * bis [applyTo] unverändert. Lesen liefert den geplanten Stand, damit Walker und Prüfung dieselben Bytes sehen wie
+ * nach dem Schreiben. Die Summe der geplanten Bytes ist durch [ScrubLimits.MAX_READ] begrenzt, so entsteht kein
+ * Speicher in Abhängigkeit von der Dateigröße.
+ */
+internal class PlanStore(
+    private val base: ByteStore,
+) : ByteStore {
+    private class Planned(
+        val offset: Long,
+        val bytes: ByteArray,
+    )
+
+    private val planned = ArrayList<Planned>()
+    private var plannedBytes = 0L
+
+    /** Anzahl der geplanten Bereiche. Null heißt: nichts zu ändern. */
+    val pendingWrites: Int get() = planned.size
+
+    override val length: Long get() = base.length
+
+    override fun read(
+        offset: Long,
+        count: Int,
+    ): ByteArray {
+        val out = base.read(offset, count)
+        for (entry in planned) {
+            val from = maxOf(offset, entry.offset)
+            val to = minOf(offset + count, entry.offset + entry.bytes.size)
+            if (from < to) {
+                entry.bytes.copyInto(
+                    out,
+                    destinationOffset = (from - offset).toInt(),
+                    startIndex = (from - entry.offset).toInt(),
+                    endIndex = (to - entry.offset).toInt(),
+                )
+            }
+        }
+        return out
+    }
+
+    override fun write(
+        offset: Long,
+        bytes: ByteArray,
+    ) {
+        plannedBytes += bytes.size
+        if (plannedBytes > ScrubLimits.MAX_READ) bail(NotRemovableReason.STRUCTURE)
+        planned.add(Planned(offset, bytes.copyOf()))
+    }
+
+    /** Schreibt alle geplanten Bereiche in der Reihenfolge der Planung. Spätere Bereiche gewinnen. */
+    fun applyTo(target: ByteStore) {
+        for (entry in planned) target.write(entry.offset, entry.bytes)
+    }
+}
+
+/**
  * Ein Durchlauf der Walker. Mit [mutate] = `true` werden Standortbytes überschrieben, sonst nur gezählt (Detektor
  * der Prüfung nach dem Bereinigen, ADR 0015, Prüfung). Jeder Fund steht in [findings]. [writes] zählt die
  * tatsächlichen Schreibvorgänge, damit der Aufrufer geänderte Chunks erkennt.
+ *
+ * [view] liefert eine Sicht auf einen anderen Speicher (zum Beispiel die logischen Bytes eines HEIF-Items), die
+ * Zähler, Funde und Schreibvorgänge mit dem Ursprungsdurchlauf teilt.
  */
-internal class ScrubPass(
+internal class ScrubPass private constructor(
     val store: ByteStore,
     val mutate: Boolean,
+    private val state: State,
 ) {
-    val findings = sortedSetOf<String>()
-    var writes = 0
-        private set
-    private val counts = HashMap<String, Int>()
+    constructor(store: ByteStore, mutate: Boolean) : this(store, mutate, State())
+
+    private class State {
+        val findings = sortedSetOf<String>()
+        var writes = 0
+        val counts = HashMap<String, Int>()
+        val claimed = ArrayList<Pair<Long, Long>>()
+    }
+
+    val findings: SortedSet<String> get() = state.findings
+    val writes: Int get() = state.writes
 
     /** Bereiche, die ein Walker als eigene Bilder oder Container bereits verarbeitet hat (MPF-Zusatzbilder). */
-    val claimed = ArrayList<Pair<Long, Long>>()
+    val claimed: MutableList<Pair<Long, Long>> get() = state.claimed
+
+    /** Sicht auf einen anderen Speicher mit gemeinsamen Zählern, Funden und Schreibvorgängen. */
+    fun view(other: ByteStore): ScrubPass = ScrubPass(other, mutate, state)
 
     /** Zählt Einträge einer Art. Über [ScrubLimits.MAX_ENTRIES] gilt die Struktur als unsicher. */
     fun count(kind: String) {
-        val next = (counts[kind] ?: 0) + 1
+        val next = (state.counts[kind] ?: 0) + 1
         if (next > ScrubLimits.MAX_ENTRIES) bail(NotRemovableReason.STRUCTURE)
-        counts[kind] = next
+        state.counts[kind] = next
     }
 
     fun bounds(
@@ -189,12 +262,26 @@ internal class ScrubPass(
         if (count == 0L) return
         bounds(offset, count, store.length)
         if (count > ScrubLimits.MAX_READ) bail(NotRemovableReason.STRUCTURE)
-        val current = store.read(offset, count.toInt())
-        if (current.all { it == fill }) return
-        findings.add(finding)
+        overwrite(offset, ByteArray(count.toInt()) { fill }, finding)
+    }
+
+    /**
+     * Ersetzt die Bytes ab [offset] durch [bytes] gleicher Länge (etwa einen Box-Typ durch `free`). Ein Fund entsteht,
+     * wenn sich etwas ändert.
+     */
+    fun overwrite(
+        offset: Long,
+        bytes: ByteArray,
+        finding: String,
+    ) {
+        if (bytes.isEmpty()) return
+        bounds(offset, bytes.size.toLong(), store.length)
+        val current = store.read(offset, bytes.size)
+        if (current.contentEquals(bytes)) return
+        state.findings.add(finding)
         if (mutate) {
-            store.write(offset, ByteArray(count.toInt()) { fill })
-            writes++
+            store.write(offset, bytes)
+            state.writes++
         }
     }
 }
@@ -230,6 +317,28 @@ internal object LocationText {
             if (pos + count >= end) return false
             pos += WINDOW - OVERLAP
         }
+    }
+
+    /**
+     * Prüft den ganzen Strom in Fenstern von 64 KiB und füttert [digest] (falls angegeben) mit denselben Bytes. Ein
+     * Durchlauf liefert Scan und Hash zugleich (ADR 0015, ein Lesedurchgang). Liefert `true` bei einem Fund.
+     */
+    fun scanAll(
+        store: ByteStore,
+        digest: MessageDigest?,
+    ): Boolean {
+        var pos = 0L
+        var carry = ""
+        while (pos < store.length) {
+            val count = minOf(WINDOW.toLong(), store.length - pos).toInt()
+            val bytes = store.read(pos, count)
+            digest?.update(bytes)
+            val window = carry + String(bytes, Charsets.ISO_8859_1)
+            if (containsIn(window)) return true
+            carry = window.takeLast(OVERLAP)
+            pos += count
+        }
+        return false
     }
 }
 

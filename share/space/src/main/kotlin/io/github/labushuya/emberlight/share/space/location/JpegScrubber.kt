@@ -239,6 +239,20 @@ internal object JpegScrubber {
     }
 
     /**
+     * Eingebettetes JPEG (Thumbnail in TIFF): wie das Hauptbild, aber das Anhängsel nach dem EOI wird innerhalb der
+     * eigenen Grenze geprüft. Nicht leere Bytes ergeben `trailing_data`, sie bleiben also nicht ungeprüft stehen.
+     */
+    fun scrubEmbedded(
+        pass: ScrubPass,
+        start: Long,
+        limit: Long,
+        depth: Int,
+    ) {
+        val afterEoi = scrubImage(pass, start, limit, depth)
+        gap(pass, afterEoi, limit, limit)
+    }
+
+    /**
      * Alles nach dem EOI, abzüglich der MPF-Zusatzbilder, die schon geprüft sind. Ein angehängtes MP4 (`ftyp` an
      * Offset 4 ab der Lücke) wird bereinigt. Anderes nicht-leeres Anhängsel führt zu `trailing_data`.
      */

@@ -4,7 +4,8 @@ package io.github.labushuya.emberlight.share.space.location
  * ISO-BMFF-Scrubber für MP4, MOV und 3GP (ADR 0015, Fundorte). Box-Walker mit 64-bit-Größen, `size 0` bis zum Ende,
  * Grenzen und Schachtelungstiefe.
  *
- * - `udta` (auch in `trak`): `©xyz` (Text ab Offset 4), `loci` (3GPP). `meta` mit `keys` und `ilst`: Items der Keys
+ * - `udta` (auch in `trak`): `©xyz` (Text ab Offset 4), `loci` (3GPP). Beide werden geleert und danach in `free` umbenannt
+ *   (längenerhaltend, ADR 0015). `meta` mit `keys` und `ilst`: Items der Keys
  *   `com.apple.quicktime.location.*` und `©xyz` werden in der `data`-Nutzlast überschrieben. `keys` und Indizes
  *   bleiben unverändert.
  * - XMP-`uuid`: XMP-Scrubber. `free`/`skip` mit Standort: `free_box_location`.
@@ -34,10 +35,11 @@ internal object BmffScrubber {
             0xAC.toByte(),
         )
     private const val COPYRIGHT_XYZ = "©xyz"
+    private val FREE_TYPE = ascii("free")
     private const val LOCATION_KEY_PREFIX = "com.apple.quicktime.location."
     private val METADATA_SAMPLE_TYPES = setOf("gpmd", "camm")
 
-    private class Box(
+    internal class Box(
         val type: String,
         val start: Long,
         val payload: Long,
@@ -83,7 +85,7 @@ internal object BmffScrubber {
         }
     }
 
-    private fun box(
+    internal fun box(
         pass: ScrubPass,
         start: Long,
         parentEnd: Long,
@@ -113,6 +115,14 @@ internal object BmffScrubber {
             }
         if (end > parentEnd || end < start) bail(NotRemovableReason.STRUCTURE)
         return Box(type, start, payload, end)
+    }
+
+    /** `moov` auf Top-Level (auch in HEIF-Sequenzen und Bursts): Kinder wie bei MP4. */
+    internal fun moov(
+        pass: ScrubPass,
+        box: Box,
+    ) {
+        children(pass, box.payload, box.end, 1, null)
     }
 
     private fun children(
@@ -227,15 +237,46 @@ internal object BmffScrubber {
             pass.count("udta_boxes")
             val item = box(pass, p, box.end, top = false)
             when (item.type) {
-                COPYRIGHT_XYZ -> xyzText(pass, item)
-                "loci" -> loci(pass, item)
-                "meta" -> meta(pass, item, depth + 1)
-                "udta" -> userData(pass, item, depth + 1)
-                "uuid" -> uuid(pass, item)
-                else -> generic(pass, item)
+                COPYRIGHT_XYZ -> {
+                    xyzText(pass, item)
+                    renameToFree(pass, item)
+                }
+
+                "loci" -> {
+                    loci(pass, item)
+                    renameToFree(pass, item)
+                }
+
+                "meta" -> {
+                    meta(pass, item, depth + 1)
+                }
+
+                "udta" -> {
+                    userData(pass, item, depth + 1)
+                }
+
+                "uuid" -> {
+                    uuid(pass, item)
+                }
+
+                else -> {
+                    generic(pass, item)
+                }
             }
             p = item.end
         }
+    }
+
+    /**
+     * Macht eine Standort-Box unter `udta` unsichtbar: Der Typ wird in `free` geändert (längenerhaltend). Leser
+     * ignorieren `free` (ISO 14496-12, §8.1.2). So bleibt kein Standort-Typ mit leerem Wert zurück, den ein Leser als
+     * Position (0/0) deuten könnte (ADR 0015, Abschnitt „Kein Null Island“).
+     */
+    private fun renameToFree(
+        pass: ScrubPass,
+        item: Box,
+    ) {
+        pass.overwrite(item.start + 4, FREE_TYPE, "location_box")
     }
 
     /** `©xyz`: 2 Byte Länge, 2 Byte Sprache, dann der Text. Länge und Sprache bleiben. */
@@ -377,7 +418,7 @@ internal object BmffScrubber {
     }
 
     /** XMP-`uuid` (Adobe): der XMP-Scrubber läuft über den Rest. Andere `uuid` werden nur geprüft. */
-    private fun uuid(
+    internal fun uuid(
         pass: ScrubPass,
         box: Box,
     ) {
@@ -389,7 +430,7 @@ internal object BmffScrubber {
     }
 
     /** Top-Level `free` oder `skip`: Standort-Muster oder ein `gps `-Box-Typ ergeben `free_box_location`. */
-    private fun freeBox(
+    internal fun freeBox(
         pass: ScrubPass,
         box: Box,
     ) {
@@ -400,7 +441,7 @@ internal object BmffScrubber {
     }
 
     /** Alles, was der Walker nicht einordnet: Standort-Text darin führt zu `unsupported`, sonst bleibt es. */
-    private fun generic(
+    internal fun generic(
         pass: ScrubPass,
         box: Box,
     ) {

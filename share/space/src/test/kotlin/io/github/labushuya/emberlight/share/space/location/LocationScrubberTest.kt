@@ -32,6 +32,7 @@ import io.github.labushuya.emberlight.share.space.location.LocationFixtures.webp
 import io.github.labushuya.emberlight.share.space.location.LocationFixtures.ztxtDeflated
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -42,6 +43,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.security.MessageDigest
 import java.util.Random
 
 /**
@@ -61,7 +63,8 @@ class LocationScrubberTest {
     ): Pair<LocationScrubResult, ByteArray> {
         val file = folder.newFile()
         file.writeBytes(bytes)
-        val result = LocationScrubber.scrub(file, DetectedFormat(mime, kind, boxed))
+        // Der Hash des Stroms entspricht dem Upload: Er gilt, solange die Datei unverändert bleibt.
+        val result = LocationScrubber.scrub(file, DetectedFormat(mime, kind, boxed), sha256Hex(bytes))
         return result to file.readBytes()
     }
 
@@ -70,11 +73,23 @@ class LocationScrubberTest {
         mime: String,
     ): ByteArray {
         val (result, out) = scrub(bytes, mime)
-        assertEquals(LocationScrubResult.Clean(changed = true), result)
+        assertCleanResult(result, changed = true)
         assertEquals("Länge darf sich nicht ändern", bytes.size, out.size)
         assertNoLocationLeft(out)
+        assertEquals("Hash über die verarbeiteten Bytes", sha256Hex(out), (result as LocationScrubResult.Clean).sha256)
         return out
     }
+
+    private fun assertCleanResult(
+        result: LocationScrubResult,
+        changed: Boolean,
+    ) {
+        assertTrue("Erwartet Clean, war $result", result is LocationScrubResult.Clean)
+        assertEquals("changed", changed, (result as LocationScrubResult.Clean).changed)
+    }
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     private fun assertNoLocationLeft(bytes: ByteArray) {
         val text = String(bytes, Charsets.ISO_8859_1)
@@ -161,7 +176,7 @@ class LocationScrubberTest {
 
         val (result, out) = scrub(original, "image/jpeg")
 
-        assertEquals(LocationScrubResult.Clean(changed = false), result)
+        assertCleanResult(result, changed = false)
         assertArrayEquals(original, out)
     }
 
@@ -232,7 +247,7 @@ class LocationScrubberTest {
 
         val (result, _) = scrub(original, "image/png")
 
-        assertEquals(LocationScrubResult.Clean(changed = false), result)
+        assertCleanResult(result, changed = false)
     }
 
     @Test
@@ -272,6 +287,23 @@ class LocationScrubberTest {
         assertTrue(!text.contains("Mond"))
         assertTrue(!text.contains("Trak-Ort"))
         assertTrue(!text.contains("Am Platz"))
+    }
+
+    /**
+     * Standort-Boxen unter `udta` (`©xyz`, `loci`) werden in `free` umbenannt (ADR 0015, „Kein Null Island“). So bleibt
+     * kein Standort-Typ übrig, den ein Leser mit leerem Wert als Position deuten könnte.
+     */
+    @Test
+    fun udtaLocationBoxesBecomeFreeBoxesOfTheSameLength() {
+        val original = mp4WithLocation()
+        assertTrue(LocationFixtures.contains(original, "©xyz"))
+        assertTrue(LocationFixtures.contains(original, "loci"))
+
+        val cleaned = assertClean(original, "video/mp4")
+
+        assertFalse(LocationFixtures.contains(cleaned, "©xyz"))
+        assertFalse(LocationFixtures.contains(cleaned, "loci"))
+        assertTrue(LocationFixtures.contains(cleaned, "free"))
     }
 
     @Test
@@ -319,7 +351,7 @@ class LocationScrubberTest {
 
         val (result, _) = scrub(original, "video/mp4")
 
-        assertEquals(LocationScrubResult.Clean(changed = false), result)
+        assertCleanResult(result, changed = false)
     }
 
     @Test
@@ -330,15 +362,6 @@ class LocationScrubberTest {
         val (result, _) = scrub(original, "video/mp4")
 
         assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.FREE_BOX_LOCATION), result)
-    }
-
-    @Test
-    fun heifIsUnsupportedUntilItsItemWalkerExists() {
-        val original = box("ftyp", ascii("heic") + ByteArray(4)) + box("mdat", ByteArray(16))
-
-        val (result, _) = scrub(original, "image/heic", boxed = true)
-
-        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.UNSUPPORTED), result)
     }
 
     /** Robustheit: abgeschnittene und zufällig veränderte Eingaben dürfen nie Standort durchlassen oder abstürzen. */
