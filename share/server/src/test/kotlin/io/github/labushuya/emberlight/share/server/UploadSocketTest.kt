@@ -115,9 +115,11 @@ class UploadSocketTest {
         port = runBlocking { server.start(ServerConfig(subnet = Ipv4Subnet("127.0.0.1", 8))) }
 
         val response =
-            RawHttp.send(
-                port,
-                RawHttp.request("POST", "/api/v1/media", headers(), MediaFixtures.jpeg(300)),
+            answered(
+                RawHttp.sendAnsweringEarly(
+                    port,
+                    RawHttp.request("POST", "/api/v1/media", headers(), MediaFixtures.jpeg(300)),
+                ),
             )
 
         assertEquals(401, response.status)
@@ -129,13 +131,15 @@ class UploadSocketTest {
         val body = chunked(MediaFixtures.jpeg(3_000), chunk = 500)
 
         val response =
-            RawHttp.send(
-                port,
-                RawHttp.request(
-                    "POST",
-                    "/api/v1/media",
-                    headers("Transfer-Encoding" to "chunked"),
-                    body,
+            answered(
+                RawHttp.sendAnsweringEarly(
+                    port,
+                    RawHttp.request(
+                        "POST",
+                        "/api/v1/media",
+                        headers("Transfer-Encoding" to "chunked"),
+                        body,
+                    ),
                 ),
             )
 
@@ -180,14 +184,17 @@ class UploadSocketTest {
     @Test
     fun contentLengthSmallerThanTheBodyStoresAtMostTheDeclaredBytes() {
         val response =
-            RawHttp.send(
-                port,
-                RawHttp.request(
-                    "POST",
-                    "/api/v1/media",
-                    headers("Content-Length" to "100"),
-                    // Die ersten 100 Bytes sind ein vollständiges JPEG. Ein abgeschnittenes wäre zu Recht 422 (Struktur).
-                    MediaFixtures.jpeg(100) + ByteArray(2_900),
+            answered(
+                RawHttp.sendAnsweringEarly(
+                    port,
+                    RawHttp.request(
+                        "POST",
+                        "/api/v1/media",
+                        headers("Content-Length" to "100"),
+                        // Nebenläufig gelesen (#27). Die ersten 100 Bytes sind ein vollständiges JPEG (3.1b). Ein
+                        // abgeschnittenes wäre zu Recht 422 (Struktur).
+                        MediaFixtures.jpeg(100) + ByteArray(2_900),
+                    ),
                 ),
             )
 
@@ -195,16 +202,24 @@ class UploadSocketTest {
         assertTrue("Antwort: ${response.body}", response.body.contains("\"size\":100"))
     }
 
+    /**
+     * Angekündigte Länge über der Videogrenze: `413` vor dem Speichern. Der Körper ist vollständig vorhanden, die Antwort
+     * kommt trotzdem nebenläufig zum Schreiben an (siehe [RawHttp.sendAnsweringEarly]). Ohne das ginge die Antwort verloren,
+     * sobald der Server schließt, bevor der Client sie liest.
+     */
     @Test
     fun declaredLengthAboveTheVideoLimitIsRefusedBeforeReading() {
         val body = MediaFixtures.mp4() + ByteArray(9_000 - MediaFixtures.mp4().size)
         val response =
-            RawHttp.send(
-                port,
-                RawHttp.request("POST", "/api/v1/media", headers("Content-Length" to "9000"), body),
+            answered(
+                RawHttp.sendAnsweringEarly(
+                    port,
+                    RawHttp.request("POST", "/api/v1/media", headers("Content-Length" to "9000"), body),
+                ),
             )
 
         assertEquals(413, response.status)
+        assertTrue(response.body.contains("payload_too_large"))
         assertEquals(0, storedFiles())
     }
 
@@ -228,17 +243,23 @@ class UploadSocketTest {
     @Test
     fun duplicateAuthorizationOnUploadIsUnauthorized() {
         val response =
-            RawHttp.send(
-                port,
-                RawHttp.request(
-                    "POST",
-                    "/api/v1/media",
-                    headers("Authorization" to "Bearer $token"),
-                    MediaFixtures.jpeg(300),
+            answered(
+                RawHttp.sendAnsweringEarly(
+                    port,
+                    RawHttp.request(
+                        "POST",
+                        "/api/v1/media",
+                        headers("Authorization" to "Bearer $token"),
+                        MediaFixtures.jpeg(300),
+                    ),
                 ),
             )
 
         assertEquals(401, response.status)
         assertEquals(0, storedFiles())
     }
+
+    /** Eine Antwort ist Pflicht. Fehlt sie, schlägt der Test mit klarer Meldung fehl statt mit einem Nullzeiger. */
+    private fun answered(response: RawResponse?): RawResponse =
+        checkNotNull(response) { "Keine Antwort vom Server erhalten." }
 }

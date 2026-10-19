@@ -266,6 +266,14 @@ Der Gerätetest mit dem Debug-Einstieg (Benchmark-Build) hat drei Befunde gebrac
 2. **`Accept-Ranges` nur einmal.** Ursache: `respondContent` setzte den Header selbst, und das Plugin `PartialContent` setzt ihn ebenfalls. Der eigene Header ist entfernt. `SpaceApiTest.downloadSendsExactlyOneAcceptRangesHeaderOn200And206` prüft genau einen Wert bei `200` und `206`.
 3. **Frühe Ablehnung.** Der Vault liest für die Signaturerkennung genau `ContentInspector.HEAD_BYTES` (32) Bytes. Ein Körper ohne erlaubte Signatur wird danach mit `415` abgelehnt (`SpaceVaultTest.bodyWithoutAllowedSignatureIsRejectedAfterTheHeadOnly`, gelesene Bytes höchstens 32). Der Befund vom Gerät war eine Datei mit gültiger Signatur, aber ungültiger Struktur. Sie wird weiterhin erst nach dem Lesen des ganzen Körpers geprüft, weil die Box-Kette bis zum Dateiende reicht. Eine Prüfung während des Streamens ist offen (siehe unten). Für die Verbindung gilt: Abgelehnte Uploads antworten mit `Connection: close`. Danach bricht der Server den Körper nach 200 ms ab, damit der Client die Antwort lesen kann (`REFUSED_BODY_LINGER_MS`). Ohne die Frist schließt der Server mit ungelesenen Bytes im Puffer, sendet RST, und Windows verwirft die Antwort. Ohne Abbruch liest CIO den Körper vollständig vom Socket (gemessen mit 64 MiB: vollständig in 0,14 s auf dem Loopback). `UploadSocketTest.unsignedLargeBodyIsRefusedEarlyWithConnectionCloseAndServerStaysUsable` prüft `415`, `Connection: close`, dass der Client nicht alles schreibt, und dass danach `/health` mit `200` antwortet.
 
+### Nachtrag: flakiger Socket-Test auf `main` (19.10.2026)
+
+Der CI-Lauf auf `main` (Run 39247557292) ist einmal bei `UploadSocketTest.declaredLengthAboveTheVideoLimitIsRefusedBeforeReading` fehlgeschlagen (`413` erwartet, Assertion ohne lesbaren Text im Log). Der Wiederholungslauf desselben Codes war grün. Lokal ist der Fehler nicht reproduziert worden. Die Ursache ist nicht belegt.
+
+Die Testseite hat die Lücke geschlossen. `RawHttp.send` hatte den Körper vollständig geschrieben und erst danach gelesen. Das ist genau das Muster, vor dem `RawHttp` warnt. Jetzt laufen alle Tests, bei denen der Server vor dem Körperende antwortet, über `RawHttp.sendAnsweringEarly` (Lesen nebenläufig zum Schreiben). Betroffen sind `401`, `413` (Content-Length und chunked) und `201` bei kleinem Content-Length.
+
+Offen: Die Messung zeigt, dass die Verbindung nach der Antwort oft schon 1 bis 4 ms später schließt. Die Frist von 200 ms greift in diesen Läufen nicht. Nur der erste Lauf hatte rund 200 ms. Der Server ist deshalb nicht geändert worden. Ob das Schließen ohne Frist die Antwort gefährdet, ist nicht geklärt.
+
 ### Offen
 
 - Strukturprüfung während des Streamens: Ein Körper mit gültiger Signatur, aber ungültiger Box-Kette, wird erst nach dem vollen Lesen mit `415` abgelehnt. Eine frühere Ablehnung braucht eine Kettenprüfung beim Lesen (Box-Köpfe an bekannten Offsets). Das ist nicht in 3.1a umgesetzt.
