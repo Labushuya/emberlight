@@ -33,7 +33,7 @@ abstract class CheckProjectIsolationTask : DefaultTask() {
                 buildString {
                     appendLine("Verbotene Modulabhängigkeit in ${guardedProject.get()} (aufgelöster Graph, transitiv):")
                     violations.forEach { appendLine("  - $it") }
-                    append("Das Modul darf diese Projekte nicht erreichen, siehe docs/adr/0012-lokaler-server.md.")
+                    append("Das Modul darf diese Projekte nicht erreichen, siehe $ISOLATION_ADR_REFERENCE.")
                 },
             )
         }

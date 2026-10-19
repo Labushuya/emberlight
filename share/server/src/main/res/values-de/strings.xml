@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="space_server_channel_name">Space-Server</string>
+    <string name="space_server_alert_channel_name">Space-Server-Hinweise</string>
     <string name="space_server_running_title">Space-Server läuft</string>
     <string name="space_server_starting">Startet …</string>
     <string name="space_server_port">Port %1$d</string>
     <string name="space_server_stop">Beenden</string>
+    <string name="space_server_no_space">Der Server startet nicht: Es ist kein Space eingerichtet.</string>
+    <string name="space_server_no_wifi">Der Server startet nicht: Kein WLAN mit IPv4-Adresse verbunden.</string>
+    <string name="space_server_network_changed">WLAN-Adresse hat sich geändert oder das WLAN ist weg. Der Server ist gestoppt.</string>
 </resources>

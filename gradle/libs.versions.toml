@@ -30,6 +30,10 @@ exifinterface = "1.4.2"
 media3 = "1.11.1"
 # Eingebetteter Server (Paket 3.0, ADR 0012). Ktor 3.6.0 ist laut Maven Central die neueste stabile Version.
 ktor = "3.6.0"
+# Medien-Index des Space (Paket 3.1a, ADR 0014). Room über KSP.
+room = "2.8.5"
+# JSON für die Server-Antworten (CLAUDE.md, Technik). Keine Play-Services-Abhängigkeit.
+kotlinx-serialization = "1.11.0"
 
 [libraries]
 # Build-Logic (Classpath der Convention-Plugins)
@@ -70,6 +74,9 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 androidx-compose-material3-adaptive-navigation-suite = { group = "androidx.compose.material3", name = "material3-adaptive-navigation-suite" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation-compose" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 
 # Debug-only (Tooling und Test-Manifest, über die BOM versioniert)
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }

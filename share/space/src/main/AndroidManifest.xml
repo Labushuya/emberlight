@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bibliothek ohne Komponenten. Speicher und Index laufen im Prozess der App. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

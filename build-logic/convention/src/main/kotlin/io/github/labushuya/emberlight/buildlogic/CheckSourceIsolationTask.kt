@@ -44,7 +44,7 @@ abstract class CheckSourceIsolationTask : DefaultTask() {
                     appendLine("Verbotener Quelltext im geschützten Modul (Datei:Zeile: Token):")
                     violations.forEach { appendLine("  - $it") }
                     append(
-                        "Der Server darf nicht auf Medien oder Speicher der Galerie zugreifen, siehe docs/adr/0012-lokaler-server.md.",
+                        "Das geschützte Modul darf nicht auf Medien oder Speicher der Galerie zugreifen, siehe $ISOLATION_ADR_REFERENCE.",
                     )
                 },
             )

@@ -63,7 +63,7 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
 
 1. **Grundgerüst**: Gradle-Projekt, Module, Theme, Navigation, CI und Release-Workflow. Ergebnis: `v0.1.0` baut als signierte APK.
 2. **Galerie**: MediaStore-Zugriff mit Berechtigungen (inkl. „ausgewählte Fotos“ ab Android 14), Zeitleiste mit Pinch-Zoom der Spalten, Alben, Vollbild mit Wischen/Zoom, Video-Wiedergabe, flüssige Übergänge.
-3. **Space im vorhandenen WLAN**:
+3. **Space im vorhandenen WLAN** (Paketplan: [docs/PLAN-M3.md](docs/PLAN-M3.md)):
    - Space anlegen (Name, Titelbild, Farbe, Laufzeit, Nachhaltefrist, Speicherlimit)
    - Beitritt mit Anzeigenamen
    - Ktor-Server im Foreground-Service, QR-Code

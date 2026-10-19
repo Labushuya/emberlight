@@ -56,5 +56,25 @@ gradlePlugin {
             id = "emberlight.server.isolation"
             implementationClass = "io.github.labushuya.emberlight.buildlogic.ServerIsolationConventionPlugin"
         }
+        register("spaceIsolation") {
+            id = "emberlight.space.isolation"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.SpaceIsolationConventionPlugin"
+        }
+        register("galleryIsolation") {
+            id = "emberlight.gallery.isolation"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.GalleryIsolationConventionPlugin"
+        }
+        register("room") {
+            id = "emberlight.room"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.RoomConventionPlugin"
+        }
+        register("serialization") {
+            id = "emberlight.serialization"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.SerializationConventionPlugin"
+        }
+        register("releaseManifest") {
+            id = "emberlight.release.manifest"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.ReleaseManifestConventionPlugin"
+        }
     }
 }

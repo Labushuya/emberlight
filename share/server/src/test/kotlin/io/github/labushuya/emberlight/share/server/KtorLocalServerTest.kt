@@ -1,154 +1,187 @@
 package io.github.labushuya.emberlight.share.server
 
-import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.get
-import io.ktor.server.routing.route
-import io.ktor.server.testing.testApplication
+import io.github.labushuya.emberlight.share.space.ParticipantId
+import io.github.labushuya.emberlight.share.space.Principal
+import io.github.labushuya.emberlight.share.space.Role
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.net.HttpURLConnection
-import java.net.URI
+import java.security.MessageDigest
 
+/**
+ * Echter Socket auf 127.0.0.1 (ADR 0012, ADR 0013). Die Anfragen laufen roh, damit Host-Header und mehrere
+ * Authorization-Header wirklich gesendet werden.
+ */
 class KtorLocalServerTest {
-    private val allowAll = RequestAuthorizer { header -> header == "Bearer testtoken-0123456789" }
+    private val localSubnet = Ipv4Subnet("127.0.0.1", 8)
+    private val hostPrincipal = Principal(ParticipantId.generate(), Role.HOST)
+    private val token = "testtoken-0123456789"
+    private val allowAll =
+        TokenAuthorizer(mapOf(MessageDigest.getInstance("SHA-256").digest(token.toByteArray()) to hostPrincipal))
+
+    private fun hostHeader(port: Int) = "Host" to "127.0.0.1:$port"
+
+    private fun bearer() = "Authorization" to "Bearer $token"
 
     @Test
-    fun healthIsDeniedWithoutAuthorization() =
-        testApplication {
-            application { installEmberlightModule(RequestAuthorizer.DenyAll, routes = {}) }
-            assertEquals(HttpStatusCode.Unauthorized, client.get("/health").status)
+    fun healthIsDeniedWithoutAuthorizationAndSaysWhy() {
+        val server = KtorLocalServer(routes = {})
+        runBlocking {
+            val port = server.start(ServerConfig(subnet = localSubnet))
+            val response = RawHttp.get(port, "/health", hostHeader(port))
+
+            assertEquals(401, response.status)
+            assertEquals("Bearer", response.headers["www-authenticate"])
+            assertEquals("""{"error":"unauthorized"}""", response.body)
+            server.stop()
         }
+    }
 
     @Test
-    fun healthReturnsStatusAndApiVersionOnly() =
-        testApplication {
-            application { installEmberlightModule(allowAll, routes = {}) }
-            val response = client.get("/health") { header(HttpHeaders.Authorization, "Bearer testtoken-0123456789") }
-            assertEquals(HttpStatusCode.OK, response.status)
-            assertEquals("""{"status":"ok","apiVersion":$SERVER_API_VERSION}""", response.bodyAsText())
+    fun unknownPathIsProtectedToo() {
+        val server = KtorLocalServer(routes = {})
+        runBlocking {
+            val port = server.start(ServerConfig(subnet = localSubnet))
+
+            assertEquals(401, RawHttp.get(port, "/gibt-es-nicht", hostHeader(port)).status)
+            server.stop()
         }
+    }
 
     @Test
-    fun unknownRoutesAreProtectedToo() =
-        testApplication {
-            application { installEmberlightModule(RequestAuthorizer.DenyAll, routes = {}) }
-            // Ohne Berechtigung kein Hinweis, ob ein Pfad existiert: auch unbekannte Pfade liefern 401.
-            assertEquals(HttpStatusCode.Unauthorized, client.get("/gibt-es-nicht").status)
-        }
-
-    @Test
-    fun unknownRoutesAreNotFoundWhenAuthorized() =
-        testApplication {
-            application { installEmberlightModule(allowAll, routes = {}) }
-            val response =
-                client.get("/gibt-es-nicht") { header(HttpHeaders.Authorization, "Bearer testtoken-0123456789") }
-            assertEquals(HttpStatusCode.NotFound, response.status)
-        }
-
-    @Test
-    fun appRoutesAreReachableOnlyWhenAuthorized() =
-        testApplication {
-            application {
-                installEmberlightModule(allowAll) {
-                    route("/app") { get("/ping") { call.respondText("pong") } }
-                }
-            }
-            assertEquals(HttpStatusCode.Unauthorized, client.get("/app/ping").status)
-            val ok = client.get("/app/ping") { header(HttpHeaders.Authorization, "Bearer testtoken-0123456789") }
-            assertEquals("pong", ok.bodyAsText())
-        }
-
-    @Test
-    fun requestLogSeesEntryAndExit() =
-        testApplication {
-            val lines = mutableListOf<String>()
-            application {
-                installEmberlightModule(
-                    RequestAuthorizer.DenyAll,
-                    requestLog = { lines += it },
-                    routes = {},
-                )
-            }
-            client.get("/health")
-            assertEquals(2, lines.size)
-            assertTrue(lines[0].startsWith("req-in method=GET path=/health"))
-            assertTrue(lines[1].startsWith("req-out path=/health status=401"))
-        }
-
-    @Test
-    fun realSocketServerStartsAnswersAndStops() {
+    fun authorizedHealthReturnsStatusAndApiVersionOnly() {
         val server = KtorLocalServer(routes = {}, authorizer = allowAll)
         runBlocking {
-            val port = server.start(ServerConfig(port = 0))
-            assertTrue(port > 0)
-            assertEquals(ServerState.Running(port), server.state.value)
+            val port = server.start(ServerConfig(subnet = localSubnet))
+            val response = RawHttp.get(port, "/health", hostHeader(port), bearer())
 
-            assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, httpStatus("http://127.0.0.1:$port/health", null))
-            val allowed = httpStatus("http://127.0.0.1:$port/health", "Bearer testtoken-0123456789")
-            assertEquals(HttpURLConnection.HTTP_OK, allowed)
+            assertEquals(200, response.status)
+            assertEquals("""{"status":"ok","apiVersion":$SERVER_API_VERSION}""", response.body)
+            assertEquals("nosniff", response.headers["x-content-type-options"])
+            assertEquals("no-store", response.headers["cache-control"])
+            assertNull(response.headers["access-control-allow-origin"])
+            server.stop()
+        }
+    }
+
+    @Test
+    fun foreignHostHeaderIsForbiddenEvenWithValidAuthorization() {
+        val server = KtorLocalServer(routes = {}, authorizer = allowAll)
+        runBlocking {
+            val port = server.start(ServerConfig(subnet = localSubnet))
+
+            val response = RawHttp.get(port, "/health", "Host" to "evil.example:$port", bearer())
+
+            assertEquals(403, response.status)
+            assertEquals("""{"error":"forbidden_host"}""", response.body)
+            server.stop()
+        }
+    }
+
+    @Test
+    fun hostWithoutPortIsForbidden() {
+        val server = KtorLocalServer(routes = {}, authorizer = allowAll)
+        runBlocking {
+            val port = server.start(ServerConfig(subnet = localSubnet))
+
+            assertEquals(403, RawHttp.get(port, "/health", "Host" to "127.0.0.1", bearer()).status)
+            server.stop()
+        }
+    }
+
+    @Test
+    fun multipleAuthorizationHeadersAreRejectedEvenIfTheFirstIsValid() {
+        val server = KtorLocalServer(routes = {}, authorizer = allowAll)
+        runBlocking {
+            val port = server.start(ServerConfig(subnet = localSubnet))
+
+            val response =
+                RawHttp.get(port, "/health", hostHeader(port), bearer(), "Authorization" to "Bearer falsch")
+
+            assertEquals(401, response.status)
+            server.stop()
+        }
+    }
+
+    @Test
+    fun startTwiceIsRejectedAndStopFreesTheState() {
+        val server = KtorLocalServer(routes = {})
+        runBlocking {
+            val port = server.start(ServerConfig(subnet = localSubnet))
+            assertTrue(runCatching { server.start(ServerConfig(subnet = localSubnet)) }.isFailure)
+            assertEquals(ServerState.Running(port), server.state.value)
 
             server.stop()
             assertEquals(ServerState.Stopped, server.state.value)
-            // Ein zweiter Stopp ist harmlos.
-            server.stop()
         }
     }
 
     @Test
-    fun defaultAuthorizerDeniesEverythingOnSocket() {
+    fun requestLogNamesRouteTemplatesAndNeverTheToken() {
+        val lines = mutableListOf<String>()
+        val server = KtorLocalServer(routes = {}, authorizer = allowAll, requestLog = { lines += it })
+        runBlocking {
+            val port = server.start(ServerConfig(subnet = localSubnet))
+            RawHttp.get(port, "/health", hostHeader(port), bearer())
+            server.stop()
+        }
+
+        assertTrue(lines.any { it.contains("route=/health") && it.contains("status=200") })
+        assertFalse(lines.any { it.contains(token) })
+    }
+
+    @Test
+    fun headerLineOverTheCioLimitIsRejectedWith400() {
         val server = KtorLocalServer(routes = {})
         runBlocking {
-            val port = server.start(ServerConfig())
-            assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, httpStatus("http://127.0.0.1:$port/health", null))
-            assertEquals(
-                HttpURLConnection.HTTP_UNAUTHORIZED,
-                httpStatus("http://127.0.0.1:$port/health", "Bearer irgendetwas-anderes"),
-            )
+            val port = server.start(ServerConfig(subnet = localSubnet))
+
+            val response = RawHttp.get(port, "/health", hostHeader(port), "X-Lang" to "a".repeat(8_201))
+
+            assertEquals(400, response.status)
             server.stop()
         }
     }
 
+    /**
+     * Dokumentiertes Restrisiko (ADR 0013, Entscheidung 1): CIO begrenzt die Gesamtgröße der Header nicht. Der Test
+     * hält das Verhalten fest. Es gibt keine Abwehr, sondern nur die Zugriffsprüfung danach.
+     */
     @Test
-    fun secondStartWhileRunningIsRejected() {
+    fun totalHeaderSizeIsNotLimitedByCioDocumentedRisk() {
         val server = KtorLocalServer(routes = {})
         runBlocking {
-            server.start(ServerConfig())
-            val failure = runCatching { server.start(ServerConfig()) }.exceptionOrNull()
-            assertTrue(failure is IllegalStateException)
+            val port = server.start(ServerConfig(subnet = localSubnet))
+            val headers = (1..1_000).map { "X-Pad-$it" to "b".repeat(1_000) }
+
+            val response = RawHttp.get(port, "/health", hostHeader(port), *headers.toTypedArray())
+
+            assertEquals("Die Anfrage erreicht die Zugriffsprüfung, nicht den Header-Filter", 401, response.status)
             server.stop()
         }
     }
 
+    /** Leerlauf-Timeout der Verbindung (ADR 0013). Ein stummer Client wird geschlossen. Das dauert echte 15 Sekunden. */
     @Test
-    fun portOutOfRangeIsRejected() {
-        assertTrue(runCatching { ServerConfig(port = 65536) }.isFailure)
-        assertTrue(runCatching { ServerConfig(port = -1) }.isFailure)
-        assertEquals(0, ServerConfig().port)
-    }
+    fun silentConnectionIsClosedByIdleTimeout() {
+        val server = KtorLocalServer(routes = {})
+        runBlocking {
+            val port = server.start(ServerConfig(subnet = localSubnet))
+            val started = System.nanoTime()
 
-    private fun httpStatus(
-        url: String,
-        authorization: String?,
-    ): Int {
-        val connection = URI(url).toURL().openConnection() as HttpURLConnection
-        connection.connectTimeout = TIMEOUT_MS
-        connection.readTimeout = TIMEOUT_MS
-        if (authorization != null) connection.setRequestProperty(HttpHeaders.Authorization, authorization)
-        return try {
-            connection.responseCode
-        } finally {
-            connection.disconnect()
+            val closedByServer =
+                java.net.Socket("127.0.0.1", port).use { socket ->
+                    socket.soTimeout = 30_000
+                    runCatching { socket.getInputStream().read() }.getOrDefault(-1) == -1
+                }
+            val seconds = (System.nanoTime() - started) / 1_000_000_000L
+
+            assertTrue("Server schließt nicht, Dauer $seconds s", closedByServer)
+            assertTrue("Schluss erst nach $seconds s", seconds in 10..25)
+            server.stop()
         }
-    }
-
-    private companion object {
-        const val TIMEOUT_MS = 5_000
     }
 }

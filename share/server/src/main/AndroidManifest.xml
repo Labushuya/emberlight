@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Ab targetSdk 37 ist lokaler Netzwerkzugriff eine Laufzeit-Berechtigung. Die Anfrage kommt mit der Oberfläche (Paket 3.3). -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!-- Die WLAN-Adresse liest der Server über ConnectivityManager (ADR 0013). Sie fehlt im Manifest von share:server
+         bisher und ist für registerNetworkCallback Pflicht (Android-API-Fakten, Nr. 1). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <!-- connectedDevice verlangt mindestens eine dieser Berechtigungen. Gewählt: CHANGE_NETWORK_STATE (normal, ADR 0012). -->

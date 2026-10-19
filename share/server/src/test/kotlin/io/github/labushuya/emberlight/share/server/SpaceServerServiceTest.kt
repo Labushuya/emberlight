@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.filterNotNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,6 +37,10 @@ class SpaceServerServiceTest {
     private lateinit var wifi: FakeServerLock
 
     private val originalServerFactory = SpaceServerService.serverFactory
+    private val originalSetupProvider = SpaceServerService.serverSetupProvider
+    private val fakeNetwork = FakeWifiNetworkProvider { currentWifi }
+    private val originalNetworkFactory = SpaceServerService.networkFactory
+    private var currentWifi: WifiAddress? = WifiAddress("127.0.0.1", 8)
     private val originalLocksFactory = SpaceServerService.locksFactory
     private val originalForegroundStarter = SpaceServerService.foregroundStarter
 
@@ -44,7 +49,9 @@ class SpaceServerServiceTest {
         server = FakeLocalServer()
         cpu = FakeServerLock()
         wifi = FakeServerLock()
-        SpaceServerService.serverFactory = { server }
+        SpaceServerService.serverFactory = { _, _ -> server }
+        SpaceServerService.serverSetupProvider = { testSetup() }
+        SpaceServerService.networkFactory = { fakeNetwork }
         SpaceServerService.locksFactory = { ServerLocks(cpu, wifi) }
     }
 
@@ -53,6 +60,8 @@ class SpaceServerServiceTest {
         controller?.let { runCatching { it.destroy() } }
         controller = null
         SpaceServerService.serverFactory = originalServerFactory
+        SpaceServerService.serverSetupProvider = originalSetupProvider
+        SpaceServerService.networkFactory = originalNetworkFactory
         SpaceServerService.locksFactory = originalLocksFactory
         SpaceServerService.foregroundStarter = originalForegroundStarter
     }
@@ -230,6 +239,56 @@ class SpaceServerServiceTest {
         assertEquals(0, wifi.acquires)
     }
 
+    @Test
+    fun withoutSetupTheServiceDoesNotStart() {
+        grantLocalNetwork()
+        SpaceServerService.serverSetupProvider = { null }
+        val service = createService(SpaceServerService.startIntent(context, port = 0))
+
+        service.startCommand(0, 1)
+
+        assertTrue(awaitStoppedBySelf(service))
+        assertEquals(0, server.starts)
+        assertFalse(cpu.isHeld)
+    }
+
+    @Test
+    fun withoutWifiAddressTheServiceDoesNotStart() {
+        grantLocalNetwork()
+        currentWifi = null
+        val service = createService(SpaceServerService.startIntent(context, port = 0))
+
+        service.startCommand(0, 1)
+
+        assertTrue(awaitStoppedBySelf(service))
+        assertEquals(0, server.starts)
+        assertFalse(wifi.isHeld)
+    }
+
+    @Test
+    fun wifiAddressChangeStopsTheServerAndReleasesLocks() {
+        grantLocalNetwork()
+        val service = createService(SpaceServerService.startIntent(context, port = 0))
+        service.startCommand(0, 1)
+        assertTrue(awaitTrue { server.starts == 1 && cpu.isHeld && wifi.isHeld })
+
+        fakeNetwork.emit(WifiAddress("192.168.1.77", 24))
+
+        assertTrue(awaitTrue { server.stops >= 1 && !cpu.isHeld && !wifi.isHeld })
+    }
+
+    @Test
+    fun lostWifiStopsTheServer() {
+        grantLocalNetwork()
+        val service = createService(SpaceServerService.startIntent(context, port = 0))
+        service.startCommand(0, 1)
+        assertTrue(awaitTrue { server.starts == 1 && cpu.isHeld })
+
+        fakeNetwork.emit(null)
+
+        assertTrue(awaitTrue { server.stops >= 1 && !cpu.isHeld })
+    }
+
     private fun grantLocalNetwork() {
         shadowOf(context.applicationContext as Application).grantPermissions(LOCAL_NETWORK_PERMISSION)
     }
@@ -265,3 +324,51 @@ class SpaceServerServiceTest {
         const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
     }
 }
+
+/** Test-WLAN: liefert den aktuellen Stand und löst Wechsel über [changes] aus. */
+internal class FakeWifiNetworkProvider(
+    private val current: () -> WifiAddress?,
+) : WifiNetworkProvider {
+    /** StateFlow, damit ein Wechsel auch dann ankommt, wenn der Beobachter erst kurz danach abonniert. */
+    private val updates = kotlinx.coroutines.flow.MutableStateFlow<Update?>(null)
+
+    override fun currentAddress(): WifiAddress? = current()
+
+    /** Erster Wert ist der Stand beim Abonnieren, danach der letzte und jeder weitere gemeldete Wechsel. */
+    override fun changes(): kotlinx.coroutines.flow.Flow<WifiAddress?> =
+        kotlinx.coroutines.flow.flow {
+            emit(current())
+            updates.filterNotNull().collect { emit(it.address) }
+        }
+
+    /** Simuliert einen Wechsel der Adresse oder den Verlust des WLAN. */
+    fun emit(address: WifiAddress?) {
+        updates.value = Update(address)
+    }
+
+    private class Update(
+        val address: WifiAddress?,
+    )
+}
+
+/** Einrichtung für die Service-Tests: ein Space mit einem Gastgeber. */
+internal fun testSetup(): ServerSetup =
+    ServerSetup(
+        spaceId =
+            io.github.labushuya.emberlight.share.space.SpaceId
+                .generate(),
+        spaceName = "Test",
+        participants =
+            listOf(
+                ParticipantSeed(
+                    principal =
+                        io.github.labushuya.emberlight.share.space.Principal(
+                            io.github.labushuya.emberlight.share.space.ParticipantId
+                                .generate(),
+                            io.github.labushuya.emberlight.share.space.Role.HOST,
+                        ),
+                    displayName = "Gastgeberin",
+                    tokenSha256Hex = "0".repeat(64),
+                ),
+            ),
+    )

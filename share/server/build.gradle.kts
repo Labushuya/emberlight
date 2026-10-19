@@ -1,6 +1,7 @@
 plugins {
     id("emberlight.android.library")
     id("emberlight.server.isolation")
+    id("emberlight.serialization")
 }
 
 android {
@@ -11,7 +12,9 @@ android {
 }
 
 dependencies {
-    // Eingebetteter Server (ADR 0012). Nur CIO, keine weiteren Engines. partial-content für Range-Antworten.
+    // Space-Domäne und Speicher (ADR 0014). Der Server ruft nur deren öffentliche Typen auf.
+    implementation(project(":share:space"))
+    // Eingebetteter Server (ADR 0012, ADR 0013). Nur CIO, keine weiteren Engines. partial-content für Range-Antworten.
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.partial.content)
