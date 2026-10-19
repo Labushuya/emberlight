@@ -125,6 +125,19 @@ class SpaceVaultTest {
         assertTrue(storedFiles().isEmpty())
     }
 
+    /** Ein großer Körper ohne erlaubte Signatur wird nach dem Kopf abgelehnt. Mehr als [ContentInspector.HEAD_BYTES] liest der Vault nicht. */
+    @Test
+    fun bodyWithoutAllowedSignatureIsRejectedAfterTheHeadOnly() {
+        val vault = vault()
+        val source = CountingSource(BytesSource(ByteArray(2_000_000) { 0x55 }, chunk = 64 * 1024))
+
+        val result = runBlocking { vault.ingest(guest, "rauschen.bin", null, source) }
+
+        assertEquals(IngestResult.Rejected(RejectReason.UnsupportedType), result)
+        assertTrue("gelesen: ${source.bytesRead}", source.bytesRead <= ContentInspector.HEAD_BYTES)
+        assertTrue(storedFiles().isEmpty())
+    }
+
     @Test
     fun polyglotPngWithAppendedHtmlIsStoredAsPng() {
         val vault = vault()

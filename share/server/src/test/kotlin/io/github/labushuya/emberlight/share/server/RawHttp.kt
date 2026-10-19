@@ -1,6 +1,10 @@
 package io.github.labushuya.emberlight.share.server
 
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.net.Socket
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /** Antwort einer rohen HTTP-Anfrage. Header in Kleinbuchstaben. */
 internal class RawResponse(
@@ -70,6 +74,57 @@ internal object RawHttp {
         }
     }
 
+    /**
+     * Sendet Kopf und Körper und liest die Antwort gleichzeitig, wie ein Browser oder curl. Der Server darf vor dem Ende des
+     * Körpers antworten und die Verbindung schließen. Dann schlägt das Schreiben fehl, das ist hier erwartet. Liefert die
+     * Antwort (`null`, wenn keine ankam) und die Zahl der Körperbytes, die in den Socket geschrieben wurden.
+     *
+     * Die Antwort wird nebenläufig gelesen. Ein Lesen erst nach dem Schreiben verliert die Antwort: Schließt der Server
+     * mit ungelesenen Bytes im Puffer, sendet er RST, und Windows verwirft den bereits empfangenen Rest.
+     */
+    fun sendBodyAnsweringEarly(
+        port: Int,
+        head: ByteArray,
+        bodySize: Long,
+    ): Pair<RawResponse?, Long> =
+        Socket("127.0.0.1", port).use { socket ->
+            socket.soTimeout = TIMEOUT_MS
+            val reply = CompletableFuture.supplyAsync { readReply(socket) }
+            var sent = 0L
+            try {
+                val out = socket.getOutputStream()
+                out.write(head)
+                val chunk = ByteArray(CHUNK_BYTES) { 0x55 }
+                while (sent < bodySize) {
+                    val count = minOf(CHUNK_BYTES.toLong(), bodySize - sent).toInt()
+                    out.write(chunk, 0, count)
+                    sent += count.toLong()
+                }
+                out.flush()
+            } catch (_: IOException) {
+                // Der Server hat die Verbindung geschlossen. Das ist der erwartete Fall.
+            }
+            val raw = reply.get(TIMEOUT_MS.toLong() + 5_000L, TimeUnit.MILLISECONDS)
+            (if (raw.isEmpty()) null else parse(raw)) to sent
+        }
+
+    /** Liest, bis der Server schließt oder zurücksetzt. Was bis dahin ankam, bleibt erhalten. */
+    private fun readReply(socket: Socket): ByteArray {
+        val collected = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        try {
+            val input = socket.getInputStream()
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                collected.write(buffer, 0, count)
+            }
+        } catch (_: IOException) {
+            // Zurückgesetzt oder Zeitüberschreitung. Die bis dahin empfangene Antwort zählt.
+        }
+        return collected.toByteArray()
+    }
+
     private fun parse(raw: ByteArray): RawResponse {
         val text = String(raw, Charsets.ISO_8859_1)
         val split = text.indexOf("\r\n\r\n")
@@ -93,4 +148,5 @@ internal object RawHttp {
     }
 
     private const val TIMEOUT_MS = 10_000
+    private const val CHUNK_BYTES = 16 * 1024
 }

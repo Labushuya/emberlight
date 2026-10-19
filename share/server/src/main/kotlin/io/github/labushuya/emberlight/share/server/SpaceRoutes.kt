@@ -20,6 +20,7 @@ import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -101,7 +102,7 @@ fun spaceRoutes(
                 val principal = call.principal()
                 if (!gates.tryEnterUpload(principal.participantId)) {
                     call.response.header(HttpHeaders.RetryAfter, RETRY_AFTER_SECONDS)
-                    call.respondError(HttpStatusCode.TooManyRequests, "too_many_uploads")
+                    call.refuseUpload(HttpStatusCode.TooManyRequests, "too_many_uploads")
                     return@post
                 }
                 try {
@@ -148,12 +149,12 @@ private suspend fun handleUpload(
     tuning: UploadTuning,
 ) {
     if (call.request.contentType().withoutParameters() != ContentType.Application.OctetStream) {
-        call.respondError(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
+        call.refuseUpload(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
         return
     }
     val name = UploadFilenameHeader.decode(call.request.headers[UploadFilenameHeader.NAME])
     if (name == null) {
-        call.respondError(HttpStatusCode.BadRequest, "bad_filename")
+        call.refuseUpload(HttpStatusCode.BadRequest, "bad_filename")
         return
     }
     val rawLength = call.request.headers[HttpHeaders.ContentLength]
@@ -162,7 +163,7 @@ private suspend fun handleUpload(
             null
         } else {
             rawLength.toLongOrNull()?.takeIf { it >= 0 } ?: run {
-                call.respondError(HttpStatusCode.BadRequest, "bad_request")
+                call.refuseUpload(HttpStatusCode.BadRequest, "bad_request")
                 return
             }
         }
@@ -171,14 +172,14 @@ private suspend fun handleUpload(
         try {
             vault.ingest(call.principal(), name, declared, source)
         } catch (abort: TransferAbortedException) {
-            call.respondError(
+            call.refuseUpload(
                 HttpStatusCode.RequestTimeout,
                 "request_timeout",
                 mapOf("reason" to JsonPrimitive(abort.violation.wireName)),
             )
             return
         } catch (incomplete: IncompleteBodyException) {
-            call.respondError(HttpStatusCode.BadRequest, "incomplete_body")
+            call.refuseUpload(HttpStatusCode.BadRequest, "incomplete_body")
             return
         }
     when (result) {
@@ -211,11 +212,11 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondUploaded(
 private suspend fun io.ktor.server.application.ApplicationCall.respondRejected(reason: RejectReason) {
     when (reason) {
         RejectReason.UnsupportedType -> {
-            respondError(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
+            refuseUpload(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
         }
 
         is RejectReason.TooLarge -> {
-            respondError(
+            refuseUpload(
                 HttpStatusCode.PayloadTooLarge,
                 "payload_too_large",
                 mapOf("limit" to JsonPrimitive(reason.limitBytes)),
@@ -223,13 +224,33 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondRejected(r
         }
 
         RejectReason.StorageFull -> {
-            respondError(HttpStatusCode.InsufficientStorage, "storage_full")
+            refuseUpload(HttpStatusCode.InsufficientStorage, "storage_full")
         }
 
         RejectReason.DeviceStorageLow -> {
-            respondError(HttpStatusCode.InsufficientStorage, "device_storage_low")
+            refuseUpload(HttpStatusCode.InsufficientStorage, "device_storage_low")
         }
     }
+}
+
+/** Frist in Millisekunden, in der ein abgelehnter Upload-Körper noch fließt, damit der Client die Antwort lesen kann. */
+private const val REFUSED_BODY_LINGER_MS = 200L
+
+/**
+ * Antwort auf einen abgelehnten Upload, bevor der Körper ganz gelesen ist (ADR 0014, Umsetzung 3.1a). Die Verbindung schließt
+ * mit `Connection: close`. Der Körper wird danach abgebrochen, sonst liest CIO ihn vollständig vom Socket.
+ */
+private suspend fun io.ktor.server.application.ApplicationCall.refuseUpload(
+    status: HttpStatusCode,
+    code: String,
+    extra: Map<String, JsonElement> = emptyMap(),
+) {
+    response.headers.append(HttpHeaders.Connection, "close")
+    respondError(status, code, extra)
+    // Dem Client Zeit für die Antwort lassen. Danach den Körper abbrechen: CIO kopiert ihn sonst ganz vom Socket. Schließt
+    // der Server mit ungelesenen Bytes, sendet er RST, und die Antwort geht verloren (Windows).
+    delay(REFUSED_BODY_LINGER_MS)
+    request.receiveChannel().cancel(null)
 }
 
 private fun listItemJson(entry: MediaListEntry): JsonElement =

@@ -77,6 +77,24 @@ internal class BytesSource(
     }
 }
 
+/** Zählt die Bytes, die der Vault aus der Quelle tatsächlich liest. */
+internal class CountingSource(
+    private val inner: ChunkSource,
+) : ChunkSource {
+    var bytesRead = 0L
+        private set
+
+    override suspend fun read(
+        buffer: ByteArray,
+        offset: Int,
+        length: Int,
+    ): Int {
+        val count = inner.read(buffer, offset, length)
+        if (count > 0) bytesRead += count
+        return count
+    }
+}
+
 /** Quelle, die nach [failAfter] Bytes abbricht, wie eine unterbrochene Verbindung. */
 internal class BrokenSource(
     private val inner: ChunkSource,

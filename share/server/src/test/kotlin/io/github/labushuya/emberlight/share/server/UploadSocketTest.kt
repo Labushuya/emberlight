@@ -145,6 +145,35 @@ class UploadSocketTest {
     }
 
     /**
+     * Großer Körper ohne erlaubte Signatur: `415` kommt nach dem Kopf, nicht nach dem Körper. Die Antwort trägt
+     * `Connection: close`, danach ist die Verbindung zu, und eine neue Anfrage funktioniert.
+     */
+    @Test
+    fun unsignedLargeBodyIsRefusedEarlyWithConnectionCloseAndServerStaysUsable() {
+        val bodySize = 256L * 1024 * 1024
+        val head =
+            RawHttp.request(
+                "POST",
+                "/api/v1/media",
+                headers("Content-Length" to bodySize.toString()),
+            )
+
+        val started = System.nanoTime()
+        val (response, sent) = RawHttp.sendBodyAnsweringEarly(port, head, bodySize)
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+
+        assertEquals("Antwort ausgeblieben nach $elapsedMs ms", 415, response?.status)
+        assertEquals("close", response?.headers?.get("connection"))
+        assertTrue("Körper vollständig gesendet: $sent von $bodySize", sent < bodySize)
+        assertTrue("Dauer $elapsedMs ms", elapsedMs < 5_000)
+        assertEquals(0, storedFiles())
+
+        val health =
+            RawHttp.get(port, "/health", "Host" to "127.0.0.1:$port", "Authorization" to "Bearer $token")
+        assertEquals(200, health.status)
+    }
+
+    /**
      * Content-Length kleiner als der gesendete Körper: Der Server liest genau Content-Length Bytes (HTTP-Rahmung, CIO).
      * Die Datei hat deshalb die angekündigte Länge und nie mehr. Die Grenze in Bytes greift zusätzlich beim Zählen.
      */

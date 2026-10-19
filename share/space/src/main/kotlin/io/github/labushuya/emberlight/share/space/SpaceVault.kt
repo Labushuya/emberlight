@@ -315,7 +315,8 @@ class SpaceVault internal constructor(
     ): Int {
         var filled = 0
         while (filled < ContentInspector.HEAD_BYTES) {
-            val read = source.read(buffer, filled, buffer.size - filled)
+            // Genau bis zur Kopflänge lesen: Ein unbekanntes Format wird nach diesen Bytes abgelehnt, ohne mehr zu lesen.
+            val read = source.read(buffer, filled, ContentInspector.HEAD_BYTES - filled)
             if (read < 0) break
             filled += read
         }
