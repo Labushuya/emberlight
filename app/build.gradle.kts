@@ -1,6 +1,7 @@
 plugins {
     id("emberlight.android.application")
     id("emberlight.android.application.compose")
+    id("emberlight.release.manifest")
     id("emberlight.hilt")
 }
 
@@ -42,6 +43,8 @@ dependencies {
     implementation(project(":core:media"))
     // Lokaler Server (ADR 0012). Ohne Aufrufer noch ohne Routen. Die Einbindung macht den Release-Build zur Prüfung von R8.
     implementation(project(":share:server"))
+    // Typen des Space für den Debug-Einstieg (src/debug). Die Abhängigkeit von share:server ist nur implementation.
+    implementation(project(":share:space"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
