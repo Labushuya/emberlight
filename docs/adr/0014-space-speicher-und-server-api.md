@@ -254,7 +254,7 @@ Jede Fehlerantwort: `{"error":"<code>"}` plus Felder. Schutzheader auf allen Ant
 - Keine Tabelle `space` in 3.1a. Name und Speicherlimit kommen aus der Einrichtung des Serverlaufs.
 - Upload-Warnung: `warning` ist `"storage_80"` ab 80 % des Speicherlimits, sonst `null`.
 - Liste: `uploader` ist der Anzeigename aus der Teilnehmer-Tabelle, `createdAt` ist Epoch-Millisekunden in UTC.
-- Debug-Einstieg: Start und Stopp per Broadcast-Empfänger statt Aktivität, Tokens in einer Datei unter `files/debug-server/`. Der Empfänger ist im Debug- und im Benchmark-Build exportiert und mit `android.permission.DUMP` geschützt (nur Shell und System). Er liegt im Source-Set `app/src/devtools`, das `debug` und `benchmark` gemeinsam einbinden. Beschreibung in `docs/DEBUG-SERVER.md`.
+- Debug-Einstieg: Start und Stopp per Broadcast-Empfänger statt Aktivität. Die Tokens kommen vom PC als Broadcast-Extras (`host_token`, optional `guest_token`); die App erzeugt und speichert keine Klartext-Tokens mehr (Nachtrag 19.10.2026, weil `run-as` im Benchmark-Build nicht greift). Der Empfänger ist im Debug- und im Benchmark-Build exportiert und mit `android.permission.DUMP` geschützt (nur Shell und System). Er liegt im Source-Set `app/src/devtools`, das `debug` und `benchmark` gemeinsam einbinden. Beschreibung in `docs/DEBUG-SERVER.md`.
 - R8-Abdeckung des Servers (19.10.2026): Sie erfolgt über den benchmark-Build mit Debug-Einstieg. Der Release-Build enthält bis Paket 3.3 keinen Einstieg, dort entfernt R8 den Serverpfad. Die Keep-Regeln für `KtorLocalServer` und `SpaceServerService.Companion` sind entfernt. Die `-dontwarn`-Zeilen bleiben.
 
 ### Offen
