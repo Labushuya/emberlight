@@ -145,9 +145,12 @@ Details und Messwerte stehen in den ADRs 0006 bis 0011.
 
 ## Nachträge aus Meilenstein 3
 
-- **Voreinstellungen beim Anlegen** (Paket 3.2, [ADR 0016](adr/0016-space-verwaltung.md)): Farbe die erste der acht Akzentfarben, Laufzeit 1 Tag, Nachhaltefrist 1 Woche, Speicherlimit 4 GiB. Der Name ist Pflicht. Laufzeiten: 2 h, 6 h, 12 h, 1 Tag, 3 Tage, 1 Woche, Eigenes Ende (nur in der Zukunft, höchstens 30 Tage). Nachhaltefrist: Sofort löschen, 1 Tag, 1 Woche, Eigene (1 bis 90 Tage). Speicherlimit: 1, 2, 4, 8, 16 GiB, Eigenes (0,5 bis 64 GiB). Warnung, wenn das Limit den freien Speicher minus 2 GiB übersteigt.
+- **Voreinstellungen beim Anlegen** (Paket 3.2, [ADR 0016](adr/0016-space-verwaltung.md)): Farbe die erste der acht Akzentfarben, Laufzeit 1 Tag, Nachhaltefrist 1 Woche, Speicherlimit 4 GiB. Der Name ist Pflicht. Laufzeiten: 2 h, 6 h, 12 h, 1 Tag, 3 Tage, 1 Woche, Eigenes Ende (nur in der Zukunft, höchstens 30 Tage). Nachhaltefrist: Sofort löschen, 1 Tag, 1 Woche, Eigene (1 bis 90 Tage). Speicherlimit: 1, 2, 4, 8, 16 GiB, Eigenes (0,5 bis 64 GiB). Die Obergrenze auf dem Gerät gilt seit dem 20.10.2026 als harte Grenze, siehe Nachtrag unten.
 - **Titelbild** über die System-Fotoauswahl. Das Bild wird in den Space-Speicher kopiert, mit Standort-Entfernung. Ein Bild, bei dem sich der Standort nicht entfernen lässt, wird abgewiesen. Es gibt keine Einwilligung für das Titelbild.
 - **Laufzeit als Regel**: Eine Dauer bleibt Dauer, bis der Space in Paket 3.3 startet. Ein festes Ende ist ein Zeitpunkt.
+- **Begriff „Aufbewahrung nach dem Ende“** (Nachtrag vom 20.10.2026): In der Oberfläche heißt die Nachhaltefrist jetzt „Aufbewahrung nach dem Ende“ (en: „Keep after the end“). Darunter steht: „Nach dem Ende bleiben die Medien nur bei dir in der App. Du wählst aus, was in deine Galerie soll; danach wird automatisch gelöscht.“ Der Begriff „Nachhaltefrist“ in diesem Konzept bleibt die fachliche Bezeichnung, interne Bezeichner ebenso.
+- **Harte Obergrenze des Speicherlimits** (Nachtrag vom 20.10.2026): Die Obergrenze ist der freie Speicher des Geräts minus 2 GiB Puffer, abgerundet auf halbe GiB. Voreinstellungen darüber sind ausgegraut und mit dem Hinweis „Nicht genug freier Speicher, max. X GiB“ versehen. Ein eigener Wert darüber ist ein Fehler und sperrt das Speichern. Ist die Obergrenze kleiner als 0,5 GiB, lässt sich kein Space anlegen, das Formular erklärt den Grund. Die Prüfung wiederholt sich beim Speichern. Das Limit ist keine Reservierung von Speicher. Die Prüfung beim Start folgt in Paket 3.3.
+- **Namensvorschläge** (Nachtrag vom 20.10.2026): Ein Würfel neben dem Namensfeld schlägt einen Namen aus Adjektiv und Substantiv vor, etwa „Tanzende Waschbären“ oder „Dancing Raccoons“. Die Wortlisten sind je Sprache hinterlegt. Ist das Feld leer, übernimmt der Würfel den Vorschlag sofort. Steht ein eigener Name darin, fragt die App vorher nach. Der Vorschlag bleibt editierbar.
 
 ## Offene Punkte
 
@@ -162,3 +165,5 @@ Details und Messwerte stehen in den ADRs 0006 bis 0011.
 17.10.2026: Fragen F–K entschieden. Nachhalten nur beim Gastgeber, Löschung auch ohne Reaktion, Erinnerung als Benachrichtigung mit Aktionen, GPS-Daten beim Upload standardmäßig entfernt, eigenes WLAN der App in fremden Netzen, Zurückziehen eigener Uploads und Entfernen durch den Gastgeber.
 
 18.10.2026: Paket 3.0 abgeschlossen (Server-Basis, Foreground-Service, ADR 0012). Auf einem Honor-Gerät blieben mit Akku-Ausnahme allein die Anfragen im Akkubetrieb aus, mit zusätzlicher Hintergrund-Freigabe kamen sie durch (Beobachtung auf einem Gerät, eingetragen im Abschnitt Spaces, Betrieb).
+
+20.10.2026: Entscheidungen der Nutzerin bzw. des Nutzers zu Paket 3.2 umgesetzt: Namensvorschläge, harte Obergrenze des Speicherlimits, Begriff „Aufbewahrung nach dem Ende“, Datum und Uhrzeit über Auswahldialoge. Die Designentscheidungen (a) bis (f) sind in [docs/mockups/README.md](mockups/README.md) festgehalten.
