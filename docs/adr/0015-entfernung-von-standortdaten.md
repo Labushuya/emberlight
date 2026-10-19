@@ -1,6 +1,6 @@
 # ADR 0015: Entfernung von Standortdaten (Meilenstein 3, Paket 3.1b)
 
-Status: Entwurf, Umsetzung in Paket 3.1b (19.10.2026). Wird nach grüner CI auf „Angenommen, <Datum>“ gesetzt.
+Status: Angenommen, 19.10.2026. Umsetzung in Paket 3.1b. Die Festlegungen 1 bis 9 gelten, die Abweichungen stehen unten.
 
 Die Festlegungen 1 bis 3 und die Reihenfolge der Prüfungen stammen aus der Nutzerentscheidung vom 19.10.2026. Die Fundorte stammen aus der Recherche vom selben Tag. Was in dieser Umsetzung nicht erreicht wurde, steht unter „Abweichungen und offene Punkte“.
 
@@ -96,7 +96,7 @@ Die Tests prüfen mit ExifInterface (`getLatLong()`, Robolectric) und metadata-e
 - **Eigener Detektor**: derselbe Walker läuft ohne Änderung erneut. Das deckt Strukturfehler nicht auf, die der Walker selbst übersieht. Dafür ist der Byte-Scan da.
 - **Byte-Scan**: streamend über die ganze Datei, 64-KiB-Fenster mit 256 Bytes Überlappung. Das Lesen ist teuer bei großen Videos. Es ist bewusst Teil der Prüfung.
 - **Unabhängige Leser**: ExifInterface und metadata-extractor in den JVM-Tests (`LocationScrubberTest`).
-- **ExifTool und ffmpeg** (`ExternalToolCrossCheckTest`): nur in der CI. Der Runner installiert beide per apt, lokal fehlen sie und der Test wird übersprungen. Mit `CI=true` schlägt der Test bei fehlenden Werkzeugen fehl. Er erzeugt ein MP4 mit ffmpeg (`-metadata location=…`, `com.apple.quicktime.location.ISO6709`), prüft mit ExifTool, dass Standort drin ist, bereinigt und prüft erneut mit ExifTool.
+- **ExifTool und ffmpeg** (`ExternalToolCrossCheckTest`): nur in der CI. Der Runner installiert beide per apt, lokal fehlen sie und der Test wird übersprungen. Mit `CI=true` schlägt der Test bei fehlenden Werkzeugen fehl. Er erzeugt ein MP4 mit ffmpeg (`-metadata location=…`, `com.apple.quicktime.location.ISO6709`), prüft mit ExifTool, dass Standort drin ist, bereinigt und prüft erneut mit ExifTool. Ein geleertes `loci` zeigt ExifTool als „Lat=0 Lon=0“. Nullkoordinaten sind das vorgeschriebene Ergebnis (0x00) und zählen nicht als Standort. Die CI-Gegenprobe fand dabei einen echten Fehler: Ein Standort-Wert unter einem Key ohne Apple-Präfix blieb stehen. Der Scrubber überschreibt seither jeden Key mit „location“ im Namen und jedes Item mit Standort-Text.
 - **Robustheit**: abgeschnittene und zufällig veränderte Eingaben (fest seeded) dürfen nie Standort durchlassen und nie eine Ausnahme aus dem Scrubber werfen. Unerwartete Laufzeitfehler im Walker gelten als `structure`.
 
 ## Restrisiken
