@@ -4,6 +4,7 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -64,6 +65,12 @@ class SpaceVaultTest {
     ): SpaceVault = SpaceVault(database, SpaceStorage(spacesDir, space), limits, probe) { clock++ }
 
     private fun storedFiles(): List<String> = File(spacesDir, space.value).listFiles()?.map { it.name }.orEmpty()
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        java.security.MessageDigest
+            .getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString("") { "%02x".format(it) }
 
     private fun ingest(
         vault: SpaceVault,
@@ -138,13 +145,58 @@ class SpaceVaultTest {
         assertTrue(storedFiles().isEmpty())
     }
 
+    /**
+     * Ein Anhängsel hinter IEND wird abgeschnitten (ADR 0015, Anhänge). Das PNG-Gerüst bleibt, der Rest (hier HTML)
+     * verschwindet. Die Datei gilt als bereinigt, also ohne Standort-Markierung und ohne Einwilligung.
+     */
     @Test
-    fun polyglotPngWithAppendedHtmlIsStoredAsPng() {
+    fun polyglotPngWithAppendedHtmlIsStoredWithoutTheTail() {
         val vault = vault()
+        val clean = MediaFixtures.png()
 
         val record = createdRecord(ingest(vault, guest, MediaFixtures.png(MediaFixtures.ascii("<html></html>"))))
 
         assertEquals("image/png", record.mime)
+        assertEquals(false, record.locationKept)
+        assertEquals(clean.size.toLong(), record.sizeBytes)
+        assertArrayEquals(clean, File(spacesDir, "${space.value}/${record.sha256}").readBytes())
+        assertEquals(listOf(record.sha256), storedFiles())
+        assertEquals(sha256Hex(clean), record.sha256)
+    }
+
+    /**
+     * Die Einwilligung ändert hier nichts: Das Abschneiden gelingt, also gibt es nichts, was man behalten müsste. Die
+     * Datei ist identisch zu der ohne Einwilligung (ADR 0015, Einwilligung).
+     */
+    @Test
+    fun polyglotPngWithConsentIsCutTheSameWay() {
+        val vault = vault()
+        val bytes = MediaFixtures.png(MediaFixtures.ascii("<html></html>"))
+
+        val record = createdRecord(runBlocking { vault.ingest(guest, "polyglot.png", null, BytesSource(bytes), true) })
+
+        assertEquals("image/png", record.mime)
+        assertEquals(false, record.locationKept)
+        assertEquals(MediaFixtures.png().size.toLong(), record.sizeBytes)
+        assertEquals(listOf(record.sha256), storedFiles())
+    }
+
+    /**
+     * Ein Anhang nach der letzten Box ist kein Strukturfehler mehr (vorher 415). Das Video wird angenommen und ohne den
+     * Anhang gespeichert, also mit der Länge bis zum Ende der Box-Kette (ADR 0015, Anhänge).
+     */
+    @Test
+    fun mp4WithAttachmentAfterTheLastBoxIsStoredWithoutIt() {
+        val vault = vault()
+        val mp4 = MediaFixtures.mp4()
+        val withTail = mp4 + ByteArray(201) { (it * 7 + 3).toByte() }
+
+        val record = createdRecord(ingest(vault, guest, withTail, name = "film.mp4"))
+
+        assertEquals("video/mp4", record.mime)
+        assertEquals(mp4.size.toLong(), record.sizeBytes)
+        assertEquals(sha256Hex(mp4), record.sha256)
+        assertArrayEquals(mp4, File(spacesDir, "${space.value}/${record.sha256}").readBytes())
     }
 
     @Test

@@ -175,7 +175,8 @@ Hinweise:
 
 - Erste Box muss `ftyp` sein (für HEIC, AVIF, MP4, 3GP, MOV mit `ftyp`). Vorschlag. Die Position `ftyp` bei Offset 4 ist durch libmagic belegt. Dass `ftyp` die erste Box sein muss, ist ein Vorschlag, der Spezifikationstext ist nicht abgerufen.
 - Größen aller Top-Level-Boxen plausibel: Größe ≥ 8, Summe ≤ Dateigröße, `size == 1` nur mit 64-Bit-Länge, `size == 0` nur für die letzte Box.
-- Die Kette der Top-Level-Boxen wird bis zum Dateiende durchlaufen. Dabei wird nur gelesen, nichts dekodiert.
+- Die Kette der Top-Level-Boxen wird durchlaufen. Dabei wird nur gelesen, nichts dekodiert.
+- Seit 3.1b (ADR 0015, Abschnitt „Anhänge nach dem Dateiende“): Ein Rest hinter der letzten gültigen Box ist ein Anhang und wird nicht mehr mit 415 abgelehnt. Er wird beim Upload abgeschnitten. Ein Kopf mit bekanntem Top-Level-Typ und kaputter Größe bleibt 415 (beschädigte Kette).
 - Für JPEG: `FF D8 FF` am Anfang reicht für 3.1. Eine Prüfung auf `FF D9` am Ende entfällt. Vermutung: Kameras hängen Daten nach dem Dateiende an, das ist nicht belegt und auch kein Sicherheitsproblem, solange die Auslieferung nach dem erkannten Typ geschieht.
 
 ### Keine Volldekodierung in 3.1
@@ -190,7 +191,7 @@ Der MIME-Typ, den der Server speichert und ausliefert, stammt aus der Erkennung.
 
 ### Polyglot
 
-Eine Datei, die zugleich gültiges Bild und etwas anderes ist, wird als Bild gespeichert. Das ist kein Problem, solange die Auslieferung mit dem erkannten Typ, `nosniff` und `Content-Disposition: attachment` geschieht. Test in 3.1a: Datei mit falscher Endung, Datei mit angehängtem HTML nach gültigem PNG (Ausgabe bleibt `image/png`).
+Eine Datei, die zugleich gültiges Bild und etwas anderes ist, wird als Bild gespeichert. Das ist kein Problem, solange die Auslieferung mit dem erkannten Typ, `nosniff` und `Content-Disposition: attachment` geschieht. Test in 3.1a: Datei mit falscher Endung, Datei mit angehängtem HTML nach gültigem PNG (Ausgabe bleibt `image/png`). Seit 3.1b wird der angehängte Teil beim Upload abgeschnitten (ADR 0015). Die gespeicherte Datei ist dann das reine PNG.
 
 ## Dedupe
 
@@ -256,7 +257,7 @@ Eine Datei, die zugleich gültiges Bild und etwas anderes ist, wird als Bild ges
 
 ## GPS-Entfernung (3.1b, nur Analyse)
 
-Standard nach KONZEPT: GPS-Daten werden beim Upload entfernt. Dieser Abschnitt ist nur Analyse.
+Standard nach KONZEPT: GPS-Daten werden beim Upload entfernt. Dieser Abschnitt ist nur Analyse. Die Umsetzung (Scrubber, Einwilligung, Reason-Codes, Fundorte je Format) steht in [ADR 0015](0015-entfernung-von-standortdaten.md).
 
 ### Was ExifInterface 1.4.2 schreiben kann
 

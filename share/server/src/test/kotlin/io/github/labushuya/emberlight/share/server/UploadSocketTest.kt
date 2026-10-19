@@ -191,7 +191,9 @@ class UploadSocketTest {
                         "POST",
                         "/api/v1/media",
                         headers("Content-Length" to "100"),
-                        MediaFixtures.jpeg(3_000),
+                        // Nebenläufig gelesen (#27). Die ersten 100 Bytes sind ein vollständiges JPEG (3.1b). Ein
+                        // abgeschnittenes wäre zu Recht 422 (Struktur).
+                        MediaFixtures.jpeg(100) + ByteArray(2_900),
                     ),
                 ),
             )
