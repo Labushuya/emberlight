@@ -180,13 +180,17 @@ class LocationScrubberTest {
         assertArrayEquals(original, out)
     }
 
+    /** Anhängsel nach dem EOI wird abgeschnitten, nicht abgelehnt (ADR 0015, Anhänge). Der Standort ist weg. */
     @Test
-    fun junkAfterTheJpegEndIsNotRemovable() {
-        val original = jpeg(app1Exif(exifTiff().bytes)) + "<html>junk</html>".toByteArray()
+    fun junkAfterTheJpegEndIsCutAndTheLocationIsGone() {
+        val clean = jpeg(app1Exif(exifTiff().bytes))
+        val original = clean + "<html>junk</html>".toByteArray()
 
-        val (result, _) = scrub(original, "image/jpeg")
+        val (result, out) = scrub(original, "image/jpeg")
 
-        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.TRAILING_DATA), result)
+        assertCleanResult(result, changed = true)
+        assertEquals("Länge = Hauptbild bis EOI", clean.size, out.size)
+        assertNoLocationLeft(out)
     }
 
     @Test
@@ -446,13 +450,16 @@ class LocationScrubberTest {
         assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.STRUCTURE), result)
     }
 
+    /** Anhängsel nach IEND wird abgeschnitten, das PNG bleibt bis IEND unverändert (ADR 0015, Anhänge). */
     @Test
-    fun pngWithAppendedDataAfterIendIsNotRemovable() {
-        val original = png(pngChunk("tEXt", ascii("Comment\u0000ok"))) + ascii("<script>")
+    fun pngWithAppendedDataAfterIendIsCut() {
+        val clean = png(pngChunk("tEXt", ascii("Comment\u0000ok")))
+        val original = clean + ascii("<script>")
 
-        val (result, _) = scrub(original, "image/png")
+        val (result, out) = scrub(original, "image/png")
 
-        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.TRAILING_DATA), result)
+        assertCleanResult(result, changed = true)
+        assertArrayEquals(clean, out)
     }
 
     @Test

@@ -1,5 +1,8 @@
 package io.github.labushuya.emberlight.share.space.location
 
+import io.github.labushuya.emberlight.share.space.ByteReader
+import io.github.labushuya.emberlight.share.space.ContentInspector
+
 /**
  * ISO-BMFF-Scrubber für MP4, MOV und 3GP (ADR 0015, Fundorte). Box-Walker mit 64-bit-Größen, `size 0` bis zum Ende,
  * Grenzen und Schachtelungstiefe.
@@ -12,7 +15,8 @@ package io.github.labushuya.emberlight.share.space.location
  * - Metadaten-Tracks (`gpmd`, `camm`, `mebx` mit `location`, Handler `meta`): `metadata_track`.
  * - Alles, was nicht eingeordnet werden kann und Standort-Text enthält: `unsupported`.
  *
- * Mediendaten (`mdat`) werden nie gelesen.
+ * Mediendaten (`mdat`) werden nie gelesen. Ein Anhang hinter der letzten gültigen Top-Level-Box wird abgeschnitten
+ * (ADR 0015, Anhänge).
  */
 internal object BmffScrubber {
     private val XMP_UUID =
@@ -58,9 +62,47 @@ internal object BmffScrubber {
         val entries = ArrayList<SampleEntry>()
     }
 
-    /** Ganze Datei ab Offset 0. */
+    /**
+     * Ganze Datei ab Offset 0. Die Kette endet am logischen Ende (ADR 0015, Anhänge). Was danach folgt, wird abgeschnitten.
+     */
     fun scrubFile(pass: ScrubPass) {
-        scrubTop(pass, 0, pass.store.length)
+        val size = pass.store.length
+        val end = logicalEnd(pass, 0, size)
+        scrubTop(pass, 0, end)
+        pass.truncate(end, CUT_FINDING)
+    }
+
+    /**
+     * Bereinigt ein MP4, das bei [start] beginnt (etwa nach einem JPEG-EOI), und liefert sein logisches Ende. Alles
+     * danach bis [limit] gehört nicht zur Kette und liegt im Aufrufer (abschneiden oder ablehnen).
+     */
+    fun scrubRegion(
+        pass: ScrubPass,
+        start: Long,
+        limit: Long,
+    ): Long {
+        val end = logicalEnd(pass, start, limit)
+        scrubTop(pass, start, end)
+        return end
+    }
+
+    /**
+     * Ende der gültigen Top-Level-Kette zwischen [start] und [limit] (absolut). Eine beschädigte Kette ist nicht
+     * bereinigbar (STRUCTURE).
+     */
+    internal fun logicalEnd(
+        pass: ScrubPass,
+        start: Long,
+        limit: Long,
+    ): Long {
+        val reader =
+            ByteReader { offset, length ->
+                val at = start + offset
+                val count = minOf(length.toLong(), limit - at).toInt()
+                if (count <= 0) ByteArray(0) else pass.bytes(at, count.toLong(), limit)
+            }
+        val end = ContentInspector.validBoxEnd(limit - start, reader) ?: bail(NotRemovableReason.STRUCTURE)
+        return start + end
     }
 
     /** Top-Level-Boxen zwischen [start] und [end]. Wird auch für ein MP4 nach einem JPEG-EOI verwendet. */

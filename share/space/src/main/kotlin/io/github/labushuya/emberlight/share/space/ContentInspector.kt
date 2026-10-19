@@ -86,13 +86,23 @@ object ContentInspector {
 
     /**
      * Prüft die Box-Struktur. Bei Formaten ohne Boxen gilt die Prüfung als bestanden. Sonst muss die Kette der
-     * Top-Level-Boxen lückenlos bis zum Dateiende reichen. Gelesen wird nur der Kopf jeder Box.
+     * Top-Level-Boxen gültig sein (siehe [validBoxEnd]). Gelesen wird nur der Kopf jeder Box.
      */
     fun hasValidStructure(
         format: DetectedFormat,
         fileSize: Long,
         reader: ByteReader,
-    ): Boolean = !format.boxed || BoxChain.isValid(fileSize, reader)
+    ): Boolean = !format.boxed || validBoxEnd(fileSize, reader) != null
+
+    /**
+     * Ende der gültigen Kette von Top-Level-Boxen ab Offset 0, oder `null` bei beschädigter Kette (ADR 0015, Anhänge).
+     * Alles hinter dem Ende ist ein Anhang, der beim Upload abgeschnitten wird. Eine beschädigte Kette ist dagegen
+     * nicht bereinigbar und wird abgelehnt (415 bzw. fail closed).
+     */
+    fun validBoxEnd(
+        fileSize: Long,
+        reader: ByteReader,
+    ): Long? = BoxChain.validEnd(fileSize, reader)
 
     private fun identifyFtyp(head: ByteArray): DetectedFormat? {
         val brand = head.asciiAt(8, 4) ?: return null
@@ -117,49 +127,98 @@ object ContentInspector {
     }
 }
 
-/** Kette der Top-Level-Boxen (ADR 0013, Strukturprüfung). Größen müssen plausibel sein und lückenlos enden. */
+/**
+ * Kette der Top-Level-Boxen (ADR 0013, Strukturprüfung; ADR 0015, Anhänge). Eine gültige Box hat eine plausible Größe
+ * (mindestens 8, 64-bit ab 16, `size 0` bis zum Dateiende), passt in die Datei und hat einen Typ aus vier druckbaren
+ * ASCII-Zeichen.
+ *
+ * Der erste Kopf, der das nicht erfüllt, beginnt den Anhang hinter dem logischen Dateiende. Ausnahme: Hat der Kopf einen
+ * bekannten Top-Level-Typ (etwa `mdat` oder `moov`), ist die Kette beschädigt, und die Prüfung scheitert (`null`). So
+ * verschwindet keine Box mitten in der Datei stillschweigend.
+ */
 private object BoxChain {
     private const val MAX_BOXES = 100_000
     private const val HEADER_READ = 16
     private const val MIN_HEADER = 8
 
-    fun isValid(
+    /** Typen, die als Top-Level-Box einer Kette vorkommen. Ein kaputter Kopf mit einem davon ist kein Anhang. */
+    private val KNOWN_TOP_LEVEL =
+        setOf(
+            "ftyp",
+            "moov",
+            "mdat",
+            "free",
+            "skip",
+            "wide",
+            "uuid",
+            "meta",
+            "pnot",
+            "moof",
+            "mfra",
+            "styp",
+            "sidx",
+            "idat",
+            "junk",
+        )
+
+    /** Ende der gültigen Kette ab 0, oder `null` bei beschädigter Kette. Liefert immer höchstens [fileSize]. */
+    fun validEnd(
         fileSize: Long,
         reader: ByteReader,
-    ): Boolean {
+    ): Long? {
         var offset = 0L
         var boxes = 0
         while (offset < fileSize) {
-            boxes++
-            if (boxes > MAX_BOXES) return false
+            if (boxes >= MAX_BOXES) return null
             val header = reader.read(offset, HEADER_READ)
-            if (header.size < MIN_HEADER) return false
-            val size32 = header.unsignedInt(0)
-            val boxSize =
-                when (size32) {
-                    // Größe 1: 64-bit-Länge folgt. Die Länge muss den Kopf von 16 Bytes umfassen.
-                    1L -> {
-                        if (header.size < HEADER_READ) return false
-                        val large = header.longAt(8)
-                        if (large < HEADER_READ) return false
-                        large
-                    }
-
-                    // Größe 0: die Box reicht bis zum Dateiende. Danach kommt keine weitere Box.
-                    0L -> {
-                        fileSize - offset
-                    }
-
-                    else -> {
-                        if (size32 < MIN_HEADER) return false
-                        size32
-                    }
-                }
-            if (boxSize > fileSize - offset) return false
-            offset += boxSize
+            val type = if (header.size >= MIN_HEADER) header.typeText() else null
+            val boxSize = plausibleSize(header, offset, fileSize)
+            if (boxSize != null && type != null && type.isPrintable()) {
+                offset += boxSize
+                boxes++
+                continue
+            }
+            // Kein gültiger Kopf: beschädigte Kette bei bekanntem Typ, sonst Anhang ab hier.
+            if (boxes == 0 || (type != null && type in KNOWN_TOP_LEVEL)) return null
+            return offset
         }
-        return boxes > 0 && offset == fileSize
+        return if (boxes > 0) offset else null
     }
+
+    /** Größe der Box, oder `null` bei unplausibler Angabe oder einer Box, die über das Dateiende hinausreicht. */
+    private fun plausibleSize(
+        header: ByteArray,
+        offset: Long,
+        fileSize: Long,
+    ): Long? {
+        if (header.size < MIN_HEADER) return null
+        val size32 = header.unsignedInt(0)
+        val boxSize =
+            when (size32) {
+                // Größe 1: 64-bit-Länge folgt. Die Länge muss den Kopf von 16 Bytes umfassen.
+                1L -> {
+                    if (header.size < HEADER_READ) return null
+                    val large = header.longAt(8)
+                    if (large < HEADER_READ) return null
+                    large
+                }
+
+                // Größe 0: die Box reicht bis zum Dateiende. Danach kommt keine weitere Box.
+                0L -> {
+                    fileSize - offset
+                }
+
+                else -> {
+                    if (size32 < MIN_HEADER) return null
+                    size32
+                }
+            }
+        return if (boxSize > fileSize - offset) null else boxSize
+    }
+
+    private fun ByteArray.typeText(): String = String(this, 4, 4, Charsets.ISO_8859_1)
+
+    private fun String.isPrintable(): Boolean = all { it.code in 0x20..0x7E }
 
     private fun ByteArray.unsignedInt(offset: Int): Long =
         ((this[offset].toLong() and 0xFF) shl 24) or

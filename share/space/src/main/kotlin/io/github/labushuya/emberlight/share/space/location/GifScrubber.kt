@@ -26,7 +26,8 @@ internal object GifScrubber {
             pass.count("gif_blocks")
             when (pass.u8(p, size)) {
                 0x3B -> {
-                    if (!JpegScrubber.allZero(pass, p + 1, size)) bail(NotRemovableReason.TRAILING_DATA)
+                    // Der Trailer beendet den Datenstrom. Ein Anhang dahinter wird abgeschnitten (ADR 0015, Anhänge).
+                    pass.truncate(p + 1, CUT_FINDING)
                     return
                 }
 

@@ -14,7 +14,6 @@ internal object WebpScrubber {
         if (pass.bytes(8, 4, size).toString(Charsets.ISO_8859_1) != "WEBP") bail(NotRemovableReason.STRUCTURE)
         val riffEnd = 8 + pass.u32(4, size, big = false)
         if (riffEnd < 12 || riffEnd > size) bail(NotRemovableReason.STRUCTURE)
-        if (!JpegScrubber.allZero(pass, riffEnd, size)) bail(NotRemovableReason.TRAILING_DATA)
         var p = 12L
         while (p < riffEnd) {
             pass.count("riff_chunks")
@@ -46,5 +45,7 @@ internal object WebpScrubber {
             // Chunks sind auf gerade Länge gepolstert.
             p = dataEnd + (length % 2)
         }
+        // Alles hinter der RIFF-Größe ist ein Anhang und wird abgeschnitten (ADR 0015, Anhänge).
+        pass.truncate(riffEnd, CUT_FINDING)
     }
 }

@@ -24,6 +24,9 @@ import kotlin.math.min
  *   Tag-Namen), Strukturprüfung und Ergebnis des Scrubbers im Plan-Modus. Die Datei wird nur gelesen, nie geschrieben.
  * - `EMBERLIGHT_COMPARE_DIR`: Arbeitskopien, zum Beispiel vom Gerät. Je Datei: Standort nachher, Strukturprüfung und
  *   Dekodierbarkeit.
+ * - `EMBERLIGHT_SCRUB_OUT_DIR`: Ausgabeordner. Mit `EMBERLIGHT_SAMPLES_DIR` wird jede Probe in eine nummerierte Kopie
+ *   kopiert und dort per Apply bereinigt. Die Originale werden nur gelesen. Danach prüft der Bericht die Kopien wie
+ *   Arbeitskopien (Standort nachher, Struktur, Dekodierbarkeit).
  * - `EMBERLIGHT_REPORT_FILE`: Pfad der Berichtsdatei (Pflicht, wenn einer der beiden Ordner gesetzt ist).
  *
  * Der Bericht enthält nur Ja/Nein, Namen von Directories und Tags, Reason-Codes, Größen und Hashes. Keine Werte von
@@ -47,6 +50,29 @@ class SampleLocationReportTest {
             samplesDir.listSamples().forEachIndexed { index, file ->
                 try {
                     report += reportSample(index + 1, file)
+                } catch (failure: Exception) {
+                    failures++
+                    report += "#${index + 1} Fehler: ${failure.javaClass.simpleName}"
+                }
+            }
+        }
+        val scrubOut = System.getenv(ENV_SCRUB_OUT)?.takeIf { it.isNotBlank() }?.let { File(it) }
+        if (samplesDir != null && scrubOut != null) {
+            // Originale nur lesen und kopieren. Bereinigt wird ausschließlich die Kopie im Ausgabeordner.
+            scrubOut.mkdirs()
+            report += "== Bereinigung (Apply nur auf Kopien im Ausgabeordner)"
+            samplesDir.listSamples().forEachIndexed { index, source ->
+                try {
+                    report += scrubCopy(index + 1, source, scrubOut)
+                } catch (failure: Exception) {
+                    failures++
+                    report += "#${index + 1} Fehler: ${failure.javaClass.simpleName}"
+                }
+            }
+            report += "== Ausgaben der Bereinigung (Standort nachher)"
+            scrubOut.listSamples().forEachIndexed { index, file ->
+                try {
+                    report += reportCopy(index + 1, file)
                 } catch (failure: Exception) {
                     failures++
                     report += "#${index + 1} Fehler: ${failure.javaClass.simpleName}"
@@ -96,6 +122,52 @@ class SampleLocationReportTest {
         return lines
     }
 
+    /**
+     * Bereinigt eine Kopie der Probe im Ausgabeordner per Apply. Die Probe selbst wird nur gelesen und kopiert. Der
+     * Name der Kopie ist laufend nummeriert und enthält keinen Originalnamen.
+     */
+    private fun scrubCopy(
+        number: Int,
+        source: File,
+        outDir: File,
+    ): List<String> {
+        val format =
+            ContentInspector.identify(headOf(source))
+                ?: return listOf("#$number Bereinigung übersprungen: Format nicht erkannt")
+        val target = File(outDir, "sample-%02d.%s".format(number, extensionFor(format.mimeType)))
+        source.copyTo(target, overwrite = true)
+        val before = source.length()
+        // Hash der empfangenen Bytes, wie beim Upload. Er gilt, solange die Kopie unverändert bleibt.
+        val sha = sha256Hex(source)
+        val outcome = LocationScrubber.scrub(target, format, sha)
+        val result =
+            when (outcome) {
+                is LocationScrubResult.Clean -> {
+                    if (outcome.changed) "bereinigt (überschrieben und/oder gekürzt)" else "ohne Standort, unverändert"
+                }
+
+                is LocationScrubResult.NotRemovable -> {
+                    "nicht bereinigbar, reason=${outcome.reason.code} (Kopie unverändert)"
+                }
+            }
+        return listOf(
+            "#$number Bereinigung ${format.mimeType}: Länge vorher=${before / 1024} KB, nachher=${target.length() / 1024} KB",
+            "  Ergebnis: $result",
+        )
+    }
+
+    private fun extensionFor(mimeType: String): String =
+        when (mimeType) {
+            "image/jpeg" -> "jpg"
+            "image/png" -> "png"
+            "image/webp" -> "webp"
+            "image/gif" -> "gif"
+            "video/mp4", "video/quicktime", "video/3gpp" -> "mp4"
+            "image/heic", "image/heif" -> "heic"
+            "image/avif" -> "avif"
+            else -> "bin"
+        }
+
     private fun reportCopy(
         number: Int,
         file: File,
@@ -106,6 +178,7 @@ class SampleLocationReportTest {
         val format = ContentInspector.identify(headOf(file))
         val lines = mutableListOf("#$number Kopie Größe=$size B SHA-256=${sha.take(16)}")
         lines += "  Standort nachher: ${location.summary()}"
+        lines += "  Gegenprobe ISO-6709-Muster im Bytestrom: ${iso6709Count(file)}"
         if (format == null) {
             lines += "  Format: nicht erkannt"
             lines += "  Dekodierbar: nein"
@@ -197,7 +270,7 @@ class SampleLocationReportTest {
                 is LocationScrubResult.Clean -> {
                     if (outcome.changed) {
                         "bereinigbar, Bereiche=${store.writes}, geänderte Bytes=${store.changedBytes}, " +
-                            "Hash nach Plan=${outcome.sha256.take(16)}"
+                            "Kürzen=${store.truncations}, Hash nach Plan=${outcome.sha256.take(16)}"
                     } else {
                         "ohne Standort"
                     }
@@ -302,12 +375,20 @@ class SampleLocationReportTest {
             writes++
             changedBytes += bytes.size
         }
+
+        override fun truncate(newLength: Long) {
+            truncations++
+        }
+
+        var truncations = 0
+            private set
     }
 
     private companion object {
         const val ENV_SAMPLES = "EMBERLIGHT_SAMPLES_DIR"
         const val ENV_COMPARE = "EMBERLIGHT_COMPARE_DIR"
         const val ENV_REPORT = "EMBERLIGHT_REPORT_FILE"
+        const val ENV_SCRUB_OUT = "EMBERLIGHT_SCRUB_OUT_DIR"
         const val BLOCK_BYTES = 64 * 1024
         const val MAX_PATTERN_BYTES = 64L * 1024 * 1024
         val ISO_6709 = Regex("[+-]\\d{1,3}\\.\\d+[+-]\\d{1,3}\\.\\d+")

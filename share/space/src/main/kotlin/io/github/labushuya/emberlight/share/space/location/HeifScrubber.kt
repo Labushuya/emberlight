@@ -43,7 +43,7 @@ internal object HeifScrubber {
 
     /** Ganze Datei ab Offset 0. */
     fun scrubFile(pass: ScrubPass) {
-        val end = pass.store.length
+        val end = BmffScrubber.logicalEnd(pass, 0, pass.store.length)
         var p = 0L
         while (p < end) {
             pass.count("heif_boxes")
@@ -58,6 +58,7 @@ internal object HeifScrubber {
             }
             p = box.end
         }
+        pass.truncate(end, CUT_FINDING)
     }
 
     /** `meta` als FullBox: Version 0, Flags, dann die Kinder. Items werden erst nach allen Kindern verarbeitet. */

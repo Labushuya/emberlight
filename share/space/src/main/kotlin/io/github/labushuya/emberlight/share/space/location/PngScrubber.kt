@@ -41,7 +41,8 @@ internal object PngScrubber {
             pass.bounds(dataStart, length + 4, size)
             val writesBefore = pass.writes
             if (type == "IEND") {
-                trailing(pass, chunkEnd, size)
+                // Nach IEND folgt kein Bildteil mehr. Ein Anhang (etwa HTML) wird abgeschnitten (ADR 0015, Anhänge).
+                pass.truncate(chunkEnd, CUT_FINDING)
                 return
             }
             chunk(pass, type, dataStart, dataEnd)
@@ -211,15 +212,6 @@ internal object PngScrubber {
     ) {
         val base = if (pass.startsWith(start, end, EXIF_PREFIX)) start + EXIF_PREFIX.size else start
         TiffScrubber.scrub(pass, base, end, depth + 1)
-    }
-
-    /** Nach dem IEND darf nur Leere folgen. Alles andere ist ein Anhängsel, das nicht sicher bewertet ist. */
-    private fun trailing(
-        pass: ScrubPass,
-        from: Long,
-        size: Long,
-    ) {
-        if (!JpegScrubber.allZero(pass, from, size)) bail(NotRemovableReason.TRAILING_DATA)
     }
 
     /** Berechnet die CRC über Typ und Daten neu und schreibt sie hinter die Daten. Nur im Änderungsmodus. */

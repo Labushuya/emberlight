@@ -15,6 +15,8 @@ enum class NotRemovableReason(
     val code: String,
 ) {
     METADATA_TRACK("metadata_track"),
+
+    /** Anhang, der innerhalb einer Struktur liegt und nicht abgeschnitten werden kann (ADR 0015, Anhänge). */
     TRAILING_DATA("trailing_data"),
     COMPRESSED_TEXT("compressed_text"),
     EXTENDED_XMP("extended_xmp"),
@@ -39,7 +41,16 @@ internal object ScrubLimits {
     const val MAX_TEXT = 8 * 1024 * 1024
 }
 
-/** Zugriff auf die Bytes einer Datei oder eines Speicherpuffers. Nur überschreiben, nie längen ändern. */
+/**
+ * Finding-Name für Anhänge hinter dem logischen Dateiende (ADR 0015). Ein Walker kürzt dann die Datei; im Prüfdurchlauf
+ * ist derselbe Fund ein Fehler, weil danach nichts mehr abzuschneiden ist.
+ */
+internal const val CUT_FINDING = "trailing_bytes"
+
+/**
+ * Zugriff auf die Bytes einer Datei oder eines Speicherpuffers. Überschreiben ändert keine Länge. Kürzen ist nur für
+ * den Anhang hinter dem logischen Dateiende vorgesehen (ADR 0015) und nur auf der Datei oder im Plan möglich.
+ */
 internal interface ByteStore {
     val length: Long
 
@@ -52,13 +63,21 @@ internal interface ByteStore {
         offset: Long,
         bytes: ByteArray,
     )
+
+    /** Kürzt auf [newLength] Bytes. Speicherpuffer unterstützen das nicht. */
+    fun truncate(newLength: Long): Unit =
+        throw UnsupportedOperationException("Kürzen ist für diesen Speicher nicht vorgesehen.")
 }
 
 /** Die Temp-Datei, per wahlfreiem Zugriff. Gelesen werden nur die Stellen, die ein Walker anfordert. */
 internal class FileStore(
     private val file: RandomAccessFile,
-    override val length: Long,
+    initialLength: Long,
 ) : ByteStore {
+    private var currentLength = initialLength
+
+    override val length: Long get() = currentLength
+
     override fun read(
         offset: Long,
         count: Int,
@@ -75,6 +94,11 @@ internal class FileStore(
     ) {
         file.seek(offset)
         file.write(bytes)
+    }
+
+    override fun truncate(newLength: Long) {
+        file.setLength(newLength)
+        currentLength = newLength
     }
 }
 
@@ -115,11 +139,18 @@ internal class PlanStore(
 
     private val planned = ArrayList<Planned>()
     private var plannedBytes = 0L
+    private var truncatedTo: Long? = null
 
-    /** Anzahl der geplanten Bereiche. Null heißt: nichts zu ändern. */
-    val pendingWrites: Int get() = planned.size
+    /** `true`, wenn etwas zu schreiben oder zu kürzen ist. Ohne Änderung bleibt der Hash des Streams gültig. */
+    val hasChanges: Boolean get() = planned.isNotEmpty() || truncatedTo != null
 
-    override val length: Long get() = base.length
+    /** Länge des geplanten Stands: nach einem Kürzen die neue Länge, sonst die der Datei. */
+    override val length: Long get() = truncatedTo ?: base.length
+
+    override fun truncate(newLength: Long) {
+        if (newLength < 0 || newLength > length) bail(NotRemovableReason.STRUCTURE)
+        truncatedTo = newLength
+    }
 
     override fun read(
         offset: Long,
@@ -150,9 +181,13 @@ internal class PlanStore(
         planned.add(Planned(offset, bytes.copyOf()))
     }
 
-    /** Schreibt alle geplanten Bereiche in der Reihenfolge der Planung. Spätere Bereiche gewinnen. */
+    /**
+     * Schreibt alle geplanten Bereiche in der Reihenfolge der Planung, danach kürzt es. Spätere Bereiche gewinnen. Der
+     * Aufruf erfolgt nur nach bestandener Prüfung (ADR 0015, Plan/Apply).
+     */
     fun applyTo(target: ByteStore) {
         for (entry in planned) target.write(entry.offset, entry.bytes)
+        truncatedTo?.let { target.truncate(it) }
     }
 }
 
@@ -263,6 +298,21 @@ internal class ScrubPass private constructor(
         bounds(offset, count, store.length)
         if (count > ScrubLimits.MAX_READ) bail(NotRemovableReason.STRUCTURE)
         overwrite(offset, ByteArray(count.toInt()) { fill }, finding)
+    }
+
+    /**
+     * Kürzt die Datei auf [to] Bytes. Alles dahinter ist ein Anhang nach dem logischen Dateiende (ADR 0015) und wird
+     * entfernt. Ein Fund entsteht, wenn es etwas abzuschneiden gibt. Gekürzt wird nur im Änderungsmodus, die Prüfung
+     * zählt nur.
+     */
+    fun truncate(
+        to: Long,
+        finding: String,
+    ) {
+        if (to < 0 || to > store.length) bail(NotRemovableReason.STRUCTURE)
+        if (to == store.length) return
+        state.findings.add(finding)
+        if (mutate) store.truncate(to)
     }
 
     /**

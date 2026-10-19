@@ -193,7 +193,9 @@ class SpaceVault internal constructor(
             val (size, streamedSha256) = writeBody(temp, source, buffer, head, Limit(maxBytes, budget))
             if (!structureIsValid(format, temp, size)) throw Rejection(RejectReason.UnsupportedType)
             val outcome = removeLocationOrKeep(temp, format, keepLocation, streamedSha256)
-            return commit(uploader, rawFileName, format, outcome.sha256, size, temp, outcome.locationKept)
+            // Nach dem Abschneiden von Anhängen zählt die Länge auf dem Speicher, nicht die des Stroms (ADR 0015).
+            val storedSize = withContext(Dispatchers.IO) { Files.size(temp) }
+            return commit(uploader, rawFileName, format, outcome.sha256, storedSize, temp, outcome.locationKept)
         } catch (rejection: Rejection) {
             Files.deleteIfExists(temp)
             return IngestResult.Rejected(rejection.reason)

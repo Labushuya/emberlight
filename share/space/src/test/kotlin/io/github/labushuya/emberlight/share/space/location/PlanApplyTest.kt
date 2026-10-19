@@ -52,15 +52,18 @@ class PlanApplyTest {
     private val jpeg = DetectedFormat("image/jpeg", MediaKind.IMAGE, boxed = false)
 
     @Test
-    fun planChangesAreNotWrittenWhenALaterCheckRefusesTheFile() {
-        // Der Standort im eXIf-Chunk ist bereinigbar, danach folgt Anhängsel nach IEND: die Datei ist nicht bereinigbar.
+    fun planChangesAreNotWrittenWhenALaterChunkRefusesTheFile() {
+        // Der Standort im eXIf-Chunk wäre bereinigbar, aber ein komprimierter Text mit Standort nicht: keine Datei-Änderung.
         val original =
-            LocationFixtures.png(LocationFixtures.pngChunk("eXIf", exifTiff().bytes)) + ascii("<html></html>")
+            LocationFixtures.png(
+                LocationFixtures.pngChunk("eXIf", exifTiff().bytes),
+                LocationFixtures.pngChunk("zTXt", LocationFixtures.ztxtDeflated("Comment", "+48.8566+002.3522/")),
+            )
         val store = RecordingStore(original)
 
         val result = LocationScrubber.scrubStore(store, png, sha256Hex(original))
 
-        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.TRAILING_DATA), result)
+        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.COMPRESSED_TEXT), result)
         assertEquals("Kein einziger Schreibvorgang bei nicht bereinigbarer Datei", 0, store.writes)
         assertArrayEquals(original, store.bytes())
     }

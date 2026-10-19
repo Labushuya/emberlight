@@ -57,7 +57,7 @@ class ExternalToolCrossCheckTest {
             val cleaned = File(folder.root, "${case.name}-cleaned").apply { writeBytes(case.bytes) }
             val result = LocationScrubber.scrub(cleaned, case.format, sha256Hex(case.bytes))
             assertTrue("${case.name}: Bereinigung liefert $result, erwartet Clean", result is LocationScrubResult.Clean)
-            assertEquals("${case.name}: Länge", case.bytes.size.toLong(), cleaned.length())
+            assertEquals("${case.name}: Länge nach dem Abschneiden", case.keptLength.toLong(), cleaned.length())
             val after = exiftool(cleaned)
             // Ausgabe für die CI-Gegenprobe (ADR 0015): Der Schritt „Gegenprobe-Ausgabe“ zeigt diese Zeilen im Log.
             println(
@@ -70,16 +70,29 @@ class ExternalToolCrossCheckTest {
         }
     }
 
-    /** Ein Prüffall: Name, Format für den Scrubber und die Bytes der Eingabe. */
+    /**
+     * Ein Prüffall: Name, Format für den Scrubber und die Bytes der Eingabe. [keptLength] ist die Länge nach dem Bereinigen.
+     * Sie ist kleiner als die Eingabe, wenn ein Anhang abgeschnitten wird (ADR 0015, Anhänge).
+     */
     private class Case(
         val name: String,
         val format: DetectedFormat,
         val bytes: ByteArray,
+        val keptLength: Int = bytes.size,
     )
 
-    private fun cases(): List<Case> =
-        listOf(
-            Case("mp4", DetectedFormat("video/mp4", MediaKind.VIDEO, boxed = true), ffmpegVideo("mp4")),
+    private fun cases(): List<Case> {
+        val mp4 = ffmpegVideo("mp4")
+        // Anhang nach der letzten Box: Zufallsbytes ohne Box-Struktur (ADR 0015, Anhänge).
+        val attachment = ByteArray(257) { (it * 37 + 11).toByte() }
+        return listOf(
+            Case("mp4", DetectedFormat("video/mp4", MediaKind.VIDEO, boxed = true), mp4),
+            Case(
+                "mp4-anhang",
+                DetectedFormat("video/mp4", MediaKind.VIDEO, boxed = true),
+                mp4 + attachment,
+                keptLength = mp4.size,
+            ),
             Case("mov", DetectedFormat("video/quicktime", MediaKind.VIDEO, boxed = true), ffmpegVideo("mov")),
             Case(
                 "jpeg",
@@ -105,6 +118,7 @@ class ExternalToolCrossCheckTest {
             Case("heic", DetectedFormat("image/heic", MediaKind.IMAGE, boxed = true), heicWithLocation()),
             Case("avif", DetectedFormat("image/avif", MediaKind.IMAGE, boxed = true), avifWithLocation()),
         )
+    }
 
     /** MP4 oder MOV mit dem Standort als `©xyz` und dem Apple-Key. */
     private fun ffmpegVideo(extension: String): ByteArray {

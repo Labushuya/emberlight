@@ -7,7 +7,8 @@ package io.github.labushuya.emberlight.share.space.location
  * - APP1 `Exif`: TIFF-Walker. APP1 XMP: XMP-Scrubber. APP1 Extended XMP: nur prüfen, bei Standort nicht bereinigbar.
  * - APP13 Photoshop-IRB mit IPTC-IIM: Ortsfelder 2:90, 2:92, 2:95, 2:100, 2:101 mit 0x20 überschreiben.
  * - APP2 MPF: Zusatzbilder über die MPF-Offsets rekursiv als JPEG.
- * - Daten nach EOI: ein angehängtes MP4 (Motion Photo) über den MP4-Scrubber, anderes nicht-leeres mit `trailing_data`.
+ * - Daten nach EOI: ein angehängtes MP4 (Motion Photo) über den MP4-Scrubber, bis zu seinem logischen Ende. Alles danach
+ *   wird abgeschnitten (ADR 0015, Anhänge). Lücken zwischen zwei bekannten Teilen bleiben `trailing_data`.
  */
 internal object JpegScrubber {
     private val EXIF_ID = ascii("Exif\u0000\u0000")
@@ -23,11 +24,19 @@ internal object JpegScrubber {
     private const val SCAN_CHUNK = 64 * 1024
     private val IPTC_LOCATION_DATASETS = setOf(90, 92, 95, 100, 101)
 
-    /** Ganze Datei: Hauptbild, MPF-Zusatzbilder und alles, was nach dem EOI folgt. */
+    /** Marker vor einem angehängten MP4 (Samsung-artig). Hinter dem Marker beginnt das MP4 (Offset 4 vor `ftyp`). */
+    private const val MOTION_MARKER = "MotionPhoto_Data"
+    private const val MOTION_HEADER_WINDOW = 64
+    private const val MIN_MOTION_HEADER = 8L
+
+    /**
+     * Ganze Datei: Hauptbild, MPF-Zusatzbilder und alles, was nach dem EOI folgt. Hinter dem letzten bekannten Teil
+     * wird abgeschnitten (ADR 0015, Anhänge).
+     */
     fun scrubFile(pass: ScrubPass) {
         val size = pass.store.length
         val afterEoi = scrubImage(pass, 0, size, 0)
-        trailing(pass, afterEoi, size)
+        pass.truncate(trailing(pass, afterEoi, size), CUT_FINDING)
     }
 
     /**
@@ -249,38 +258,76 @@ internal object JpegScrubber {
         depth: Int,
     ) {
         val afterEoi = scrubImage(pass, start, limit, depth)
-        gap(pass, afterEoi, limit, limit)
+        middleGap(pass, afterEoi, limit)
     }
 
     /**
-     * Alles nach dem EOI, abzüglich der MPF-Zusatzbilder, die schon geprüft sind. Ein angehängtes MP4 (`ftyp` an
-     * Offset 4 ab der Lücke) wird bereinigt. Anderes nicht-leeres Anhängsel führt zu `trailing_data`.
+     * Alles nach dem EOI, abzüglich der MPF-Zusatzbilder, die schon geprüft sind. Liefert das logische Ende: Bis dorthin
+     * bleibt die Datei, der Rest wird abgeschnitten (ADR 0015, Anhänge). Lücken zwischen zwei bekannten Teilen lassen
+     * sich nicht kürzen und folgen [middleGap].
      */
     private fun trailing(
         pass: ScrubPass,
         from: Long,
         size: Long,
-    ) {
+    ): Long {
         var position = from
         for ((start, end) in pass.claimed.sortedBy { it.first }) {
-            if (start > position) gap(pass, position, start, size)
+            if (start > position) middleGap(pass, position, start)
             position = maxOf(position, end)
         }
-        gap(pass, position, size, size)
+        return tailEnd(pass, position, size)
     }
 
-    private fun gap(
+    /**
+     * Lücke zwischen zwei bekannten Teilen. Sie liegt mitten in der Datei und kann nicht abgeschnitten werden. Zulässig
+     * sind Nullbytes oder ein MP4 (`ftyp` an Offset 4). Anderes führt zu `trailing_data`.
+     */
+    private fun middleGap(
         pass: ScrubPass,
         from: Long,
         to: Long,
-        size: Long,
     ) {
         if (from >= to) return
-        if (from + 8 <= size && pass.bytes(from + 4, 4, size).toString(Charsets.ISO_8859_1) == "ftyp") {
+        if (from + 8 <= to && pass.startsWith(from + 4, to, ascii("ftyp"))) {
             BmffScrubber.scrubTop(pass, from, to)
             return
         }
         if (!allZero(pass, from, to)) bail(NotRemovableReason.TRAILING_DATA)
+    }
+
+    /**
+     * Ende des letzten bekannten Teils nach dem EOI. Ein angehängtes MP4 bleibt bis zu seinem logischen Ende, alles
+     * danach wird abgeschnitten. Ohne MP4 endet das Logische bei [from]: Der ganze Rest wird abgeschnitten.
+     */
+    private fun tailEnd(
+        pass: ScrubPass,
+        from: Long,
+        size: Long,
+    ): Long {
+        val video = motionVideoStart(pass, from, size) ?: return from
+        return BmffScrubber.scrubRegion(pass, video, size)
+    }
+
+    /**
+     * Start eines angehängten MP4. Google-Motion-Photo: `ftyp` direkt nach dem EOI (Offset 4). Samsung-artig: ein Kopf
+     * mit dem Marker `MotionPhoto_Data`, danach das MP4 (`ftyp` hinter dem Marker, Offset 4 vor `ftyp`). Sonst `null`.
+     */
+    private fun motionVideoStart(
+        pass: ScrubPass,
+        from: Long,
+        size: Long,
+    ): Long? {
+        if (from + 8 <= size && pass.startsWith(from + 4, size, ascii("ftyp"))) return from
+        val window = minOf(MOTION_HEADER_WINDOW.toLong(), size - from)
+        if (window < MIN_MOTION_HEADER) return null
+        val head = pass.bytes(from, window, size).toString(Charsets.ISO_8859_1)
+        val marker = head.indexOf(MOTION_MARKER)
+        if (marker < 0) return null
+        val afterMarker = marker + MOTION_MARKER.length
+        val ftyp = head.indexOf("ftyp", startIndex = afterMarker + 4)
+        if (ftyp < 0) return null
+        return from + ftyp - 4
     }
 
     /** Prüft einen Bereich streamend auf Nullbytes. */
