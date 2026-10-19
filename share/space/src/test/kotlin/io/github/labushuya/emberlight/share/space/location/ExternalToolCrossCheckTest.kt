@@ -136,9 +136,12 @@ class ExternalToolCrossCheckTest {
         return output
     }
 
-    /** Eine Zeile mit Standort-Tag und Wert (Ziffern hinter dem Doppelpunkt). Namen ohne Wert sind unkritisch. */
+    /**
+     * Eine Zeile mit Standort-Tag und einem Wert, der nicht nur aus Nullen besteht. Nullkoordinaten sind das
+     * vorgeschriebene Ergebnis für `loci` (ADR 0015, 0x00) und kein Standort. Namen ohne Wert sind unkritisch.
+     */
     private fun isLocationLineWithValue(line: String): Boolean =
-        GPS_TAG.containsMatchIn(line) && line.substringAfter(':', "").any(Char::isDigit)
+        GPS_TAG.containsMatchIn(line) && line.substringAfter(':', "").any { it in '1'..'9' }
 
     private fun assertNoLocationTag(output: String) {
         val leaks = output.lines().filter { it.contains("48.8566") || isLocationLineWithValue(it) }
