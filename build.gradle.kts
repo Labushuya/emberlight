@@ -48,6 +48,7 @@ dependencies {
     kover(project(":core:media"))
     kover(project(":feature:gallery"))
     kover(project(":feature:space"))
+    kover(project(":share:space"))
     kover(project(":share:server"))
     kover(project(":share:network"))
 }

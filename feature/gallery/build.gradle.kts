@@ -1,5 +1,6 @@
 plugins {
     id("emberlight.android.feature")
+    id("emberlight.gallery.isolation")
 }
 
 // BuildConfig.DEBUG steuert die Debug-Marken des Viewers (ViewerTrace). Im Release entfällt der Aufruf.

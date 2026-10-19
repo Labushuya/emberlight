@@ -1,6 +1,7 @@
 plugins {
     id("emberlight.android.library")
     id("emberlight.hilt")
+    id("emberlight.gallery.isolation")
 }
 
 dependencies {
