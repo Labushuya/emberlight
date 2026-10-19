@@ -156,7 +156,7 @@ Festgelegt am 18.10.2026. Zu 3.1a gehört alles außer der GPS-Entfernung (3.1b)
 - Manifest von `share:server`: `ACCESS_NETWORK_STATE` ergänzen (Pflicht für `registerNetworkCallback`, ADR 0013, Android-API-Fakten).
 - `<device-transfer>`-Regeln in `app/src/main/res/xml/data_extraction_rules.xml` ergänzen. Heute fehlt der Abschnitt, damit ist die Geräte-zu-Geräte-Übertragung für App-Daten nicht eingeschränkt (ADR 0013, Speicher). Die Ausschlüsse entsprechen `<cloud-backup>`.
 - Build-Sperren für `share:space` in beide Richtungen: `share:space` darf nicht von `:app`, `:feature:*`, `:core:media` oder `share:server` abhängen (transitiv). Galerie-Module (`:core:media`, `:feature:gallery`, `:app`) dürfen nicht von `share:*` abhängen. Die Richtung „Galerie → Space“ ist neu (`checkGalleryNoSpaceDependency`, Vorschlag).
-- Prüfung, dass das Release-Manifest keinen Debug-Einstieg enthält (Build-Prüfung `checkReleaseManifest`, Vorschlag).
+- Prüfung, dass das Release-Manifest keinen Debug-Einstieg enthält (Build-Prüfung `checkReleaseManifestDebugEntry`).
 - Room-Pfad per Robolectric-Test absichern: prüfen, dass die Datenbank unter `noBackupFilesDir/spaces/` angelegt wird und der absolute Dateiname funktioniert (siehe Persistenz, offen).
 - `SERVER_API_VERSION`-KDoc anpassen (siehe Version).
 - Zugriffsprüfung auf `Setup` und Protokollierung ohne Roh-URI (ADR 0013, Logging) sind ebenfalls Teil von 3.1a.
@@ -202,7 +202,7 @@ Die Testdateien sind kleine, synthetische Byte-Folgen mit den Signaturen. Echte 
 
 Vorschlag, ohne Produktionspfad:
 
-- Ein Debug-Einstieg liegt im Source-Set `app/src/debug`. Er ist nicht im Release-Manifest. Die Build-Prüfung `checkReleaseManifest` (Vorschlag) bricht ab, wenn der Einstieg im Release-Manifest auftaucht.
+- Ein Debug-Einstieg liegt im Source-Set `app/src/devtools` (umgesetzt in 3.1a, siehe „Umsetzung 3.1a“). Er ist nicht im Release-Manifest. Die Build-Prüfung `checkReleaseManifestDebugEntry` bricht ab, wenn der Einstieg im Release-Manifest auftaucht.
 - Die Debug-Aktivität startet den Server mit einem Space und einem Gastgeber-Principal. Der Gast-Token wird nur auf dem Bildschirm des Debug-Builds gezeigt, nie geloggt.
 - Der Gerätetest läuft vom PC im selben WLAN mit `curl` (Authorization-Header, Host-Header). Der Start geschieht durch die Debug-Aktivität.
 - Den Start über einen Intent mit Test-Principal (adb) halte ich für denkbar, aber nicht nötig. Er würde einen Testpfad mit Principal-Übergabe über Intent-Extras einführen. Ob die Nutzerin bzw. der Nutzer das will, ist offen.
@@ -254,11 +254,12 @@ Jede Fehlerantwort: `{"error":"<code>"}` plus Felder. Schutzheader auf allen Ant
 - Keine Tabelle `space` in 3.1a. Name und Speicherlimit kommen aus der Einrichtung des Serverlaufs.
 - Upload-Warnung: `warning` ist `"storage_80"` ab 80 % des Speicherlimits, sonst `null`.
 - Liste: `uploader` ist der Anzeigename aus der Teilnehmer-Tabelle, `createdAt` ist Epoch-Millisekunden in UTC.
-- Debug-Einstieg: Start und Stopp per Broadcast-Empfänger statt Aktivität, Tokens in einer Datei unter `files/debug-server/`. Der Empfänger ist im Debug-Build exportiert und mit `android.permission.DUMP` geschützt (nur Shell und System). Beschreibung in `docs/DEBUG-SERVER.md`.
+- Debug-Einstieg: Start und Stopp per Broadcast-Empfänger statt Aktivität, Tokens in einer Datei unter `files/debug-server/`. Der Empfänger ist im Debug- und im Benchmark-Build exportiert und mit `android.permission.DUMP` geschützt (nur Shell und System). Er liegt im Source-Set `app/src/devtools`, das `debug` und `benchmark` gemeinsam einbinden. Beschreibung in `docs/DEBUG-SERVER.md`.
+- R8-Abdeckung des Servers (19.10.2026): Sie erfolgt über den benchmark-Build mit Debug-Einstieg. Der Release-Build enthält bis Paket 3.3 keinen Einstieg, dort entfernt R8 den Serverpfad. Die Keep-Regeln für `KtorLocalServer` und `SpaceServerService.Companion` sind entfernt. Die `-dontwarn`-Zeilen bleiben.
 
 ### Offen
 
 - Auto-Resume nach Netzverlust und die Stopp-Oberfläche folgen in 3.3.
 - GPS-Entfernung folgt in 3.1b, vor dem ersten Upload über die Gäste-Webseite (3.5).
-- Keep-Regeln für den Serverpfad (`share/server/consumer-rules.pro`: `KtorLocalServer`, `SpaceServerService$Companion`) entfernen oder prüfen, sobald 3.3 einen echten Einstieg aus der Oberfläche hat (Paket 3.3 in `docs/PLAN-M3.md`).
-- Befund beim Vergleich der Release-Builds (Stand f09f220): Die Regeln halten nur die Klassenhülle. Die Routing-Pipeline (`installEmberlightModule` in `ServerPipeline.kt`) fehlt im R8-Mapping, die Ktor-Plugins (`PartialContent`, `ConditionalHeaders`) ebenfalls. Im Release ist der Server ohne Einrichtung nicht startbar, deshalb fällt das bisher nicht auf. Vor 3.3 muss die Pipeline gehalten werden, und die Build-Prüfung soll das Mapping daraufhin prüfen.
+- Erledigt (19.10.2026): Die Keep-Regeln für `KtorLocalServer` und `SpaceServerService$Companion` sind entfernt. Der Befund aus f09f220 bleibt als Hintergrund: Die Regeln hielten nur die Klassenhülle, die Routing-Pipeline (`installEmberlightModule` in `ServerPipeline.kt`) fiel im R8-Mapping weg.
+- Nachweis (19.10.2026, Mapping): Im benchmark-Build sind `ServerPipelineKt.installEmberlightModule`, die Ktor-Plugins `PartialContent` und `ConditionalHeaders` sowie 548 `io.ktor`-Klassen erhalten. Im release-Build fehlen sie; dort bleibt eine `io.ktor`-Klasse. Das ist bis Paket 3.3 erwartet. Ab 3.3 muss der Release-Einstieg existieren und die R8-Prüfung dann auch den Release-Build abdecken (Paket 3.3 in `docs/PLAN-M3.md`).

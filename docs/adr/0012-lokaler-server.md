@@ -219,3 +219,7 @@ Der Text oben bleibt unverändert. Zwei Punkte werden präzisiert:
 
 - (a) Der Punkt „Stopp in der App“ unter „Pflicht vor Paket 3.1“ gehört zu **Paket 3.3** (Start aus der Oberfläche). Er ist keine Voraussetzung von Paket 3.1. Bis 3.3 bleibt der Stopp auf Server-Ebene getestet (ADR 0014, Teststrategie). Siehe [PLAN-M3](../PLAN-M3.md), Paket 3.3.
 - (b) Der Speicherort der Space-Dateien ist durch [ADR 0013](0013-schutz-gegen-manipulation.md) auf `noBackupFilesDir` präzisiert (Abschnitt „Speicher“). „Unterhalb des app-internen Speichers“ bleibt richtig, ist aber nicht mehr die genaue Festlegung.
+
+## Nachtrag (19.10.2026)
+
+Die Aussage zu R8 oben („Der Release-Build prüft so R8 mit dem Server“) gilt nicht mehr. Die R8-Prüfung des Servers läuft über den **benchmark**-Build, der den Debug-Einstieg enthält (ADR 0014, Umsetzung 3.1a). Der Release-Build hat bis Paket 3.3 keinen Einstieg und entfernt den Serverpfad. Die Keep-Regeln für `KtorLocalServer` und `SpaceServerService.Companion` sind entfernt. Die `-dontwarn`-Zeilen bleiben.
