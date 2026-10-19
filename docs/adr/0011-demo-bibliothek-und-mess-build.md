@@ -65,7 +65,7 @@ Release-nah optimiert ist, aber mit der Demo-Bibliothek arbeitet. Zu klären war
 ### CI
 
 - `assembleBenchmark` ist nicht in der CI. Der Build braucht mit R8 mehrere Minuten zusätzlich, die Release-APK prüft die CI bereits.
-  Der Mess-Build wird lokal gebaut und unter `H:\DEV\#claude\emberlight-builds` abgelegt, siehe Abschluss des PR.
+  Der Mess-Build wird lokal gebaut und unter `<builds-verzeichnis>` abgelegt, siehe Abschluss des PR.
 
 ### Icon-Varianten
 

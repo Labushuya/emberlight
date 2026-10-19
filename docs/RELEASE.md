@@ -26,7 +26,7 @@ Benötigt werden vier Repository-Secrets und eine Repository-Variable:
 **Einmalig erzeugen** (Windows PowerShell 5.1, im Repository-Ordner):
 
 ```powershell
-.\scripts\new-release-keystore.ps1 -OutputDir H:\DEV\_keys\emberlight
+.\scripts\new-release-keystore.ps1 -OutputDir <keys-verzeichnis>
 ```
 
 Das Skript erzeugt im Zielordner die Keystore-Datei und eine `LIESMICH.txt` mit Passwort, Alias und Fingerprint. Danach setzt es die Secrets und die Variable im Repository `Labushuya/emberlight`. Es bricht ab, wenn dort bereits `KEYSTORE_BASE64` existiert oder wenn der Zielordner in einem Git-Repository liegt. Mit `-SkipGitHub` erzeugt es nur die Dateien.
