@@ -1,0 +1,272 @@
+package io.github.labushuya.emberlight.share.space.location
+
+import java.io.ByteArrayOutputStream
+import java.io.RandomAccessFile
+import java.util.zip.DataFormatException
+import java.util.zip.Inflater
+
+/**
+ * Grund, warum eine Datei nicht sicher bereinigt werden kann (ADR 0015, Reason-Codes). Der Code erscheint als
+ * `reason` in der 422-Antwort.
+ */
+enum class NotRemovableReason(
+    val code: String,
+) {
+    METADATA_TRACK("metadata_track"),
+    TRAILING_DATA("trailing_data"),
+    COMPRESSED_TEXT("compressed_text"),
+    EXTENDED_XMP("extended_xmp"),
+    FREE_BOX_LOCATION("free_box_location"),
+    STRUCTURE("structure"),
+    UNSUPPORTED("unsupported"),
+    VERIFICATION_FAILED("verification_failed"),
+}
+
+/** Abbruch der Bereinigung. Fail closed: jede unklare Struktur führt hierhin, nie zu einer Teilbereinigung. */
+internal class Unremovable(
+    val reason: NotRemovableReason,
+) : RuntimeException(reason.code, null, false, false)
+
+internal fun bail(reason: NotRemovableReason): Nothing = throw Unremovable(reason)
+
+/** Grenzen aus ADR 0015: Schachtelungstiefe, Zähler und maximale Lesegröße je Struktur. */
+internal object ScrubLimits {
+    const val MAX_DEPTH = 8
+    const val MAX_ENTRIES = 10_000
+    const val MAX_READ = 16 * 1024 * 1024
+    const val MAX_TEXT = 8 * 1024 * 1024
+}
+
+/** Zugriff auf die Bytes einer Datei oder eines Speicherpuffers. Nur überschreiben, nie längen ändern. */
+internal interface ByteStore {
+    val length: Long
+
+    fun read(
+        offset: Long,
+        count: Int,
+    ): ByteArray
+
+    fun write(
+        offset: Long,
+        bytes: ByteArray,
+    )
+}
+
+/** Die Temp-Datei, per wahlfreiem Zugriff. Gelesen werden nur die Stellen, die ein Walker anfordert. */
+internal class FileStore(
+    private val file: RandomAccessFile,
+    override val length: Long,
+) : ByteStore {
+    override fun read(
+        offset: Long,
+        count: Int,
+    ): ByteArray {
+        val out = ByteArray(count)
+        file.seek(offset)
+        file.readFully(out)
+        return out
+    }
+
+    override fun write(
+        offset: Long,
+        bytes: ByteArray,
+    ) {
+        file.seek(offset)
+        file.write(bytes)
+    }
+}
+
+/** Speicherpuffer für eingebettete Daten (TIFF in PNG-Text, GIF-XMP). */
+internal class MemoryStore(
+    private val data: ByteArray,
+) : ByteStore {
+    override val length: Long = data.size.toLong()
+
+    override fun read(
+        offset: Long,
+        count: Int,
+    ): ByteArray = data.copyOfRange(offset.toInt(), offset.toInt() + count)
+
+    override fun write(
+        offset: Long,
+        bytes: ByteArray,
+    ) {
+        bytes.copyInto(data, offset.toInt())
+    }
+
+    fun bytes(): ByteArray = data
+}
+
+/**
+ * Ein Durchlauf der Walker. Mit [mutate] = `true` werden Standortbytes überschrieben, sonst nur gezählt (Detektor
+ * der Prüfung nach dem Bereinigen, ADR 0015, Prüfung). Jeder Fund steht in [findings]. [writes] zählt die
+ * tatsächlichen Schreibvorgänge, damit der Aufrufer geänderte Chunks erkennt.
+ */
+internal class ScrubPass(
+    val store: ByteStore,
+    val mutate: Boolean,
+) {
+    val findings = sortedSetOf<String>()
+    var writes = 0
+        private set
+    private val counts = HashMap<String, Int>()
+
+    /** Bereiche, die ein Walker als eigene Bilder oder Container bereits verarbeitet hat (MPF-Zusatzbilder). */
+    val claimed = ArrayList<Pair<Long, Long>>()
+
+    /** Zählt Einträge einer Art. Über [ScrubLimits.MAX_ENTRIES] gilt die Struktur als unsicher. */
+    fun count(kind: String) {
+        val next = (counts[kind] ?: 0) + 1
+        if (next > ScrubLimits.MAX_ENTRIES) bail(NotRemovableReason.STRUCTURE)
+        counts[kind] = next
+    }
+
+    fun bounds(
+        offset: Long,
+        count: Long,
+        end: Long,
+    ) {
+        if (offset < 0 || count < 0 || end > store.length || offset > end || count > end - offset) {
+            bail(NotRemovableReason.STRUCTURE)
+        }
+    }
+
+    fun bytes(
+        offset: Long,
+        count: Long,
+        end: Long,
+    ): ByteArray {
+        bounds(offset, count, end)
+        if (count > ScrubLimits.MAX_READ) bail(NotRemovableReason.STRUCTURE)
+        return store.read(offset, count.toInt())
+    }
+
+    fun u8(
+        offset: Long,
+        end: Long,
+    ): Int = bytes(offset, 1, end)[0].toInt() and 0xFF
+
+    fun u16(
+        offset: Long,
+        end: Long,
+        big: Boolean,
+    ): Int {
+        val b = bytes(offset, 2, end)
+        val hi = b[if (big) 0 else 1].toInt() and 0xFF
+        val lo = b[if (big) 1 else 0].toInt() and 0xFF
+        return (hi shl 8) or lo
+    }
+
+    fun u32(
+        offset: Long,
+        end: Long,
+        big: Boolean,
+    ): Long {
+        val b = bytes(offset, 4, end)
+        var value = 0L
+        for (i in 0 until 4) {
+            val index = if (big) i else 3 - i
+            value = (value shl 8) or (b[index].toLong() and 0xFF)
+        }
+        return value
+    }
+
+    fun u32Be(
+        offset: Long,
+        end: Long,
+    ): Long = u32(offset, end, big = true)
+
+    /**
+     * Überschreibt [count] Bytes ab [offset] mit [fill]. Ein Fund entsteht, wenn ein Byte davon abweicht. Die
+     * Länge bleibt gleich, deshalb bleiben alle Strukturverweise gültig.
+     */
+    fun blank(
+        offset: Long,
+        count: Long,
+        fill: Byte,
+        finding: String,
+    ) {
+        if (count == 0L) return
+        bounds(offset, count, store.length)
+        if (count > ScrubLimits.MAX_READ) bail(NotRemovableReason.STRUCTURE)
+        val current = store.read(offset, count.toInt())
+        if (current.all { it == fill }) return
+        findings.add(finding)
+        if (mutate) {
+            store.write(offset, ByteArray(count.toInt()) { fill })
+            writes++
+        }
+    }
+}
+
+/**
+ * Textsuche nach Standort-Resten im Byte-Strom. Erkennt ISO-6709-Koordinaten und nicht geleerte GPS-Eigenschaften
+ * (ADR 0015, Prüfung danach). Streamend, ohne den Bereich komplett zu laden.
+ */
+internal object LocationText {
+    private const val WINDOW = 64 * 1024
+    private const val OVERLAP = 256
+    private val iso6709 = Regex("[+-]\\d{1,3}\\.\\d+[+-]\\d{1,3}\\.\\d+")
+    private val gpsProperty =
+        Regex("(?:GPSLatitude|GPSLongitude|exif:GPS[A-Za-z]+)[\"']?\\s*(?:=\\s*[\"']|>)([^\"'<]{0,80})")
+
+    /** Prüft einen Text. Ein GPS-Eigenschaft zählt nur, wenn ihr Wert eine Ziffer enthält. */
+    fun containsIn(text: String): Boolean =
+        iso6709.containsMatchIn(text) ||
+            gpsProperty.findAll(text).any { match -> match.groupValues[1].any { it.isDigit() } }
+
+    /** Prüft den Bereich [start, end) des Speichers in Fenstern. */
+    fun containsIn(
+        store: ByteStore,
+        start: Long,
+        end: Long,
+    ): Boolean {
+        var pos = start
+        while (true) {
+            val count = minOf(WINDOW.toLong(), end - pos).toInt()
+            if (count <= 0) return false
+            val window = String(store.read(pos, count), Charsets.ISO_8859_1)
+            if (containsIn(window)) return true
+            if (pos + count >= end) return false
+            pos += WINDOW - OVERLAP
+        }
+    }
+}
+
+/** Dekomprimiert mit Größenlimit. Ein Überlauf oder defekte Daten gelten als nicht prüfbar (fail closed). */
+internal fun inflateLimited(
+    compressed: ByteArray,
+    limit: Int = ScrubLimits.MAX_TEXT,
+): ByteArray {
+    val inflater = Inflater()
+    try {
+        inflater.setInput(compressed)
+        val out = ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        while (!inflater.finished()) {
+            val produced =
+                try {
+                    inflater.inflate(buffer)
+                } catch (defect: DataFormatException) {
+                    bail(NotRemovableReason.STRUCTURE)
+                }
+            if (produced == 0 && (inflater.needsInput() || inflater.needsDictionary())) {
+                bail(NotRemovableReason.STRUCTURE)
+            }
+            out.write(buffer, 0, produced)
+            if (out.size() > limit) bail(NotRemovableReason.STRUCTURE)
+        }
+        return out.toByteArray()
+    } finally {
+        inflater.end()
+    }
+}
+
+/** ASCII-Vergleich eines Bereichs mit einer festen Byte-Folge. */
+internal fun ScrubPass.startsWith(
+    offset: Long,
+    end: Long,
+    prefix: ByteArray,
+): Boolean = end - offset >= prefix.size && bytes(offset, prefix.size.toLong(), end).contentEquals(prefix)
+
+internal fun ascii(text: String): ByteArray = text.toByteArray(Charsets.ISO_8859_1)
