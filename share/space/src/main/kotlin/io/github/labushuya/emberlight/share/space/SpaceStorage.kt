@@ -67,11 +67,38 @@ class SpaceStorage(
     /** Löscht eine Datei, falls vorhanden. Liefert `true`, wenn sie existierte. */
     fun deleteIfExists(path: Path): Boolean = Files.deleteIfExists(path)
 
-    /** Löscht alle Einträge des Space-Verzeichnisses, deren Name nicht in [keep] steht. Liefert die Anzahl. */
+    /**
+     * Löscht Einträge des Space-Verzeichnisses, deren Name nicht in [keep] steht. Titelbilder ([COVER_PREFIX]) bleiben
+     * unberührt, sie verwaltet [deleteCoversExcept]. Liefert die Anzahl der gelöschten Einträge.
+     */
     fun deleteUnlisted(keep: Set<String>): Int {
         val names = Files.newDirectoryStream(directory).use { stream -> stream.map { it.fileName.toString() } }
-        return names.filter { it !in keep }.count { name ->
-            Files.deleteIfExists(directory.resolve(name))
+        return names
+            .filter { it !in keep && !it.startsWith(COVER_PREFIX) }
+            .count { name -> Files.deleteIfExists(directory.resolve(name)) }
+    }
+
+    /** Pfad eines Titelbilds. [sha256Hex] muss ein Hash in Kleinbuchstaben sein. Titelbilder liegen getrennt von Medien. */
+    fun coverPath(sha256Hex: String): Path {
+        require(SHA256_HEX.matches(sha256Hex)) { "Ungültiger Hash." }
+        return resolveName(COVER_PREFIX + sha256Hex)
+    }
+
+    /** Löscht alle Titelbilder außer den in [keepSha256] genannten. Liefert die Anzahl. */
+    fun deleteCoversExcept(keepSha256: Set<String>): Int {
+        val keepNames = keepSha256.map { COVER_PREFIX + it }.toSet()
+        val names = Files.newDirectoryStream(directory).use { stream -> stream.map { it.fileName.toString() } }
+        return names
+            .filter { it.startsWith(COVER_PREFIX) && it !in keepNames }
+            .count { name -> Files.deleteIfExists(directory.resolve(name)) }
+    }
+
+    /** Entfernt den gesamten Speicher dieses Space, also alle Medien und Titelbilder samt Verzeichnis. */
+    fun deleteEverything() {
+        if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return
+        rejectSymlinks(directory)
+        Files.walk(directory).use { paths ->
+            paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
         }
     }
 
@@ -87,6 +114,9 @@ class SpaceStorage(
     companion object {
         const val TEMP_PREFIX = "tmp-"
         const val TEMP_SUFFIX = ".part"
+
+        /** Präfix der Titelbilder (Paket 3.2). Medien tragen nur den Hash, Titelbilder dieses Präfix. */
+        const val COVER_PREFIX = "cover-"
         private val SIMPLE_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
         private val SHA256_HEX = Regex("[0-9a-f]{64}")
     }
