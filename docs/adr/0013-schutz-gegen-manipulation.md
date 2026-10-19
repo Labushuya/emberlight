@@ -256,7 +256,7 @@ Eine Datei, die zugleich gültiges Bild und etwas anderes ist, wird als Bild ges
 
 ## GPS-Entfernung (3.1b, nur Analyse)
 
-Standard nach KONZEPT: GPS-Daten werden beim Upload entfernt. Dieser Abschnitt ist nur Analyse.
+Standard nach KONZEPT: GPS-Daten werden beim Upload entfernt. Dieser Abschnitt ist nur Analyse. Die Umsetzung (Scrubber, Einwilligung, Reason-Codes, Fundorte je Format) steht in [ADR 0015](0015-entfernung-von-standortdaten.md).
 
 ### Was ExifInterface 1.4.2 schreiben kann
 

@@ -83,6 +83,7 @@ Grundsätze; Details folgen als ADR in Meilenstein 3.
 - Größenlimits.
 - Zugangsschlüssel pro Teilnehmer. Mit dem Space werden sie ungültig.
 - GPS-Standortdaten werden beim Hochladen in einen Space standardmäßig entfernt (EXIF-Ortsdaten). Das ist pro Upload oder in den Einstellungen abschaltbar.
+- Lässt sich der Standort nicht sicher entfernen (etwa bei HEIC, bei Sonderformaten oder bei Metadaten-Tracks), lehnt der Upload ab. Die Gästeseite fragt dann: „Standort kann nicht entfernt werden. Trotzdem mit Standort hochladen?“ Bei Ja wird die Datei unverändert gespeichert und in der Liste als „Standort enthalten“ markiert. Entscheidung der Nutzerin bzw. des Nutzers vom 19.10.2026, Umsetzung in [ADR 0015](adr/0015-entfernung-von-standortdaten.md).
 
 #### Speicher
 

@@ -93,7 +93,8 @@ Jede Anfrage durchläuft zuerst die Prüfungen aus ADR 0013: Host, Netz, Authori
 - `warning`: `"storage_80"`, sobald der Space mindestens 80 % seines Limits belegt. Sonst `null`.
 - `507` mit Code `storage_full` (Space-Limit erreicht) oder `device_storage_low` (Mindest-Restspeicher unterschritten).
 - `429` mit `Retry-After: 5` bei zu vielen parallelen Uploads (Startwerte aus ADR 0013).
-- `422` mit `location_not_removable` (ab 3.1b, siehe ADR 0013).
+- `422` mit `{"error":"location_not_removable","reason":"<code>"}` (ab 3.1b, siehe ADR 0015). Die Datei wird nicht gespeichert. Der Header `X-Emberlight-Keep-Location: 1` speichert nicht bereinigbare Dateien unverändert, mit `locationKept: true`. Er wirkt nur dort. Andere Werte ergeben `400` (`bad_request`).
+- Antwort `201` und `200` enthalten zusätzlich `"locationKept"`.
 
 ### Download
 
@@ -132,7 +133,7 @@ Jede Anfrage durchläuft zuerst die Prüfungen aus ADR 0013: Host, Netz, Authori
 | 410 | Space ist beendet |
 | 413 | Body über dem Limit |
 | 415 | Falscher `Content-Type` oder Inhalt nicht erlaubt |
-| 422 | Ortsdaten nicht sicher entfernbar (3.1b) |
+| 422 | Ortsdaten nicht sicher entfernbar (3.1b, ADR 0015), ohne Einwilligung |
 | 429 | Zu viele parallele Uploads |
 | 507 | Speicher voll (Space oder Gerät) |
 
