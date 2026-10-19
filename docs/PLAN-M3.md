@@ -17,7 +17,7 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 | vor 3.5 (Pflicht, nur dokumentiert) | Frühe Ablehnungen (401, 403, 413, 415, 429, 503), wenn der Body noch läuft, zuverlässig zustellen: „lingering close“. Nach der Antwort Body-Reste lesen und verwerfen, höchstens 2 s bzw. 1 MiB, dann schließen. Anlass: `REFUSED_BODY_LINGER_MS` greift laut Messung nicht zuverlässig, die Verbindung schließt teils nach 1–4 ms (ADR 0014, Korrekturen nach dem Gerätetest). Die Gästeseite prüft Größe und Speicher vorab (3.5). Nur dokumentiert, nicht umgesetzt. |
 | 3.5 | Gäste-Webseite: Upload, Download, Uploader-Anzeige |
 | 3.6 | Ende und Nachhalten: Ablauf erzwingen, Nachhaltefrist, Erinnerung mit Aktionen (Vorauswahl „nichts behalten“, Alles/Nichts auswählen), automatische Löschung |
-| 3.7 | Gezielte Übernahme in `Pictures/Emberlight/<Space>`, danach Release `v0.3.0`. Pflicht: „Über/Lizenzen“-Seite in der App mit Lizenzhinweisen aller mitgelieferten Bibliotheken (Apache-2.0 verlangt Lizenz bzw. NOTICE bei Weitergabe; ohne Play-Services-Plugin, z. B. AboutLibraries, prüfen), Hinweis auf GPL-3.0 und Link auf den Quellcode |
+| 3.7 | Gezielte Übernahme in `Pictures/Emberlight/<Space>`, danach Release `v0.3.0`. Pflicht: „Über/Lizenzen“-Seite in der App mit Lizenzhinweisen aller mitgelieferten Bibliotheken (Apache-2.0 verlangt Lizenz bzw. NOTICE bei Weitergabe; ohne Play-Services-Plugin, z. B. AboutLibraries, prüfen), Hinweis auf GPL-3.0 und Link auf den Quellcode. Ausdrücklich nennen: die OFL-Schriften Fraunces und Inter (SIL OFL 1.1) mit Copyright-Zeile und Lizenztext aus `core/design/src/main/assets/licenses`. |
 
 ## Festgelegt
 

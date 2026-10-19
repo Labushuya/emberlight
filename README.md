@@ -93,4 +93,10 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ```
 
-Die mitgelieferten Schriften Fraunces und Inter stehen unter der SIL Open Font License 1.1. Ihre Lizenztexte liegen im Quellcode unter `core/design/src/main/assets/licenses`.
+## Drittanbieter
+
+**Bibliotheken.** emberlight nutzt Bibliotheken anderer Projekte, unter anderem AndroidX, Jetpack Compose, Kotlin, Coil, Media3, Ktor, Room, Hilt, Telephoto und kotlinx. Sie stehen unter der [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). Eine vollständige Liste mit Lizenzhinweisen soll in der App unter „Über/Lizenzen“ stehen.
+
+**Schriften.** Die App liefert die Schriften Fraunces (Titel) und Inter (Text) mit. Beide stehen unter der [SIL Open Font License 1.1](https://openfontlicense.org/). Die Lizenztexte mit den Copyright-Zeilen liegen unter [`core/design/src/main/assets/licenses`](core/design/src/main/assets/licenses): [Fraunces](core/design/src/main/assets/licenses/fraunces_OFL.txt), [Inter](core/design/src/main/assets/licenses/inter_OFL.txt). Die Schriftdateien sind unverändert übernommen.
+
+Die Schriften liegen als eigenständige Dateien neben dem Programmcode, sie sind kein Teil des GPL-Codes. Diese Einordnung ist eine Auskunft des Projekts und keine Rechtsberatung.
