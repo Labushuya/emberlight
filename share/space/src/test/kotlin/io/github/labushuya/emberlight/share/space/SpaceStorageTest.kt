@@ -124,8 +124,11 @@ class SpaceStorageTest {
         try {
             Files.createSymbolicLink(link, target)
         } catch (failure: Exception) {
-            // Auf Windows braucht Symlink-Anlage Rechte. Fehlen sie, ist der Test nicht aussagekräftig und wird übersprungen.
-            assumeNoException("Symlink-Anlage nicht erlaubt: ${failure.javaClass.simpleName}", failure)
+            // Nur auf Windows braucht die Symlink-Anlage Rechte (Entwicklermodus oder Administrator). Dort wird der Test
+            // übersprungen, wenn sie fehlen. Auf allen anderen Systemen (CI: Linux) ist die Anlage Pflicht. Ein Fehler
+            // schlägt dort den Lauf fehl, statt den Test still zu überspringen.
+            if (!System.getProperty("os.name").orEmpty().startsWith("Windows")) throw failure
+            assumeNoException("Symlink-Anlage auf Windows nicht erlaubt: ${failure.javaClass.simpleName}", failure)
         }
     }
 }

@@ -254,9 +254,10 @@ Jede Fehlerantwort: `{"error":"<code>"}` plus Felder. Schutzheader auf allen Ant
 - Keine Tabelle `space` in 3.1a. Name und Speicherlimit kommen aus der Einrichtung des Serverlaufs.
 - Upload-Warnung: `warning` ist `"storage_80"` ab 80 % des Speicherlimits, sonst `null`.
 - Liste: `uploader` ist der Anzeigename aus der Teilnehmer-Tabelle, `createdAt` ist Epoch-Millisekunden in UTC.
-- Debug-Einstieg: Start und Stopp per Broadcast-Empfänger statt Aktivität, Tokens in einer Datei unter `files/debug-server/`. Beschreibung in `docs/DEBUG-SERVER.md`.
+- Debug-Einstieg: Start und Stopp per Broadcast-Empfänger statt Aktivität, Tokens in einer Datei unter `files/debug-server/`. Der Empfänger ist im Debug-Build exportiert und mit `android.permission.DUMP` geschützt (nur Shell und System). Beschreibung in `docs/DEBUG-SERVER.md`.
 
 ### Offen
 
 - Auto-Resume nach Netzverlust und die Stopp-Oberfläche folgen in 3.3.
 - GPS-Entfernung folgt in 3.1b, vor dem ersten Upload über die Gäste-Webseite (3.5).
+- Keep-Regeln für den Serverpfad (`share/server/consumer-rules.pro`: `KtorLocalServer`, `SpaceServerService$Companion`) entfernen oder prüfen, sobald 3.3 einen echten Einstieg aus der Oberfläche hat. Bis dahin halten sie den Serverpfad im Release-Build, damit R8 ihn nicht entfernt (Paket 3.3 in `docs/PLAN-M3.md`).

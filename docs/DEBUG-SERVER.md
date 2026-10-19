@@ -1,8 +1,13 @@
 # Debug-Server für Gerätetests
 
-Stand: 18.10.2026, Paket 3.1a. Grundlage: [ADR 0014](adr/0014-space-speicher-und-server-api.md), Abschnitt „Debug-Einstieg für Gerätetests“.
+Stand: 19.10.2026, Paket 3.1a. Grundlage: [ADR 0014](adr/0014-space-speicher-und-server-api.md), Abschnitt „Debug-Einstieg für Gerätetests“.
 
-Der Einstieg startet den lokalen Server mit einem Test-Space, ohne Oberfläche. Er dient nur dem Gerätetest. Es gibt ihn ausschließlich im Debug-Build (Source-Set `app/src/debug`). Release und Benchmark enthalten ihn nicht. Die Build-Prüfung `checkReleaseManifest` bricht ab, falls das Release-Manifest ihn enthält.
+Der Einstieg startet den lokalen Server mit einem Test-Space, ohne Oberfläche. Er dient nur dem Gerätetest. Es gibt ihn ausschließlich im Debug-Build (Source-Set `app/src/debug`). Release und Benchmark enthalten ihn nicht. Die Build-Prüfung `checkReleaseManifestDebugEntry` bricht ab, falls das Release-Manifest ihn enthält.
+
+Paketnamen für alle Befehle unten:
+
+- Debug-Build: `io.github.labushuya.emberlight.debug` (applicationId mit Suffix `.debug`, siehe `AndroidApplicationConventionPlugin`)
+- Der Namespace bleibt `io.github.labushuya.emberlight`. Deshalb heißt die Empfängerklasse ohne `.debug`: `io.github.labushuya.emberlight.debugserver.DebugServerReceiver`. Im gemergten Debug-Manifest steht `.debugserver.DebugServerReceiver` relativ zum Namespace.
 
 ## Was der Einstieg tut
 
@@ -15,7 +20,11 @@ Der Einstieg startet den lokalen Server mit einem Test-Space, ohne Oberfläche. 
 
 ## Sicherheit
 
-Der Empfänger ist im Debug-Build exportiert, damit `adb` ihn ansprechen kann. Jede App auf demselben Gerät könnte ihn dann ebenfalls auslösen. Deshalb nur auf dem Testgerät verwenden, nicht auf einem Alltagsgerät mit Debug-Build.
+Der Empfänger ist im Debug-Build exportiert, damit `adb` ihn ansprechen kann. Er hat deshalb `android:permission="android.permission.DUMP"`. Diese Berechtigung halten die Shell (also `adb`) und System-Identitäten, normale Apps nicht. Eine normale App kann den Empfänger damit nicht auslösen. Der Schutz gilt nur, solange die Berechtigung nicht an normale Apps vergeben wird. Die Schutzstufe ist laut AOSP-Manifest `signature|privileged|development`.
+
+Restrisiko: Wer `adb`-Zugriff auf das Gerät hat (USB-Debugging), kann den Server starten und stoppen. Das ist beabsichtigt. Deshalb trotzdem nur auf dem Testgerät verwenden, nicht auf einem Alltagsgerät mit Debug-Build.
+
+Nicht getestet: das Verhalten gegenüber einer echten Drittapp (ohne Testapp auf dem Gerät nicht belegt).
 
 ## Befehle
 
@@ -24,7 +33,7 @@ Platzhalter in spitzen Klammern ersetzen. Echte Tokens gehören nicht in Dokumen
 Start, mit Gast und Port:
 
 ```
-adb shell am broadcast -a io.github.labushuya.emberlight.DEBUG_SERVER_START -n io.github.labushuya.emberlight/io.github.labushuya.emberlight.debugserver.DebugServerReceiver --ei port 8787 --ez guest true
+adb shell am broadcast -a io.github.labushuya.emberlight.DEBUG_SERVER_START -n io.github.labushuya.emberlight.debug/io.github.labushuya.emberlight.debugserver.DebugServerReceiver --ei port 8787 --ez guest true
 ```
 
 Ohne Gast: `--ez guest true` weglassen.
@@ -40,7 +49,7 @@ Die Zeile „Debug: gebunden an `<ip>:<port>`“ nennt Adresse und Port.
 Tokens lesen:
 
 ```
-adb shell run-as io.github.labushuya.emberlight cat files/debug-server/tokens.json
+adb shell run-as io.github.labushuya.emberlight.debug cat files/debug-server/tokens.json
 ```
 
 Die Datei enthält `spaceId`, `port`, je Teilnehmer `participantId` und `token` unter `host` bzw. `guest`.
@@ -48,7 +57,7 @@ Die Datei enthält `spaceId`, `port`, je Teilnehmer `participantId` und `token` 
 Stop:
 
 ```
-adb shell am broadcast -a io.github.labushuya.emberlight.DEBUG_SERVER_STOP -n io.github.labushuya.emberlight/io.github.labushuya.emberlight.debugserver.DebugServerReceiver
+adb shell am broadcast -a io.github.labushuya.emberlight.DEBUG_SERVER_STOP -n io.github.labushuya.emberlight.debug/io.github.labushuya.emberlight.debugserver.DebugServerReceiver
 ```
 
 ## Testaufrufe vom PC im selben WLAN

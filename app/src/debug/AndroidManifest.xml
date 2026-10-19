@@ -7,9 +7,14 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <application>
+        <!--
+            Nur die Shell (adb) und System-Identitäten halten android.permission.DUMP. Normale Apps können den
+            Empfänger damit nicht auslösen (docs/DEBUG-SERVER.md, Abschnitt Sicherheit).
+        -->
         <receiver
             android:name=".debugserver.DebugServerReceiver"
             android:exported="true"
+            android:permission="android.permission.DUMP"
             tools:ignore="ExportedReceiver">
             <intent-filter>
                 <action android:name="io.github.labushuya.emberlight.DEBUG_SERVER_START" />

@@ -9,5 +9,6 @@
 # Serverpfad: In der Release-Variante gibt es keine Einrichtung (SpaceServerService.serverSetupProvider liefert null), und
 # R8 schließt daraus, dass der Server nie startet. Der Release-Build prüft R8 aber mit dem Server (ADR 0012). Die Regeln
 # halten die Klassen, nicht die Funktion. Ein Start bleibt ohne Einrichtung unmöglich.
+# Abbau in Paket 3.3, sobald es einen echten Einstieg gibt (ADR 0014, Abschnitt „Offen“, docs/PLAN-M3.md).
 -keep class io.github.labushuya.emberlight.share.server.KtorLocalServer { *; }
 -keep class io.github.labushuya.emberlight.share.server.SpaceServerService$Companion { *; }
