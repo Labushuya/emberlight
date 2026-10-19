@@ -31,15 +31,38 @@ Dieses ADR beschreibt die Entfernung von Standortdaten, die Einwilligung für ni
 5. **Was entfernt wird:** GPS-Koordinaten und zusätzlich **Ortsnamen** (Stadt, Region, Land, Sublocation; IPTC bzw. XMP `photoshop`, `Iptc4xmpCore`, `Iptc4xmpExt`).
 6. **EXIF-MakerNote** (Tag 0x927C) wird vollständig mit `0x00` überschrieben (längenerhaltend). Herstellerdaten können verborgene Angaben enthalten.
 7. **EXIF-GPS-IFD:** Entry-Count auf 0, alle Eintragsbytes, der Next-IFD-Zeiger und alle ausgelagerten Wertebereiche der GPS-Einträge werden genullt. Der Zeiger `GPSInfo` (0x8825) in IFD0 bleibt. Er zeigt auf ein leeres IFD. Ergebnis der Prüfung: siehe Abschnitt „Ergebnis zu Festlegung 7“.
-8. **Motion Photos** (JPEG mit angehängtem MP4 nach dem EOI): Das MP4 wird rekursiv mit dem MP4-Scrubber bereinigt. Unbekannte nicht-leere Daten nach EOI, IEND oder nach der letzten Top-Level-Box ergeben `trailing_data`. MPF-Zusatzbilder liegen bei echten Multi-Picture-Dateien ebenfalls nach dem EOI des Hauptbilds. Sie gelten nicht als Anhängsel, sondern werden rekursiv als JPEG geprüft. **Eingebettete Thumbnails** (in TIFF, IFD1) werden genauso geprüft: Anhängsel nach deren EOI ergibt `trailing_data`, es bleibt nie ungeprüft stehen.
+8. **Motion Photos** (JPEG mit angehängtem MP4 nach dem EOI): Das MP4 wird rekursiv mit dem MP4-Scrubber bereinigt. Unbekannte Daten hinter dem logischen Dateiende werden abgeschnitten (Abschnitt „Anhänge nach dem Dateiende“). MPF-Zusatzbilder liegen bei echten Multi-Picture-Dateien ebenfalls nach dem EOI des Hauptbilds. Sie gelten nicht als Anhängsel, sondern werden rekursiv als JPEG geprüft. **Eingebettete Thumbnails** (in TIFF, IFD1) werden genauso geprüft: Ein Anhängsel nach deren EOI liegt innerhalb einer Struktur und lässt sich nicht abschneiden. Es ergibt `trailing_data` und bleibt nie ungeprüft stehen.
 9. **Prüfung danach** (fail closed): Der Detektor läuft ohne Änderung über den geplanten Stand. Ein Byte-Scan über den ganzen Datenstrom sucht nach ISO-6709-Mustern `[+-]\d{1,3}\.\d+[+-]\d{1,3}\.\d+` und nach nicht geleerten Eigenschaften `GPSLatitude`, `GPSLongitude`, `exif:GPS*`. Scan und SHA-256 laufen in **einem** Durchgang über den geplanten Stand. Findet sich noch etwas: `verification_failed`, und nichts wird geschrieben. Wurde nichts geändert, läuft nur der Scan, und der beim Streamen berechnete Hash bleibt gültig.
+10. **Anhänge nach dem Dateiende** (Festlegung 19.10.2026, Befund aus echten Aufnahmen): Unbekannte Anhänge hinter dem logischen Dateiende werden beim Upload abgeschnitten. Bekannte eingebettete Teile bleiben erhalten und werden bereinigt. Details und Befund im Abschnitt „Anhänge nach dem Dateiende“.
+
+## Anhänge nach dem Dateiende
+
+**Befund** aus echten Aufnahmen (lokaler Lauf, 19.10.2026; nur Größenordnungen und Strukturtypen, keine Metadatenwerte):
+
+- Kamera-JPEG: Nach dem EOI folgt ein Block von rund 500 KB ohne erkennbare Struktur. Kein MPF. Vorher `trailing_data`, also nur mit Einwilligung hochladbar.
+- Kamera-MP4: Nach der letzten Top-Level-Box (`mdat`) folgen rund 480 KB ohne gültige Box-Struktur. `ContentInspector.hasValidStructure` lehnte die Datei vor dem Scrubber mit 415 ab. Das war ein Fehler: Das Video war nicht einmal mit Einwilligung hochladbar.
+- Motion-Photo (Samsung-artig): Nach dem EOI folgt ein 24-Byte-Kopf mit dem Marker `MotionPhoto_Data` bei Offset 8, danach ein MP4. Am Dateiende steht ein SEF-artiger Trailer (`SEFH` bis `SEFT`, 32 Bytes). Vorher `trailing_data`.
+
+**Festlegung:** Unbekannte Anhänge hinter dem logischen Dateiende werden beim Upload abgeschnitten (Truncate). Bekannte eingebettete Teile bleiben erhalten und werden bereinigt.
+
+- **Logisches Ende je Format:**
+  - JPEG: Ende des Hauptbilds (EOI). Dazu kommen MPF-Zusatzbilder, deren Bereiche über die MPF-Offsets bekannt sind, und ein angehängtes MP4. Das MP4 wird über seinen `ftyp` gefunden: direkt nach dem EOI (Google, Offset 4) oder hinter einem Kopf mit `MotionPhoto_Data` (Samsung-artig, MP4 beginnt bei Offset 24). Das MP4 wird rekursiv bereinigt. Danach ist alles abgeschnitten, auch ein SEF-Trailer.
+  - MP4, MOV, 3GP, HEIF, AVIF: Ende der letzten gültigen Top-Level-Box. Gültig heißt: Größe mindestens 8 (oder 64-Bit ab 16, oder `size 0` bis zum Dateiende), innerhalb der Datei, Typ aus vier druckbaren ASCII-Zeichen. Folgt kein gültiger Kopf, ist der Rest Anhang.
+  - PNG: Ende des `IEND`-Chunks. WebP: RIFF-Größe plus 8. GIF: Trailer `0x3B`.
+- **Strukturprüfung für Anhänge (tolerant, fail closed).** Ein Kopf mit einem bekannten Top-Level-Typ (`ftyp`, `moov`, `mdat`, `free`, `skip`, `wide`, `uuid`, `meta`, `pnot`, `moof`, `mfra`, `styp`, `sidx`, `idat`, `junk`) und kaputter Größe ist eine beschädigte Kette. Die Prüfung lehnt sie mit 415 bzw. `structure` ab. Ein Kopf mit unbekanntem Typ und kaputter Größe beginnt dagegen den Anhang. Sonst ginge eine mitten in der Datei beschädigte Box samt allem Folgenden still verloren. Restrisiko: Ein Anhang, dessen Kopf zufällig einen bekannten Typ trägt, wird abgelehnt. Das ist fail closed und kein Datenverlust.
+- **Nicht abschneidbar** sind Lücken innerhalb einer Struktur, also zwischen zwei bekannten Teilen. Dazu zählen ein Anhängsel nach dem EOI eines eingebetteten Thumbnails und eine Lücke zwischen MPF-Bildern. Sie bleiben `trailing_data`.
+- **Plan und Apply:** Der Plan enthält die Ziel-Länge. Apply schreibt die Überschreibungen und setzt danach die Länge (`RandomAccessFile.setLength`). Hash und Nachkontrolle laufen über den Stand nach dem Kürzen. Die Nachkontrolle meldet einen Anhang, der danach noch da wäre, als `verification_failed`. Das Ergebnis ist deterministisch.
+- **Einwilligung:** Bei Einwilligung mit nicht bereinigbarem Rest bleibt die Datei unverändert, also auch nicht abgeschnitten.
+- **Größe:** `size_bytes` ist die Länge der gespeicherten Datei nach dem Kürzen.
+- **Folge:** Herstellerextras im Anhang gehen verloren (etwa der Samsung-SEF-Index oder Bearbeitungsdaten). Bild bzw. Video bleiben vollständig. Die Nutzerin bzw. der Nutzer soll das erfahren und widersprechen können. Der Hinweis ist nicht umgesetzt (siehe „Abweichungen und offene Punkte“).
+- **Tests:** `TrailingCutTest` (JPEG mit Zufallsanhang und mit GPS-JPEG als Anhang, MPF mit Anhang, Google- und Samsung-Motion mit Trailer, MP4 nach `mdat`, kaputte Kette bleibt 415, PNG, WebP, GIF, HEIF, Determinismus). `ContentInspectorTest` und `SpaceVaultTest` für die Strukturprüfung und die gespeicherte Größe. Der Polyglot-PNG-Test (Anhang hinter IEND) erwartet jetzt das abgeschnittene PNG statt `trailing_data`, weil der Anhang nicht mehr Teil der Datei bleibt.
 
 ## Reason-Codes
 
 | Code | Bedeutung |
 |---|---|
 | `metadata_track` | Metadaten-Track mit Standort (`gpmd`, `camm`, `mebx` mit `location`-Key) oder Handler `meta` |
-| `trailing_data` | Nicht-leere, unbekannte Daten nach EOI, IEND oder der letzten Box, auch nach einem Thumbnail-EOI |
+| `trailing_data` | Lücke innerhalb einer Struktur (zwischen zwei bekannten Teilen, nach dem EOI eines eingebetteten Thumbnails), die sich nicht abschneiden lässt. Anhänge hinter dem logischen Dateiende werden abgeschnitten und lösen diesen Code nicht aus |
 | `compressed_text` | Komprimierter Text (zTXt, iTXt) mit Standort, der nicht sicher geändert werden kann |
 | `extended_xmp` | Erweitertes XMP (APP1 `http://ns.adobe.com/xmp/extension/`) mit Standort. Es wird nur geprüft |
 | `free_box_location` | `free`- oder `skip`-Box mit Standort-Muster oder `gps `-Box (Pittasoft-Muster) |
@@ -85,7 +108,7 @@ Ein geleerter Standort darf nicht als Position (0/0) gelesen werden. Deshalb:
 
 - Der Walker läuft zuerst gegen einen **Plan** im Speicher (`PlanStore`). Die Datei bleibt unverändert. Lesen liefert den geplanten Stand, damit Prüfung und Scan dieselben Bytes sehen wie nach dem Schreiben.
 - Die Summe der geplanten Bytes ist durch 16 MiB begrenzt. Darüber gilt die Struktur als `structure`. So entsteht kein zusätzlicher Speicher in Abhängigkeit von der Dateigröße, auch nicht bei einem 2-GiB-Video.
-- **Apply** schreibt die Bereiche nur, wenn Prüfung und Scan bestanden. Bei einem Fehler davor bleibt die Datei bit-identisch.
+- **Apply** schreibt die Bereiche nur, wenn Prüfung und Scan bestanden. Bei einem Fehler davor bleibt die Datei bit-identisch. Plan und Prüfung laufen im Fehlerfang (Strukturfehler gelten als `structure`). Das Schreiben läuft außerhalb davon, damit ein Fehler dort nie als Strukturfehler mit halb geschriebener Datei endet. Zum Schreiben gehört auch das Kürzen (siehe „Anhänge nach dem Dateiende“).
 - **Einwilligung** und nicht bereinigbar: Es wird nichts geschrieben. Die Datei bleibt unverändert, `locationKept = true`. Der Hash ist der des Streams.
 - Die Sicherungskopie und ihre Wiederherstellung entfallen ersatzlos. Im Space- und im Temp-Verzeichnis entsteht keine zweite Datei (Test `SpaceVaultTest`).
 - Tests: `PlanApplyTest.planChangesAreNotWrittenWhenALaterCheckRefusesTheFile` (bereinigbarer EXIF-Standort plus Anhängsel nach IEND: kein einziger Schreibvorgang), `HeifScrubberTest` (`assertNotRemovable` prüft die Bytes).
@@ -157,9 +180,9 @@ Für HEIF liest ExifInterface (Robolectric) das synthetische Item nicht. metadat
 
 ## Restrisiken
 
-- **Herstellerspezifische Trailer** (zum Beispiel Samsung SEF) landen bei der Einwilligung, nicht bei der automatischen Bereinigung.
+- **Herstellerspezifische Trailer** (zum Beispiel Samsung SEF) werden abgeschnitten. Herstellerextras im Anhang gehen dabei verloren. Bild und Video bleiben vollständig (Abschnitt „Anhänge nach dem Dateiende“).
 - **Echte iPhone-Dateien** sind ungeprüft. Die HEIC-Walker sind nur mit synthetischen Dateien und der ExifTool-Gegenprobe in der CI belegt. Der Gerätetest mit echten Aufnahmen fehlt.
-- **Echte Honor-Aufnahmen** folgen im Gerätetest.
+- **Echte Kamera-Aufnahmen** sind lokal in Stichproben geprüft (Abschnitt „Anhänge nach dem Dateiende“), nicht auf dem Gerät über den Upload.
 - **MakerNote** wird geleert. Herstellerdaten, die für die Bildwiedergabe nötig wären, gehen dabei verloren.
 - **Unbekannte Strukturen** werden abgelehnt, nicht durchgelassen. Das kann gültige, aber ungewöhnliche Dateien betreffen. Sie landen dann ebenfalls bei der Einwilligung.
 - **Ein Standort im Bild selbst** (etwa ein Straßenschild) bleibt. Dieses ADR behandelt nur Metadaten.
@@ -170,11 +193,14 @@ Für HEIF liest ExifInterface (Robolectric) das synthetische Item nicht. metadat
 ## Abweichungen und offene Punkte
 
 1. **Quellen nicht erneut gelesen.** Die Fundorte stammen aus der Recherche vom 19.10.2026. Die Feldgrößen von `iloc` und `infe` sind aus der Kenntnis der Spezifikation übernommen [Verm.], nicht aus einer erneuten Lektüre von ISO/IEC 14496-12 und 23008-12. Die Tests prüfen die Verfahren nur auf synthetischen Dateien, die nach diesem Stand gebaut sind.
-2. **Echte Testdateien** mit Standort (Ordner außerhalb des Repos) sind in diesem Paket nicht verwendet worden.
+2. **Echte Testdateien** mit Standort (Ordner außerhalb des Repos) wurden nur lokal und nur lesend verwendet. Ergebnis: Befund im Abschnitt „Anhänge nach dem Dateiende“. Keine Dateien und keine Metadatenwerte im Repo.
 3. **Ein Fehler im Scrubber bricht nie mit einer Ausnahme ab**, sondern wird als `structure` gemeldet, wenn es ein Laufzeitfehler der Struktur ist. Errors und I/O-Fehler laufen weiter. Fehlschläge in den Tests müssen deshalb als Fehler der Umsetzung gelesen werden.
 4. **JPEG mit drei Lesedurchgängen.** Eine Verkürzung auf zwei ist möglich, indem der Plan die Entropiegrenzen an die Prüfung weitergibt. Nicht umgesetzt.
 5. **ExifTool-Nachweis für die `ilst`-Werte mit Leerzeichen**: Die CI-Gegenprobe muss zeigen, dass ExifTool dort keine Position ableitet. Ohne grünen CI-Lauf ist das offen.
 6. **Gerätetest** mit echten Fotos und Videos (Paket 3.1b, Testkatalog in PLAN-M3.md) steht aus.
+7. **Hinweis an die Nutzerin bzw. den Nutzer** über abgeschnittene Anhänge ist nicht umgesetzt. Die Gästeseite (Paket 3.5) existiert noch nicht. Die Einwilligung wirkt nur bei nicht bereinigbaren Dateien. Für einen Widerspruch gegen das Abschneiden gibt es deshalb noch keinen Weg. Das ist eine offene Produktentscheidung.
+8. **XMP-Verweise** (`GCamera:MicroVideoOffset`, `Container:Directory`) werden nicht ausgewertet. Das angehängte MP4 wird über seinen `ftyp` gefunden, mit Suche nur direkt nach dem EOI bzw. hinter dem Marker `MotionPhoto_Data`.
+9. **Gegenprobe mit ffmpeg-MP4 plus Anhang** (Fall `mp4-anhang` in `ExternalToolCrossCheckTest`) ist lokal nicht ausgeführt. ExifTool und ffmpeg fehlen lokal, und die CI-Läufe sind gesperrt. Der Nachweis steht aus, bis die CI wieder läuft. Die Logik ist durch `TrailingCutTest` und `SpaceVaultTest` mit synthetischen MP4 abgedeckt.
 
 ## Quellen
 
