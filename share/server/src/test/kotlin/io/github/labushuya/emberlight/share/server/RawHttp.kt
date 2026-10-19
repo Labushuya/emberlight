@@ -2,6 +2,7 @@ package io.github.labushuya.emberlight.share.server
 
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.OutputStream
 import java.net.Socket
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -86,13 +87,10 @@ internal object RawHttp {
         port: Int,
         head: ByteArray,
         bodySize: Long,
-    ): Pair<RawResponse?, Long> =
-        Socket("127.0.0.1", port).use { socket ->
-            socket.soTimeout = TIMEOUT_MS
-            val reply = CompletableFuture.supplyAsync { readReply(socket) }
-            var sent = 0L
-            try {
-                val out = socket.getOutputStream()
+    ): Pair<RawResponse?, Long> {
+        var sent = 0L
+        val response =
+            exchange(port) { out ->
                 out.write(head)
                 val chunk = ByteArray(CHUNK_BYTES) { 0x55 }
                 while (sent < bodySize) {
@@ -100,12 +98,47 @@ internal object RawHttp {
                     out.write(chunk, 0, count)
                     sent += count.toLong()
                 }
-                out.flush()
+            }
+        return response to sent
+    }
+
+    /**
+     * Sendet eine vollständige, kleine Anfrage (Kopf und Körper) nebenläufig gelesen, wie [sendBodyAnsweringEarly]. Nötig für
+     * Tests, deren Server vor dem Ende des Körpers antwortet, etwa bei `401`, `403`, `413` oder `415`.
+     */
+    fun sendAnsweringEarly(
+        port: Int,
+        request: ByteArray,
+    ): RawResponse? =
+        exchange(port) { out ->
+            var offset = 0
+            while (offset < request.size) {
+                val count = minOf(CHUNK_BYTES, request.size - offset)
+                out.write(request, offset, count)
+                offset += count
+            }
+        }
+
+    /**
+     * Gemeinsamer Ablauf: Die Antwort wird nebenläufig gelesen, während [write] sendet. Schlägt das Schreiben fehl, weil der
+     * Server früh geantwortet und geschlossen hat, ist das erwartet. Ohne die nebenläufige Antwort geht sie sonst verloren,
+     * wenn der Server mit ungelesenen Bytes im Puffer schließt: Er sendet dann RST, und Windows verwirft den empfangenen Rest.
+     */
+    private inline fun exchange(
+        port: Int,
+        write: (OutputStream) -> Unit,
+    ): RawResponse? =
+        Socket("127.0.0.1", port).use { socket ->
+            socket.soTimeout = TIMEOUT_MS
+            val reply = CompletableFuture.supplyAsync { readReply(socket) }
+            try {
+                write(socket.getOutputStream())
+                socket.getOutputStream().flush()
             } catch (_: IOException) {
                 // Der Server hat die Verbindung geschlossen. Das ist der erwartete Fall.
             }
             val raw = reply.get(TIMEOUT_MS.toLong() + 5_000L, TimeUnit.MILLISECONDS)
-            (if (raw.isEmpty()) null else parse(raw)) to sent
+            if (raw.isEmpty()) null else parse(raw)
         }
 
     /** Liest, bis der Server schließt oder zurücksetzt. Was bis dahin ankam, bleibt erhalten. */
