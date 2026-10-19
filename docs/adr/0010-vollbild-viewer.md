@@ -510,7 +510,7 @@ Siehe Abschnitt „Geräteprüfung Kurzer Blick und Infobereich“.
 
 ## Geräteprüfung Kurzer Blick und Infobereich (17.10.2026)
 
-Gerät: Honor Magic V2, Android 16, Außendisplay (displayId 0, physische ID 4630946324137792644, 1060 × 2376). Debug-Build des Branches für I, II, III, Benchmark-Build für V. Demo-Modus per `--ez emberlight.demo true`, am Ende in beiden Apps aus und gestoppt. Fotos nur vom Außendisplay, nur wenn die Demo-App dort im Fokus war (`topResumedActivity`, Fokus auf Display 0 geprüft). Alle Fotos zeigten die Demo-App mit DEMO-Badge. Logcat nur mit PID und Tag `EmberlightViewer`.
+Gerät: Honor Magic V2, Android 16, Außendisplay (displayId 0, physische ID <Display-ID>, 1060 × 2376). Debug-Build des Branches für I, II, III, Benchmark-Build für V. Demo-Modus per `--ez emberlight.demo true`, am Ende in beiden Apps aus und gestoppt. Fotos nur vom Außendisplay, nur wenn die Demo-App dort im Fokus war (`topResumedActivity`, Fokus auf Display 0 geprüft). Alle Fotos zeigten die Demo-App mit DEMO-Badge. Logcat nur mit PID und Tag `EmberlightViewer`.
 
 ### Bereits belegt aus dem vorigen Lauf
 

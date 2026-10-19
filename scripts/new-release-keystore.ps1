@@ -38,7 +38,7 @@
     Erzeugt nur Keystore und LIESMICH.txt. Es werden keine Secrets und keine Variablen gesetzt.
 
 .EXAMPLE
-    .\scripts\new-release-keystore.ps1 -OutputDir H:\DEV\_keys\emberlight
+    .\scripts\new-release-keystore.ps1 -OutputDir <keys-verzeichnis>
 
 .EXAMPLE
     .\scripts\new-release-keystore.ps1 -OutputDir $env:TEMP\emberlight-test -SkipGitHub
@@ -202,7 +202,7 @@ if ($null -eq $git) {
     $gitCheck = Invoke-Native -FilePath $git.Source -Arguments @('-C', $probe, 'rev-parse', '--is-inside-work-tree')
     $gitOutput = ($gitCheck.Output -join ' ').Trim()
     if ($gitCheck.ExitCode -eq 0 -and $gitOutput -eq 'true') {
-        throw "Der Zielordner liegt in einem Git-Arbeitsverzeichnis ($probe). Schlüssel dürfen nie in einem Repository liegen. Bitte einen Ordner außerhalb wählen, z. B. H:\DEV\_keys\emberlight."
+        throw "Der Zielordner liegt in einem Git-Arbeitsverzeichnis ($probe). Schlüssel dürfen nie in einem Repository liegen. Bitte einen Ordner außerhalb wählen, z. B. <keys-verzeichnis>."
     }
     if ($gitCheck.ExitCode -ne 0 -and $gitOutput -notmatch 'not a git repository') {
         throw "Die Git-Prüfung für '$probe' ist fehlgeschlagen: $gitOutput"

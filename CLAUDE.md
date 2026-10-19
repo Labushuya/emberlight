@@ -51,7 +51,7 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
 
 ## Arbeitsweise
 
-- Repo ist privat (GitHub Free), daher keine technische Branch Protection. Trotzdem jede Änderung über Branch und PR, Merge nur bei grüner CI.
+- Repo ist öffentlich. `main` ist geschützt: Änderungen nur per PR, grüne CI „Build, Lint und Tests“ ist Pflicht, kein Force-Push, kein Löschen. Merge per Squash.
 - Dokumentation, README und Commit-Beschreibungen auf Deutsch, Code und Bezeichner auf Englisch.
 - Alle Nutzertexte in `strings.xml` (de und en), keine fest eingebauten Texte.
 - Nach jedem Meilenstein: bauen, testen, kurz in `docs/KONZEPT.md` nachtragen, wenn sich eine Entscheidung geändert hat.

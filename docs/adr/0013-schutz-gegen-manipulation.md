@@ -291,7 +291,7 @@ Bis 3.1b werden Ortsdaten **nicht** entfernt. Das widerspricht dem Standard in K
 
 ## Android-API-Fakten
 
-Prüfung am lokalen SDK, 18.10.2026. Quellen: `H:\DEV\tools\android-sdk\platforms\android-37.0\android.jar` (Signaturen per `javap`), `data\annotations.zip` (Permission-Annotationen), `data\api-versions.xml` (Einführungsversion). Lokale Quelltexte (`sources`) liegen im SDK nicht vor. Die Aussagen gelten für die Stubs, nicht für das Laufzeitverhalten auf einem Gerät.
+Prüfung am lokalen SDK, 18.10.2026. Quellen: `<android-sdk>\platforms\android-37.0\android.jar` (Signaturen per `javap`), `data\annotations.zip` (Permission-Annotationen), `data\api-versions.xml` (Einführungsversion). Lokale Quelltexte (`sources`) liegen im SDK nicht vor. Die Aussagen gelten für die Stubs, nicht für das Laufzeitverhalten auf einem Gerät.
 
 | Nr. | Aussage | Ergebnis | Fundstelle |
 |---|---|---|---|
