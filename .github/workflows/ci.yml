@@ -105,6 +105,15 @@ jobs:
         run: ./gradlew check koverXmlReport assembleDebug assembleRelease -Pemberlight.testForks=2 -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
 
       # Gradle kürzt Ausnahmen im Log (nur Typ und Ort). Bei Fehlschlag die Meldungen aus den Testberichten in den Log schreiben.
+      # Gegenprobe-Ausgabe (ADR 0015): ExifTool-Zeilen vorher und nachher je Format, aus dem Testbericht (Systemausgabe).
+      - name: Gegenprobe-Ausgabe (ExifTool vorher und nachher) anzeigen
+        if: always()
+        shell: bash
+        run: |
+          find . -path '*/build/test-results/*' -name '*ExternalToolCrossCheckTest.xml' \
+            -exec grep -h 'GEGENPROBE' {} + 2>/dev/null | sed -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&quot;/"/g' -e 's/&amp;/\&/g' || true
+          exit 0
+
       - name: Meldungen fehlgeschlagener Tests zeigen
         if: failure()
         shell: bash

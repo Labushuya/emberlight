@@ -58,7 +58,15 @@ class ExternalToolCrossCheckTest {
             val result = LocationScrubber.scrub(cleaned, case.format, sha256Hex(case.bytes))
             assertTrue("${case.name}: Bereinigung liefert $result, erwartet Clean", result is LocationScrubResult.Clean)
             assertEquals("${case.name}: Länge", case.bytes.size.toLong(), cleaned.length())
-            assertNoLocationTag(case.name, exiftool(cleaned))
+            val after = exiftool(cleaned)
+            // Ausgabe für die CI-Gegenprobe (ADR 0015): Der Schritt „Gegenprobe-Ausgabe“ zeigt diese Zeilen im Log.
+            println(
+                "GEGENPROBE ${case.name} vorher: ${before.lines().filter(
+                    ::isLocationLineWithValue,
+                ).joinToString(" | ")}",
+            )
+            println("GEGENPROBE ${case.name} nachher: ${after.lines().filter(::isLocationTagLine).joinToString(" | ")}")
+            assertNoLocationTag(case.name, after)
         }
     }
 
@@ -176,7 +184,10 @@ class ExternalToolCrossCheckTest {
      * darf keine Position mehr ableiten lassen. Namen ohne Wert sind unkritisch.
      */
     private fun isLocationLineWithValue(line: String): Boolean =
-        GPS_TAG.containsMatchIn(line.substringBefore(':')) && line.substringAfter(':', "").any { it.isDigit() }
+        isLocationTagLine(line) && line.substringAfter(':', "").any { it.isDigit() }
+
+    /** Eine Zeile mit Standort-Tag, mit oder ohne Wert. */
+    private fun isLocationTagLine(line: String): Boolean = GPS_TAG.containsMatchIn(line.substringBefore(':'))
 
     private fun assertNoLocationTag(
         name: String,
