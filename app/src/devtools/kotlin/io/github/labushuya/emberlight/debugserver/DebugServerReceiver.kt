@@ -17,9 +17,9 @@ import io.github.labushuya.emberlight.share.space.SpaceId
  * Debug-Einstieg für den Gerätetest des Servers (ADR 0014, docs/DEBUG-SERVER.md). Liegt im Source-Set `devtools` und ist nur
  * im Debug- und Benchmark-Build enthalten, nie im Release.
  *
- * START legt einen Test-Space mit einem Gastgeber und optional einem Gast an. Die Tokens kommen vom PC als Extras des
- * Broadcasts (`host_token`, optional `guest_token`, je 64 Hex-Zeichen). Die App erzeugt und speichert keine Tokens. Im
- * Speicher landen nur die SHA-256-Hashes. Tokens und Extras erscheinen nie im Log.
+ * START legt einen Test-Space mit einem Gastgeber und optional einem Gast an. Der PC übergibt die SHA-256-Hashes der Tokens
+ * als Extras des Broadcasts (`host_token_sha256` Pflicht, `guest_token_sha256` optional, je 64 Hex-Zeichen). Klartext-Tokens
+ * kommen auf dem Gerät nie an. Extras und Hashes erscheinen nie im Log.
  *
  * STOP beendet den Server über den Dienst.
  */
@@ -46,10 +46,10 @@ class DebugServerReceiver : BroadcastReceiver() {
         }
         val check =
             DebugTokens.check(
-                intent.getStringExtra(EXTRA_HOST_TOKEN),
-                intent.getStringExtra(EXTRA_GUEST_TOKEN),
+                intent.getStringExtra(EXTRA_HOST_TOKEN_SHA256),
+                intent.getStringExtra(EXTRA_GUEST_TOKEN_SHA256),
             )
-        val tokens =
+        val hashes =
             when (check) {
                 is TokenCheck.Accepted -> {
                     check
@@ -64,8 +64,8 @@ class DebugServerReceiver : BroadcastReceiver() {
         val spaceId = SpaceId.generate()
         val participants =
             buildList {
-                add(seed(Role.HOST, HOST_NAME, tokens.host))
-                tokens.guest?.let { add(seed(Role.GUEST, GUEST_NAME, it)) }
+                add(seed(Role.HOST, HOST_NAME, hashes.host))
+                hashes.guest?.let { add(seed(Role.GUEST, GUEST_NAME, it)) }
             }
         SpaceServerService.serverSetupProvider = {
             ServerSetup(
@@ -79,24 +79,24 @@ class DebugServerReceiver : BroadcastReceiver() {
         Log.i(TAG, "Debug-Server gestartet, Port $port, ${participants.size} Teilnehmer. Tokens stehen nicht im Log.")
     }
 
-    /** Ein Teilnehmer. Der Klartext-Token wird hier gehasht und danach nicht mehr gehalten. */
+    /** Ein Teilnehmer. Der Hash kommt fertig vom PC und wird hier nur übernommen. */
     private fun seed(
         role: Role,
         displayName: String,
-        token: String,
+        tokenSha256Hex: String,
     ): ParticipantSeed =
         ParticipantSeed(
             principal = Principal(ParticipantId.generate(), role),
             displayName = displayName,
-            tokenSha256Hex = DebugTokens.sha256Hex(token),
+            tokenSha256Hex = tokenSha256Hex,
         )
 
     companion object {
         const val ACTION_START = "io.github.labushuya.emberlight.DEBUG_SERVER_START"
         const val ACTION_STOP = "io.github.labushuya.emberlight.DEBUG_SERVER_STOP"
         const val EXTRA_PORT = "port"
-        const val EXTRA_HOST_TOKEN = "host_token"
-        const val EXTRA_GUEST_TOKEN = "guest_token"
+        const val EXTRA_HOST_TOKEN_SHA256 = "host_token_sha256"
+        const val EXTRA_GUEST_TOKEN_SHA256 = "guest_token_sha256"
         const val DEFAULT_PORT = 8787
 
         // Dieselbe Log-Kennung wie der Dienst, damit `logcat -s EmberlightServer` alles zeigt.

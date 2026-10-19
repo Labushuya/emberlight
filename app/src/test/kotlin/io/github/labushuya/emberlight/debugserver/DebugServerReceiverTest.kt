@@ -41,8 +41,8 @@ class DebugServerReceiverTest {
     }
 
     @Test
-    fun hostAndGuestTokenStartTheServiceWithHashesOnly() {
-        send(hostToken = HOST, guestToken = GUEST)
+    fun hostAndGuestHashesStartTheServiceAndArePassedThroughUnchanged() {
+        send(hostHash = HOST, guestHash = GUEST)
 
         val started = shadowOf(context as Application).nextStartedService
         assertNotNull(started)
@@ -51,13 +51,13 @@ class DebugServerReceiverTest {
         val setup = checkNotNull(SpaceServerService.serverSetupProvider())
         assertTrue(setup.debugLogging)
         assertEquals(listOf(Role.HOST, Role.GUEST), setup.participants.map { it.principal.role })
-        assertEquals(DebugTokens.sha256Hex(HOST), setup.participants[0].tokenSha256Hex)
-        assertEquals(DebugTokens.sha256Hex(GUEST), setup.participants[1].tokenSha256Hex)
+        assertEquals(HOST, setup.participants[0].tokenSha256Hex)
+        assertEquals(GUEST, setup.participants[1].tokenSha256Hex)
     }
 
     @Test
     fun hostOnlyCreatesOneParticipant() {
-        send(hostToken = HOST)
+        send(hostHash = HOST)
 
         assertNotNull(shadowOf(context as Application).nextStartedService)
         val setup = checkNotNull(SpaceServerService.serverSetupProvider())
@@ -66,57 +66,66 @@ class DebugServerReceiverTest {
 
     @Test
     fun noTokenFileIsWritten() {
-        send(hostToken = HOST, guestToken = GUEST)
+        send(hostHash = HOST, guestHash = GUEST)
 
         assertFalse(File(context.filesDir, "debug-server").exists())
         assertFalse(File(context.filesDir, "debug-server/tokens.json").exists())
     }
 
     @Test
-    fun missingOrInvalidHostTokenRefusesTheStart() {
+    fun oldRawTokenExtrasAreIgnoredWithoutFallback() {
+        val intent = Intent(DebugServerReceiver.ACTION_START)
+        intent.putExtra("host_token", "0123456789abcdef".repeat(4))
+        DebugServerReceiver().onReceive(context, intent)
+
+        assertRefused(secrets = listOf("0123456789abcdef"))
+    }
+
+    @Test
+    fun missingOrInvalidHostHashRefusesTheStart() {
         listOf(null, "", HOST.uppercase(), HOST.dropLast(1), HOST.replaceRange(0, 1, "z"), " $HOST").forEach { bad ->
             ShadowLog.clear()
-            send(hostToken = bad)
+            send(hostHash = bad)
             assertRefused(secrets = listOfNotNull(bad?.takeIf { it.isNotEmpty() }))
         }
     }
 
     @Test
-    fun invalidGuestTokenRefusesTheStart() {
+    fun invalidGuestHashRefusesTheStart() {
         listOf("", GUEST.uppercase(), GUEST.dropLast(1), HOST).forEach { bad ->
             ShadowLog.clear()
-            send(hostToken = HOST, guestToken = bad)
+            send(hostHash = HOST, guestHash = bad)
             assertRefused(secrets = listOfNotNull(bad.takeIf { it.isNotEmpty() }, HOST))
         }
     }
 
     @Test
-    fun equalHostAndGuestTokenRefusesTheStart() {
-        send(hostToken = HOST, guestToken = HOST)
+    fun equalHostAndGuestHashRefusesTheStart() {
+        send(hostHash = HOST, guestHash = HOST)
 
         assertRefused(secrets = listOf(HOST))
     }
 
     @Test
     fun invalidPortRefusesTheStart() {
-        send(hostToken = HOST, port = -1)
+        send(hostHash = HOST, port = -1)
         assertRefused(secrets = listOf(HOST))
 
         ShadowLog.clear()
-        send(hostToken = HOST, port = 65536)
+        send(hostHash = HOST, port = 65536)
         assertRefused(secrets = listOf(HOST))
     }
 
     @Test
-    fun tokensNeverAppearInLogEvenOnSuccess() {
-        send(hostToken = HOST, guestToken = GUEST)
+    fun hashesNeverAppearInLogEvenOnSuccess() {
+        send(hostHash = HOST, guestHash = GUEST)
 
         assertNoLogContains(HOST, GUEST)
         assertTrue(ShadowLog.getLogs().any { it.tag == "EmberlightServer" && it.type == Log.INFO })
     }
 
     @Test
-    fun stopBroadcastDoesNotTouchTokens() {
+    fun stopBroadcastDoesNotTouchHashes() {
         DebugServerReceiver().onReceive(context, Intent(DebugServerReceiver.ACTION_STOP))
 
         assertNotNull(shadowOf(context as Application).nextStartedService)
@@ -138,24 +147,25 @@ class DebugServerReceiverTest {
     private fun assertNoLogContains(vararg secrets: String) {
         val messages = ShadowLog.getLogs().map { it.msg.orEmpty() + " " + it.tag.orEmpty() }
         secrets.forEach { secret ->
-            messages.forEach { message -> assertFalse("Token im Log gefunden", message.contains(secret)) }
+            messages.forEach { message -> assertFalse("Hash im Log gefunden", message.contains(secret)) }
         }
     }
 
     private fun send(
-        hostToken: String? = HOST,
-        guestToken: String? = null,
+        hostHash: String? = HOST,
+        guestHash: String? = null,
         port: Int? = null,
     ) {
         val intent = Intent(DebugServerReceiver.ACTION_START)
-        hostToken?.let { intent.putExtra(DebugServerReceiver.EXTRA_HOST_TOKEN, it) }
-        guestToken?.let { intent.putExtra(DebugServerReceiver.EXTRA_GUEST_TOKEN, it) }
+        hostHash?.let { intent.putExtra(DebugServerReceiver.EXTRA_HOST_TOKEN_SHA256, it) }
+        guestHash?.let { intent.putExtra(DebugServerReceiver.EXTRA_GUEST_TOKEN_SHA256, it) }
         port?.let { intent.putExtra(DebugServerReceiver.EXTRA_PORT, it) }
         DebugServerReceiver().onReceive(context, intent)
     }
 
     private companion object {
-        val HOST = "0123456789abcdef".repeat(4)
-        val GUEST = "fedcba9876543210".repeat(4)
+        // SHA-256 über die UTF-8-Bytes von "host-test-token" bzw. "guest-test-token".
+        const val HOST = "1ecf73525cdb0100111fd4a8d8b88d21cd8562902bcdef91d1c862e1642f4279"
+        const val GUEST = "2b2d8e931fd3ecfb0a60fc4c8f8f9ba4ddef76fbe8150cd065f2a59a8e584989"
     }
 }

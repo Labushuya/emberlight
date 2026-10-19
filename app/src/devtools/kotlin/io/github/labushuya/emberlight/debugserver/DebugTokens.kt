@@ -1,51 +1,43 @@
 package io.github.labushuya.emberlight.debugserver
 
-import java.security.MessageDigest
-
 /**
- * Prüfung und Hashing der Test-Tokens aus dem Start-Broadcast (ADR 0013, docs/DEBUG-SERVER.md). Ein gültiger Token sind
- * genau 64 Zeichen `[0-9a-f]`, also 256 bit. Die Token-Werte stehen in keiner Meldung, auch nicht in Fehlermeldungen.
+ * Prüfung der Token-Hashes aus dem Start-Broadcast (ADR 0013, docs/DEBUG-SERVER.md). Der PC bildet den SHA-256 über die
+ * UTF-8-Bytes des Tokens und übergibt nur diesen Hash. Ein gültiger Hash sind genau 64 Zeichen `[0-9a-f]`. Die App
+ * kennt den Klartext-Token nie. Die Hashwerte stehen in keiner Meldung, auch nicht in Fehlermeldungen.
  */
 internal object DebugTokens {
-    private val TOKEN = Regex("[0-9a-f]{64}")
+    private val HASH = Regex("[0-9a-f]{64}")
 
-    fun isValid(token: String?): Boolean = token != null && TOKEN.matches(token)
+    fun isValid(hash: String?): Boolean = hash != null && HASH.matches(hash)
 
     /**
-     * Prüft die Tokens eines Starts. Ein fehlender Gast-Token (`null`) ist erlaubt, ein leerer oder ungültiger dagegen
-     * nicht. Liefert [TokenCheck.Rejected] mit einer Meldung ohne Tokenwerte.
+     * Prüft die Hashes eines Starts. Ein fehlender Gast-Hash (`null`) ist erlaubt, ein leerer oder ungültiger dagegen
+     * nicht. Liefert [TokenCheck.Rejected] mit einer Meldung ohne Hashwerte.
      */
     fun check(
-        hostToken: String?,
-        guestToken: String?,
+        hostHash: String?,
+        guestHash: String?,
     ): TokenCheck =
         when {
-            !isValid(hostToken) -> {
-                TokenCheck.Rejected("host_token fehlt oder ist ungültig (genau 64 Zeichen, 0-9 und a-f).")
+            !isValid(hostHash) -> {
+                TokenCheck.Rejected("host_token_sha256 fehlt oder ist ungültig (genau 64 Zeichen, 0-9 und a-f).")
             }
 
-            guestToken != null && !isValid(guestToken) -> {
-                TokenCheck.Rejected("guest_token ist ungültig (genau 64 Zeichen, 0-9 und a-f).")
+            guestHash != null && !isValid(guestHash) -> {
+                TokenCheck.Rejected("guest_token_sha256 ist ungültig (genau 64 Zeichen, 0-9 und a-f).")
             }
 
-            guestToken != null && guestToken == hostToken -> {
-                TokenCheck.Rejected("host_token und guest_token müssen verschieden sein.")
+            guestHash != null && guestHash == hostHash -> {
+                TokenCheck.Rejected("host_token_sha256 und guest_token_sha256 müssen verschieden sein.")
             }
 
             else -> {
-                TokenCheck.Accepted(host = checkNotNull(hostToken), guest = guestToken)
+                TokenCheck.Accepted(host = checkNotNull(hostHash), guest = guestHash)
             }
         }
-
-    /** SHA-256 des Tokens als 64 Hex-Zeichen in Kleinbuchstaben, so wie [io.github.labushuya.emberlight.share.server.ParticipantSeed] es erwartet. */
-    fun sha256Hex(token: String): String =
-        MessageDigest
-            .getInstance("SHA-256")
-            .digest(token.toByteArray(Charsets.UTF_8))
-            .joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 }
 
-/** Ergebnis von [DebugTokens.check]. */
+/** Ergebnis von [DebugTokens.check]. Die Werte sind SHA-256-Hashes in Kleinbuchstaben, keine Klartext-Tokens. */
 internal sealed interface TokenCheck {
     data class Accepted(
         val host: String,
