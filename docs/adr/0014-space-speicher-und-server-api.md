@@ -1,6 +1,6 @@
 # ADR 0014: Space-Speicher und Server-API (Meilenstein 3, Paket 3.1)
 
-Status: Entwurf, 18.10.2026. Der Entwurf wird vor der Implementierung von Paket 3.1a geprüft. Stand 18.10.2026 festgelegt: Version bleibt 1, `/health` bleibt hinter der Zugriffsprüfung, Umfang 3.1a (Abschnitt „Umfang 3.1a“). Offen: Room-Pfad (Test in 3.1a). Die Sicherheitsgrundlagen (Netz, Authorization, Inhaltsprüfung, Grenzen) stehen in [ADR 0013](0013-schutz-gegen-manipulation.md). Dieses ADR legt Module, Persistenz, Schnittstelle und Tests fest.
+Status: Angenommen, 18.10.2026. Umsetzung in Paket 3.1a, siehe Abschnitt „Umsetzung 3.1a“. Die Festlegungen des Entwurfs gelten, soweit dort nicht abgewichen wird.
 
 ## Kontext
 
@@ -222,3 +222,41 @@ Vorschlag, ohne Produktionspfad:
 - [CLAUDE.md](../../CLAUDE.md) (Technik: Room, KSP, Ktor CIO; Struktur; Build-Sperren; Nutzertexte in `strings.xml`).
 - [KONZEPT.md](../KONZEPT.md) (Trennung von Space und Galerie, Speicher, Ende und Nachhalten).
 - Repo: `gradle/libs.versions.toml` (kein Room), `share/server/src/main/AndroidManifest.xml`, `app/src/main/res/xml/data_extraction_rules.xml`.
+
+## Umsetzung 3.1a (18.10.2026)
+
+Status: Angenommen, 18.10.2026, mit den Abweichungen unten. Die Sicherheitsabschnitte stehen in [ADR 0013](0013-schutz-gegen-manipulation.md), Abschnitt „Umsetzung 3.1a“.
+
+### Module und Abhängigkeiten
+
+- `share:space` (Android-Library, Room über KSP) enthält Domäne, Speicher, Index, Inhaltsprüfung, Dedupe und Grenzen. Ohne Ktor.
+- `share:server` hängt von `share:space` ab und ruft nur dessen öffentliche Typen auf.
+- Build-Sperren: `checkSpaceIsolation` (kein Zugriff auf `:app`, `:feature:*`, `:core:media`, `:share:server`, transitiv), `checkSpaceSources` (keine Galerie- und Speichertokens im Quelltext), `checkGalleryNoSpaceDependency` (`:core:media` und `:feature:gallery` hängen nicht von `share:*` ab), `checkReleaseManifestDebugEntry` (das Release-Manifest enthält keinen Debug-Einstieg; Name statt `checkReleaseManifest`, weil die Registrierung für die Release-Variante doppelt lief und der Task so eindeutig und einmalig angelegt wird).
+- Room: `spaces.db` unter `noBackupFilesDir/spaces/`. Die Tabellen `media` und `participant` (Felder laut Entwurf, ohne `storage_name`).
+- `data_extraction_rules.xml`: `<device-transfer>` schließt dieselben Domänen aus wie `<cloud-backup>`.
+
+### API v1 (Stand 3.1a)
+
+| Methode und Pfad | Erfolg | Fehler |
+|---|---|---|
+| `GET /health` | `200` `{"status":"ok","apiVersion":1}` | `401`, `403` |
+| `GET /api/v1/space` | `200` mit Name, Speicherlimit, Belegung, Warnung | `401`, `403` |
+| `GET /api/v1/media?limit=&cursor=` | `200` mit `items` und `nextCursor` | `400` (`bad_request`, `bad_cursor`), `401`, `403` |
+| `POST /api/v1/media` | `201` neu, `200` Dedupe (`duplicate: true`) | `400` (`bad_filename`, `bad_request`, `incomplete_body`), `401`, `403`, `408`, `413` (mit `limit`), `415`, `429`, `507` (`storage_full`, `device_storage_low`) |
+| `GET /api/v1/media/{id}/content` | `200`, `206` (Range) | `401`, `403`, `404` |
+| `DELETE /api/v1/media/{id}` | `204` | `401`, `403`, `404` |
+
+Jede Fehlerantwort: `{"error":"<code>"}` plus Felder. Schutzheader auf allen Antworten: `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`. Download zusätzlich `Content-Disposition: attachment` mit `filename` und `filename*`.
+
+### Abweichungen von der Entscheidung oben
+
+- Zusätzliche Codes: `service_busy` (503), `incomplete_body` (400), `request_timeout` (408). `space_closed` (410) fehlt, weil es in 3.1a keine Beendigung gibt.
+- Keine Tabelle `space` in 3.1a. Name und Speicherlimit kommen aus der Einrichtung des Serverlaufs.
+- Upload-Warnung: `warning` ist `"storage_80"` ab 80 % des Speicherlimits, sonst `null`.
+- Liste: `uploader` ist der Anzeigename aus der Teilnehmer-Tabelle, `createdAt` ist Epoch-Millisekunden in UTC.
+- Debug-Einstieg: Start und Stopp per Broadcast-Empfänger statt Aktivität, Tokens in einer Datei unter `files/debug-server/`. Beschreibung in `docs/DEBUG-SERVER.md`.
+
+### Offen
+
+- Auto-Resume nach Netzverlust und die Stopp-Oberfläche folgen in 3.3.
+- GPS-Entfernung folgt in 3.1b, vor dem ersten Upload über die Gäste-Webseite (3.5).

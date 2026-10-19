@@ -1,6 +1,6 @@
 # ADR 0013: Schutz gegen Manipulation (Meilenstein 3, Paket 3.1)
 
-Status: Entwurf, 18.10.2026. Der Entwurf wird vor der Implementierung von Paket 3.1a geprüft. Stand 18.10.2026: Netzverlust, Stopp-Zuordnung und GPS-Aufteilung sind entschieden. Grenzwerte sind vorgeschlagen und nicht bestätigt. Die Engine-Entscheidung ist offen, Messung siehe „Messung Engine“. Offene Entscheidungen stehen am Ende.
+Status: Angenommen, 18.10.2026. Umsetzung in Paket 3.1a, siehe Abschnitt „Umsetzung 3.1a“. Dort stehen die Entscheidungen zu Engine (CIO) und Grenzwerten (bestätigt am 18.10.2026) sowie die Abweichungen vom Entwurf.
 
 Quellen sind mit [Q1] bis [Q24] markiert, die Liste steht am Ende. Was nicht belegt werden konnte, ist als „Vermutung“ gekennzeichnet. Android-API-Fakten sind am lokalen SDK geprüft (Abschnitt „Android-API-Fakten“).
 
@@ -422,3 +422,53 @@ Messung mit `:app:assembleRelease` (unsigniert, beide Seiten identisch gebaut). 
 - [Q24] Ktor 3.6.0 CIO, Quelltext-Jar `ktor-server-cio-jvm-3.6.0-sources.jar`: `backend/HttpServer.kt` und `backend/ServerPipeline.kt` (Timer `connectionIdleTimeoutSeconds`).
 
 Nicht abrufbar (als Vermutung gekennzeichnet): Die Android-Referenzseiten zu `ConnectivityManager.NetworkCallback`, `LinkProperties`, `NetworkCapabilities` und `Context.getNoBackupFilesDir` wurden nicht gelesen. Die Fakten sind stattdessen über das lokale SDK belegt (Q18 bis Q20). Der AOSP-Quelltext ließ sich nicht laden und liegt auch im SDK nicht vor. Die Apple-QuickTime-Spezifikation ließ sich nicht als Text auswerten.
+
+## Umsetzung 3.1a (18.10.2026)
+
+Dieser Abschnitt hält fest, was sich bei der Umsetzung ergeben hat. Wo er einem älteren Satz oben widerspricht, gilt er.
+
+### Entscheidung Engine: CIO bleibt
+
+- **Begründung**, gestützt auf die Messung vom 18.10.2026 (Abschnitt „Messung Engine“): CIO schließt stumme und langsame Header-Verbindungen mit gesetztem Idle-Timeout von 15 s (Fälle a, b, d). Netty mit den genannten Grenzen hat in der Messung nicht geschlossen. Netty braucht drei Build-Eingriffe (QUIC-Ausschluss, Packaging-Ausschlüsse, 45 `-dontwarn`-Zeilen), und sein Android-Fallback ist ungeprüft. CLAUDE.md nennt CIO.
+- **Körper-Schutz unabhängig von der Engine**: Der Körper wird in einer eigenen Schleife gelesen (`BodyChunkSource`). Leerlauf, Mindestrate und Gesamtdauer prüft `TransferGuard` mit einer injizierbaren Uhr.
+- **Restrisiken, ausdrücklich**:
+  - CIO begrenzt die Header-Gesamtgröße nicht. Gemessen werden 1 601 800 Byte Header mit `200` beantwortet. Der Test `totalHeaderSizeIsNotLimitedByCioDocumentedRisk` hält das Verhalten fest.
+  - CIO begrenzt die Anzahl gleichzeitiger Verbindungen nicht. Im LAN ist das ein Verfügbarkeitsrisiko ohne Datenzugriff. Mildernd wirken der Idle-Timeout für stumme Verbindungen (15 s) und die schnelle Ablehnung durch die Zugriffskette vor jeder Route.
+  - **Wiedervorlage beim TLS-Meilenstein.**
+
+### Startwerte (bestätigt am 18.10.2026)
+
+| Grenze | Wert | Umsetzung |
+|---|---|---|
+| `connectionIdleTimeoutSeconds` | 15 s | `KtorLocalServer`, Test `silentConnectionIsClosedByIdleTimeout` |
+| Body-Leerlauf (kein Byte) | 30 s, dann Abbruch | `TransferPolicy.idleNanos` |
+| Mindestrate | nach 30 s Anlauf im gleitenden 60-s-Fenster mindestens 16 KiB/s | `TransferPolicy`, `TransferGuard` |
+| Upload-Gesamtdauer | höchstens 60 min | `TransferPolicy.maxDurationNanos` (ersetzt 30 min aus dem Entwurf) |
+| Anfragen gleichzeitig | 16, darüber `503 service_busy` mit `Retry-After: 5` | `ServerGates` |
+| Uploads gleichzeitig | 4 gesamt, 2 je Teilnehmer, darüber `429 too_many_uploads` mit `Retry-After: 5` | `ServerGates` |
+| Leerlauf, Mindestrate, Gesamtdauer | `408 request_timeout` mit `reason` (`idle`, `too_slow`, `too_long`). Teildatei immer gelöscht | `BodyChunkSource`, `SpaceRoutes` |
+
+Grenzwerte, bestätigt am 18.10.2026: Bild 50 MiB, Video 2 GiB, Standard-Speicherlimit eines Space 4 GiB mit Warnung ab 80 %, Mindest-Restspeicher des Geräts 2 GiB.
+
+### Abweichungen von Entwurf und Auftrag
+
+1. **Host- und Netzablehnung** (`403`) liefern das einheitliche JSON `{"error":"forbidden_host"}` bzw. `forbidden_network`, nicht den leeren Körper aus dem Entwurf. Grund: einheitliches Fehlerformat (ADR 0014, Auftrag 3.1a). Der Code verrät nur, welche Prüfung griff.
+2. **Inhaltsadressierte Ablage**: Die Datei heißt `<SHA-256 in Hex>`, nicht Zufallsname. Grund: Integritätsprüfung (Abschnitt „Integrität“) und Auftrag („inhaltsadressierte Ablage“). Der Name entsteht auf dem Server, nie aus dem Client. Die Spalte `storage_name` entfällt, weil der Hash sie ersetzt.
+3. **GIF**: Die Signatur ist `GIF87a` bzw. `GIF89a`, strenger als das im Entwurf genannte `GIF8`.
+4. **Content-Length kleiner als der gesendete Körper**: CIO liest per HTTP-Rahmung genau Content-Length Bytes. Der Server speichert deshalb nie mehr als angekündigt. Der Socket-Test prüft das (Antwort `201`, `size` gleich Content-Length). Der Vault-Test prüft unabhängig davon das Abschneiden am Byte-Limit, auch wenn der angekündigte Wert klein ist. Der Entwurf erwartet dafür `413`. Mit CIO ist das nicht erreichbar, ohne über die HTTP-Rahmung hinauszulesen.
+5. **Körper endet vor Content-Length**: Der Leser wirft `IncompleteBodyException`. Die Teildatei wird gelöscht, die Antwort ist `400 incomplete_body`. Ohne diese Prüfung hätte ein abgebrochener Upload als vollständige, abgeschnittene Datei gegolten. Der Socket-Test „Verbindungsabbruch mitten im Upload“ deckt das ab.
+6. **Zusätzliche Codes** gegenüber ADR 0014: `service_busy` (503), `incomplete_body` (400), `request_timeout` (408). `space_closed` (410) ist in 3.1a nicht umgesetzt, weil es in 3.1a keine Beendigung des Space gibt. Er kommt mit 3.6.
+7. **Keine Tabelle `space`** in 3.1a. Name und Speicherlimit des Space kommen aus der Einrichtung des Serverlaufs (`ServerSetup`). Die Tabelle folgt mit 3.2, wenn die Oberfläche sie braucht.
+8. **Room-Pfad** (offene Frage aus ADR 0014): Der absolute Dateiname im Room-Builder ist unter Robolectric auf Windows fehlerhaft. Der Pfad wurde an das Cache-Verzeichnis angehängt (`FileNotFoundException`). Umsetzung: eine Kontext-Hülle, die `getDatabasePath` auf `noBackupFilesDir/spaces/` umlenkt. `SpacesDatabaseTest` prüft den Ort.
+9. **Mindest-Restspeicher** über `File.getUsableSpace()`, hinter der Abstraktion `StorageProbe`. Das ist gleichwertig zu StatFs und ohne Android-Kontext prüfbar.
+10. **Gegenrichtung der Galerie-Sperre**: `checkGalleryNoSpaceDependency` gilt für `:core:media` und `:feature:gallery`. `:app` ist ausgenommen, weil die App den Server einbindet.
+11. **`RequestAuthorizer`** liefert `Principal?` statt `Boolean`. `TokenAuthorizer` vergleicht SHA-256-Hashes über `MessageDigest.isEqual` und prüft alle Einträge. Die Tabelle `participant` ist angelegt. Die Verwaltung der Zugangsschlüssel folgt in 3.4.
+12. **WLAN-Adresse**: `ConnectivityWifiNetworkProvider` liest die Schnittstelle über `allNetworks`. Die Methode ist seit API 31 veraltet. Die Unterdrückung ist im Code begründet, weil das WLAN auch dann gefunden werden muss, wenn es nicht das Standardnetz ist.
+13. **Protokoll**: Route-Templates, nie rohe Pfade. IP-Adressen nur mit `debugLogging`, das nur der Debug-Einstieg setzt. Standardmäßig protokolliert der Server nichts (ADR 0012).
+14. **Netzwechsel** stoppt den Server und gibt die Sperren frei. Eine Benachrichtigung nennt den Grund. Der Dienst startet nicht selbst neu, das Fortsetzen folgt mit 3.3.
+
+### Prüfungen zur Umsetzung
+
+- Unit- und Robolectric-Tests in `share:space` und `share:server` (Anzahl und Zuordnung im PR #26).
+- Drei Symlink-Tests in `SpaceStorageTest` werden lokal unter Windows übersprungen, weil das Recht zur Symlink-Anlage fehlt. Auf dem CI-Runner (Linux) laufen sie.
+- Der Gerätetest mit dem Debug-Einstieg (docs/DEBUG-SERVER.md) folgt separat.

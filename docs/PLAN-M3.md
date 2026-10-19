@@ -9,7 +9,7 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 | Paket | Inhalt |
 |---|---|
 | 3.0 ✅ | Server-Basis, Foreground-Service, ADR 0012 (#25) |
-| 3.1 | Server-Härtung und Space-Speicher: nur WLAN, CIO-Grenzen, Upload- und Download-API, Inhaltsprüfung, Dedupe, Speicherlimit, GPS-Entfernung; ADR „Schutz gegen Manipulation“. Ohne UI. Lieferung in zwei PRs: **3.1a** (alles außer GPS) und **3.1b** (GPS-Entfernung). 3.1b muss vor dem ersten für Nutzer erreichbaren Upload (Paket 3.5) gemergt sein. Bis dahin ist der Server aus keiner Oberfläche erreichbar. Umfang 3.1a: ADR 0014, Abschnitt „Umfang 3.1a“. |
+| 3.1 (3.1a umgesetzt, PR #26, Gerätetest offen) | Server-Härtung und Space-Speicher: nur WLAN, CIO-Grenzen, Upload- und Download-API, Inhaltsprüfung, Dedupe, Speicherlimit, GPS-Entfernung; ADR „Schutz gegen Manipulation“. Ohne UI. Lieferung in zwei PRs: **3.1a** (alles außer GPS) und **3.1b** (GPS-Entfernung). 3.1b muss vor dem ersten für Nutzer erreichbaren Upload (Paket 3.5) gemergt sein. Bis dahin ist der Server aus keiner Oberfläche erreichbar. Umfang 3.1a: ADR 0014, Abschnitt „Umfang 3.1a“. |
 | 3.2 | Space anlegen und verwalten (Name, Titelbild, Farbe, Laufzeit, Nachhaltefrist, Speicherlimit; Liste und Detail) |
 | 3.3 | Einrichtung und Betrieb: Laufzeitberechtigungen, Akku-Ausnahme, Hersteller-Freigabe (Honor zuerst), Ladegerät-Hinweis, Pausen-Erkennung, Start und Stopp in der App (Voraussetzung von 3.3, nicht von 3.1; siehe ADR 0012, Nachtrag), Start/Stopp-Abfolge über einen Kanal. Netzverlust: automatisches Fortsetzen, wenn dasselbe WLAN mit derselben IP zurückkommt; sonst Hinweis an den Gastgeber, weil sich der QR-Code ändert (ADR 0013) |
 | 3.4 | Einladung und Beitritt: QR-Code, Zugangsschlüssel pro Teilnehmer, Anzeigename, Gastgeber-Kennzeichnung |
@@ -26,8 +26,8 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 - **Netzverlust** (18.10.2026): 3.1a stoppt den Server bei Verlust oder Wechsel der WLAN-Schnittstelle bzw. ihrer Adresse. 3.3 setzt automatisch fort, wenn dasselbe WLAN mit derselben IP zurückkommt (ADR 0013, Netz).
 - **`/health`** bleibt hinter der Zugriffsprüfung. Die Gäste-Webseite schickt den Token als Header mit (ADR 0014).
 - **`SERVER_API_VERSION` bleibt 1.** Erhöhung erst bei inkompatiblen Änderungen nach dem ersten Release mit Routen (`v0.3.0`) (ADR 0014, Version).
-- **Grenzwerte** (Dateigrößen, Speicherlimit, Restspeicher, Parallelität, Timeouts) sind vorgeschlagen und noch nicht von der Nutzerin bzw. dem Nutzer bestätigt (ADR 0013).
-- **Engine** (CIO oder Netty) ist offen. Die Messung liegt in ADR 0013 („Messung Engine“) vor, die Entscheidung steht aus. Der Gerätetest fehlt noch.
+- **Grenzwerte** (Dateigrößen, Speicherlimit, Restspeicher, Parallelität, Timeouts) wurden am 18.10.2026 von der Nutzerin bzw. dem Nutzer bestätigt (ADR 0013).
+- **Engine**: CIO. Die Entscheidung steht in ADR 0013 („Umsetzung 3.1a“), gestützt auf die Messung. Der Gerätetest fehlt noch.
 
 ## Entscheidungsdokumente
 
