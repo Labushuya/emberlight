@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="space_server_channel_name">Space server</string>
+    <string name="space_server_alert_channel_name">Space server alerts</string>
     <string name="space_server_running_title">Space server running</string>
     <string name="space_server_starting">Starting…</string>
     <string name="space_server_port">Port %1$d</string>
     <string name="space_server_stop">Stop</string>
+    <string name="space_server_no_space">The server did not start: no space is set up.</string>
+    <string name="space_server_no_wifi">The server did not start: no Wi-Fi connection with an IPv4 address.</string>
+    <string name="space_server_network_changed">Wi-Fi address changed or Wi-Fi was lost. The server has stopped.</string>
 </resources>

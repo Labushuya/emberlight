@@ -1,17 +1,19 @@
 package io.github.labushuya.emberlight.share.server
 
+import io.github.labushuya.emberlight.share.space.Principal
+
 /**
- * Erweiterungspunkt für den Zugriffsschutz (ADR 0012). Die Prüfung läuft vor jeder Route, auch vor `/health`.
+ * Erweiterungspunkt für den Zugriffsschutz (ADR 0012, ADR 0013). Die Prüfung läuft nach Host und Netz, vor jeder
+ * Route, auch vor `/health` und unbekannten Pfaden.
  *
- * Die konkrete Prüfung (Token, Einladungen) kommt mit Paket 3.x. Ohne eigene Implementierung gilt [DenyAll]: Der Server
- * lehnt jede Anfrage ab, es gibt keinen offenen Standardzugang.
+ * Liefert den [Principal] des Teilnehmers oder `null`. Der Standard [DenyAll] lehnt jede Anfrage ab.
  */
 fun interface RequestAuthorizer {
-    /** [authorizationHeader] ist der rohe Wert von `Authorization`, `null` wenn er fehlt. */
-    fun isAuthorized(authorizationHeader: String?): Boolean
+    /** [authorizationHeader] ist der einzige Wert von `Authorization`, `null` wenn er fehlt. */
+    fun authorize(authorizationHeader: String?): Principal?
 
     companion object {
         /** Verweigert jede Anfrage. Sicherer Standard, bis eine echte Prüfung eingesetzt wird. */
-        val DenyAll: RequestAuthorizer = RequestAuthorizer { false }
+        val DenyAll: RequestAuthorizer = RequestAuthorizer { null }
     }
 }

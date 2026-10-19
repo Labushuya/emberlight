@@ -4,3 +4,10 @@
 # belegt (offener Punkt in ADR 0012).
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
+
+# Einstiegspunkte des Servers bleiben im Release erhalten (ADR 0012, ADR 0014). Ohne diese Regeln entfernt R8 den ganzen
+# Serverpfad: In der Release-Variante gibt es keine Einrichtung (SpaceServerService.serverSetupProvider liefert null), und
+# R8 schließt daraus, dass der Server nie startet. Der Release-Build prüft R8 aber mit dem Server (ADR 0012). Die Regeln
+# halten die Klassen, nicht die Funktion. Ein Start bleibt ohne Einrichtung unmöglich.
+-keep class io.github.labushuya.emberlight.share.server.KtorLocalServer { *; }
+-keep class io.github.labushuya.emberlight.share.server.SpaceServerService$Companion { *; }

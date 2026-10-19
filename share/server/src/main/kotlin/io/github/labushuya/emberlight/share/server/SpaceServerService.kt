@@ -22,27 +22,28 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Foreground-Service, der den lokalen Server am Leben hält (ADR 0012). Typ `connectedDevice`, weil `dataSync` ein
- * Zeitlimit hat. Der Typ `connectedDevice` hat kein Zeitlimit.
+ * Foreground-Service, der den lokalen Server am Leben hält (ADR 0012, ADR 0013). Typ `connectedDevice`, weil `dataSync`
+ * ein Zeitlimit hat. Der Typ `connectedDevice` hat kein Zeitlimit.
  *
- * Solange der Server läuft, halten CPU-Wakelock und WLAN-Lock den Betrieb wach. Stopp (per Intent oder über die
- * Benachrichtigung) und `onDestroy` geben beide Sperren ausdrücklich frei. Ein Neustart nach Prozess-Tod erfolgt nicht
- * (`START_NOT_STICKY`).
+ * Ablauf eines Starts (unter [lifecycle]):
+ * 1. Einrichtung holen ([serverSetupProvider]). Ohne Einrichtung startet der Dienst nicht.
+ * 2. WLAN-Adresse holen ([networkFactory]). Ohne WLAN mit Adresse startet der Dienst nicht.
+ * 3. Index und Speicher öffnen, Server an die WLAN-Adresse binden, Sperren erwerben.
+ * 4. Netzwechsel beobachten. Jede Änderung der Adresse oder der Verlust des WLAN stoppt den Server (ADR 0013, Netz).
+ *    Der Dienst startet nicht selbst neu.
  *
- * Start und Stopp laufen über [lifecycle] in der Reihenfolge, in der sie unter dem Mutex ankommen. Ein Stopp, der
- * während des Starts kommt, wartet, bis der Start fertig ist, und räumt danach Server und Sperren auf. Sperren werden
- * nur erworben, solange [stopRequested] nicht gesetzt ist.
- *
- * Noch ohne Routen und ohne Zugriffsprüfung (Paket 3.x): Der Server verweigert damit jede Anfrage. Die Oberfläche, die
- * den Dienst startet, folgt in Paket 3.1 bzw. 3.3.
+ * Solange der Server läuft, halten CPU-Wakelock und WLAN-Lock den Betrieb wach. Stopp (per Intent oder Benachrichtigung),
+ * Netzwechsel und `onDestroy` geben beide Sperren frei. Ein Neustart nach Prozess-Tod erfolgt nicht (`START_NOT_STICKY`).
  */
 class SpaceServerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -60,7 +61,9 @@ class SpaceServerService : Service() {
     @Volatile
     private var locks: ServerLocks? = null
 
-    private val server: LocalServer by lazy { serverFactory() }
+    private var activeServer: LocalServer? = null
+    private var activeRuntime: SpaceRuntime? = null
+    private var watchJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -70,23 +73,23 @@ class SpaceServerService : Service() {
         startId: Int,
     ): Int {
         if (intent?.action == ACTION_STOP) {
-            requestStop()
+            requestStop(alertText = null)
             return START_NOT_STICKY
         }
         // Vordergrund zuerst: Android verlangt den Aufruf kurz nach startForegroundService. Auch unbekannte Aufrufe
         // erfüllen diese Pflicht, bevor der Dienst wieder endet.
         if (!ensureForeground()) {
-            requestStop()
+            requestStop(alertText = null)
             return START_NOT_STICKY
         }
         if (intent == null || intent.action != ACTION_START) {
-            requestStop()
+            requestStop(alertText = null)
             return START_NOT_STICKY
         }
         if (!startRequested.compareAndSet(false, true)) return START_NOT_STICKY
         if (!localNetworkAllowed()) {
             Log.w(TAG, "ACCESS_LOCAL_NETWORK fehlt auf API ${Build.VERSION.SDK_INT}, Start abgelehnt.")
-            requestStop()
+            requestStop(alertText = null)
             return START_NOT_STICKY
         }
 
@@ -105,42 +108,87 @@ class SpaceServerService : Service() {
         locks?.release()
         // Server und Sperren danach unter dem Mutex abschließen, dann den Scope beenden.
         scope
-            .launch { lifecycle.withLock { shutDownLocked(stopSelfAfter = false) } }
+            .launch { lifecycle.withLock { shutDownLocked(stopSelfAfter = false, alertText = null) } }
             .invokeOnCompletion { scope.cancel() }
         super.onDestroy()
     }
 
     /** Fordert den Stopp an. Der eigentliche Abbau läuft unter dem Mutex, nach einem eventuell laufenden Start. */
-    private fun requestStop() {
+    private fun requestStop(alertText: Int?) {
         stopRequested.set(true)
-        scope.launch { lifecycle.withLock { shutDownLocked(stopSelfAfter = true) } }
+        scope.launch { lifecycle.withLock { shutDownLocked(stopSelfAfter = true, alertText = alertText) } }
     }
 
-    /** Läuft unter [lifecycle]. Startet den Server und erwirbt die Sperren, außer ein Stopp steht an. */
+    /** Läuft unter [lifecycle]. Richtet den Server ein, bindet ihn an das WLAN und erwirbt die Sperren. */
     private suspend fun startLocked(port: Int) {
         if (stopRequested.get()) return
+        val setup = serverSetupProvider()
+        if (setup == null) {
+            Log.w(TAG, "Kein Space eingerichtet, der Server startet nicht.")
+            shutDownLocked(stopSelfAfter = true, alertText = R.string.space_server_no_space)
+            return
+        }
+        val provider = networkFactory(this)
+        val wifi = provider.currentAddress()
+        if (wifi == null) {
+            Log.w(TAG, "Kein WLAN mit IPv4-Adresse, der Server startet nicht.")
+            shutDownLocked(stopSelfAfter = true, alertText = R.string.space_server_no_wifi)
+            return
+        }
         try {
-            val bound = server.start(ServerConfig(port = port))
+            val runtime = SpaceRuntime.open(applicationContext, setup)
+            activeRuntime = runtime
+            val server = serverFactory(runtime, setup)
+            activeServer = server
+            val bound = server.start(ServerConfig(port = port, subnet = wifi.subnet, debugLogging = setup.debugLogging))
             // Stopp kam während des Starts: Der wartende Stopp räumt auf, hier nichts mehr erwerben.
             if (stopRequested.get()) return
             acquireLocks()
+            watchNetwork(provider, wifi)
             Log.i(TAG, "Server läuft auf Port $bound")
+            if (setup.debugLogging) Log.i(TAG, "Debug: gebunden an ${wifi.ipv4}:$bound")
             updateNotification(bound)
         } catch (failure: Exception) {
             Log.e(TAG, "Start fehlgeschlagen: ${failure.javaClass.simpleName}")
-            shutDownLocked(stopSelfAfter = true)
+            shutDownLocked(stopSelfAfter = true, alertText = null)
         }
     }
 
+    /** Stoppt den Server, sobald sich die WLAN-Adresse ändert oder das WLAN verschwindet (ADR 0013, Netz). */
+    private fun watchNetwork(
+        provider: WifiNetworkProvider,
+        bound: WifiAddress,
+    ) {
+        watchJob =
+            scope.launch {
+                provider
+                    .changes()
+                    .filter { it != bound }
+                    .collect {
+                        Log.w(TAG, "WLAN-Adresse hat sich geändert, der Server stoppt.")
+                        requestStop(alertText = R.string.space_server_network_changed)
+                    }
+            }
+    }
+
     /** Läuft unter [lifecycle]. Gibt Sperren frei, stoppt den Server und beendet den Dienst. */
-    private suspend fun shutDownLocked(stopSelfAfter: Boolean) {
+    private suspend fun shutDownLocked(
+        stopSelfAfter: Boolean,
+        alertText: Int?,
+    ) {
+        watchJob?.cancel()
+        watchJob = null
         locks?.release()
         try {
-            server.stop()
+            activeServer?.stop()
         } catch (failure: Exception) {
             Log.e(TAG, "Stopp fehlgeschlagen: ${failure.javaClass.simpleName}")
         }
+        activeServer = null
+        activeRuntime?.close()
+        activeRuntime = null
         startRequested.set(false)
+        alertText?.let { postAlert(it) }
         if (stopSelfAfter) {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -173,7 +221,7 @@ class SpaceServerService : Service() {
      * Vordergrund und der Aufrufer stoppt ihn.
      */
     private fun ensureForeground(): Boolean {
-        createChannel()
+        createChannels()
         try {
             foregroundStarter.start(this, buildNotification(port = null), foregroundType())
         } catch (failure: SecurityException) {
@@ -207,18 +255,44 @@ class SpaceServerService : Service() {
         NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, buildNotification(port))
     }
 
+    /** Hinweis an den Gastgeber, etwa bei Netzwechsel oder fehlendem WLAN. Eigener Kanal, nicht die Dauermeldung. */
+    private fun postAlert(text: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(POST_NOTIFICATIONS_PERMISSION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val notification =
+            NotificationCompat
+                .Builder(this, ALERT_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_warning)
+                .setContentTitle(getString(R.string.space_server_running_title))
+                .setContentText(getString(text))
+                .setAutoCancel(true)
+                .build()
+        NotificationManagerCompat.from(this).notify(ALERT_NOTIFICATION_ID, notification)
+    }
+
     /** Typ connectedDevice gibt es erst ab API 29. Darunter bleibt der Typ ungesetzt (0). */
     private fun foregroundType(): Int =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
 
-    private fun createChannel() {
-        val channel =
+    private fun createChannels() {
+        val manager = NotificationManagerCompat.from(this)
+        manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.space_server_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
-            )
-        NotificationManagerCompat.from(this).createNotificationChannel(channel)
+            ),
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ALERT_CHANNEL_ID,
+                getString(R.string.space_server_alert_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ),
+        )
     }
 
     private fun buildNotification(port: Int?): Notification {
@@ -275,13 +349,33 @@ class SpaceServerService : Service() {
         private const val WAKE_LOCK_TAG = "emberlight:space-server"
         private const val WIFI_LOCK_TAG = "emberlight:space-server-wifi"
         private const val CHANNEL_ID = "space_server"
+        private const val ALERT_CHANNEL_ID = "space_server_alerts"
         private const val NOTIFICATION_ID = 4711
+        private const val ALERT_NOTIFICATION_ID = 4712
         private const val ANDROID_17_SDK = 37
         private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
         private const val POST_NOTIFICATIONS_PERMISSION = "android.permission.POST_NOTIFICATIONS"
 
+        /**
+         * Einrichtung des Serverlaufs. Produktion: keine (`null`), der Dienst startet nicht. Der Debug-Einstieg setzt sie
+         * nur im Debug-Build (ADR 0014, Debug-Einstieg).
+         */
+        @Volatile
+        var serverSetupProvider: () -> ServerSetup? = { null }
+
         /** Test-Nähte. Produktion nutzt die Standardwerte. */
-        internal var serverFactory: () -> LocalServer = { KtorLocalServer(routes = {}) }
+        internal var serverFactory: (SpaceRuntime, ServerSetup) -> LocalServer = { runtime, setup ->
+            val gates = ServerGates()
+            KtorLocalServer(
+                routes = spaceRoutes(runtime.spaceVault, setup.spaceName, gates),
+                authorizer = runtime.authorizer,
+                requestLog = { line -> if (setup.debugLogging) Log.i(TAG, line) },
+                gates = gates,
+            )
+        }
+        internal var networkFactory: (Context) -> WifiNetworkProvider = { context ->
+            ConnectivityWifiNetworkProvider(context)
+        }
         internal var locksFactory: (SpaceServerService) -> ServerLocks = { service -> service.createServerLocks() }
         internal var foregroundStarter: ForegroundStarter =
             ForegroundStarter { service, notification, type ->
