@@ -15,7 +15,7 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 | 3.4 | Einladung und Beitritt: QR-Code, Zugangsschlüssel pro Teilnehmer, Anzeigename, Gastgeber-Kennzeichnung |
 | 3.5 | Gäste-Webseite: Upload, Download, Uploader-Anzeige |
 | 3.6 | Ende und Nachhalten: Ablauf erzwingen, Nachhaltefrist, Erinnerung mit Aktionen (Vorauswahl „nichts behalten“, Alles/Nichts auswählen), automatische Löschung |
-| 3.7 | Gezielte Übernahme in `Pictures/Emberlight/<Space>`, danach Release `v0.3.0` |
+| 3.7 | Gezielte Übernahme in `Pictures/Emberlight/<Space>`, danach Release `v0.3.0`. Pflicht: „Über/Lizenzen“-Seite in der App mit Lizenzhinweisen aller mitgelieferten Bibliotheken (Apache-2.0 verlangt Lizenz bzw. NOTICE bei Weitergabe; ohne Play-Services-Plugin, z. B. AboutLibraries, prüfen), Hinweis auf GPL-3.0 und Link auf den Quellcode |
 
 ## Festgelegt
 
