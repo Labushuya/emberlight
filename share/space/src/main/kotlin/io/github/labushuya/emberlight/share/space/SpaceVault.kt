@@ -1,6 +1,9 @@
 package io.github.labushuya.emberlight.share.space
 
 import android.content.Context
+import io.github.labushuya.emberlight.share.space.location.LocationScrubResult
+import io.github.labushuya.emberlight.share.space.location.LocationScrubber
+import io.github.labushuya.emberlight.share.space.location.NotRemovableReason
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -9,6 +12,7 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 import java.util.Base64
@@ -23,15 +27,17 @@ data class MediaRecord(
     val originalName: String,
     val uploaderId: ParticipantId,
     val createdAt: Long,
+    val locationKept: Boolean = false,
 )
 
-/** Eintrag der Medienliste. Ohne Pfad, ohne Hash. */
+/** Eintrag der Medienliste. Ohne Pfad, ohne Hash. [locationKept] markiert „Standort enthalten“ (ADR 0015). */
 data class MediaListEntry(
     val id: MediaId,
     val mime: String,
     val sizeBytes: Long,
     val createdAt: Long,
     val uploaderName: String?,
+    val locationKept: Boolean = false,
 )
 
 data class MediaPage(
@@ -79,6 +85,14 @@ enum class StorageWarning { STORAGE_80 }
 sealed interface RejectReason {
     /** Inhalt ist kein erlaubtes Format oder die Struktur ist ungültig (415). */
     data object UnsupportedType : RejectReason
+
+    /**
+     * Standort nicht sicher entfernbar und ohne Einwilligung (422, `location_not_removable`). Die Datei wird nicht
+     * gespeichert. [reason] nennt den Grund (ADR 0015, Reason-Codes).
+     */
+    data class LocationNotRemovable(
+        val reason: NotRemovableReason,
+    ) : RejectReason
 
     /** Größe über dem Limit der Medienart (413). */
     data class TooLarge(
@@ -148,15 +162,19 @@ class SpaceVault internal constructor(
     }
 
     /**
-     * Nimmt einen Upload entgegen. Die Reihenfolge entspricht ADR 0013: Kopf lesen und erkennen, Größe und Budget
-     * prüfen, beim Streamen zählen und hashen, Struktur prüfen, dann Dedupe und atomar übernehmen. Bei jeder
-     * Ablehnung und jedem Abbruch bleibt keine Teildatei zurück. Ein Abbruch durch [ChunkSource] wird weitergereicht.
+     * Nimmt einen Upload entgegen. Die Reihenfolge entspricht ADR 0013 und ADR 0015: Kopf lesen und erkennen, Größe und
+     * Budget prüfen, streamen und zählen, Struktur prüfen, Standort entfernen (oder mit Einwilligung unverändert
+     * behalten), dann über die verarbeiteten Bytes hashen, Dedupe und atomar übernehmen. Bei jeder Ablehnung und jedem
+     * Abbruch bleibt keine Teildatei zurück. Ein Abbruch durch [ChunkSource] wird weitergereicht.
+     *
+     * [keepLocation] ist die Einwilligung. Sie wirkt nur, wenn der Standort nicht sicher entfernt werden kann.
      */
     suspend fun ingest(
         uploader: Principal,
         rawFileName: String,
         declaredLength: Long?,
         source: ChunkSource,
+        keepLocation: Boolean = false,
     ): IngestResult {
         val buffer = ByteArray(BUFFER_BYTES)
         val head = fillHead(source, buffer)
@@ -171,11 +189,15 @@ class SpaceVault internal constructor(
         if (budget.bytes <= 0) return IngestResult.Rejected(budget.reason)
 
         val temp = storage.newTempPath()
+        // Nur mit Einwilligung: Sicherungskopie des Originals, falls die Bereinigung halb schreibt und scheitert.
+        val backup = if (keepLocation) storage.newTempPath() else null
         try {
-            val digest = MessageDigest.getInstance(SHA_256)
-            val size = writeBody(temp, source, buffer, head, Limit(maxBytes, budget), digest)
+            val size = writeBody(temp, source, buffer, head, Limit(maxBytes, budget))
             if (!structureIsValid(format, temp, size)) throw Rejection(RejectReason.UnsupportedType)
-            return commit(uploader, rawFileName, format, digest.digest().toHex(), size, temp)
+            if (backup != null) withContext(Dispatchers.IO) { Files.copy(temp, backup) }
+            val kept = removeLocationOrKeep(temp, backup, format, keepLocation)
+            val sha256 = withContext(Dispatchers.IO) { sha256Of(temp) }
+            return commit(uploader, rawFileName, format, sha256, size, temp, kept)
         } catch (rejection: Rejection) {
             Files.deleteIfExists(temp)
             return IngestResult.Rejected(rejection.reason)
@@ -183,6 +205,32 @@ class SpaceVault internal constructor(
             // Abbruch durch Timeout, Verbindungsende oder Ausnahme: die Teildatei verschwindet in jedem Fall.
             Files.deleteIfExists(temp)
             throw failure
+        } finally {
+            backup?.let { Files.deleteIfExists(it) }
+        }
+    }
+
+    /**
+     * Bereinigt den Standort in [temp]. Liefert `true`, wenn der Standort mit Einwilligung unverändert bleibt. Ohne
+     * Einwilligung lehnt es mit [Rejection] ab. Mit Einwilligung stellt es das Original aus [backup] wieder her.
+     */
+    private suspend fun removeLocationOrKeep(
+        temp: Path,
+        backup: Path?,
+        format: DetectedFormat,
+        keepLocation: Boolean,
+    ): Boolean {
+        val outcome = withContext(Dispatchers.IO) { LocationScrubber.scrub(temp.toFile(), format) }
+        return when (outcome) {
+            is LocationScrubResult.Clean -> {
+                false
+            }
+
+            is LocationScrubResult.NotRemovable -> {
+                if (!keepLocation || backup == null) throw Rejection(RejectReason.LocationNotRemovable(outcome.reason))
+                withContext(Dispatchers.IO) { Files.move(backup, temp, StandardCopyOption.REPLACE_EXISTING) }
+                true
+            }
         }
     }
 
@@ -201,7 +249,7 @@ class SpaceVault internal constructor(
             }
         val page =
             rows.take(limit).map {
-                MediaListEntry(MediaId(it.id), it.mime, it.sizeBytes, it.createdAt, it.uploaderName)
+                MediaListEntry(MediaId(it.id), it.mime, it.sizeBytes, it.createdAt, it.uploaderName, it.locationKept)
             }
         val next =
             if (rows.size > limit && page.isNotEmpty()) {
@@ -289,7 +337,6 @@ class SpaceVault internal constructor(
         buffer: ByteArray,
         head: Int,
         limit: Limit,
-        digest: MessageDigest,
     ): Long =
         withContext(Dispatchers.IO) {
             Files.newOutputStream(target, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE).use { out ->
@@ -299,7 +346,6 @@ class SpaceVault internal constructor(
                     if (length > 0) {
                         written += length
                         limit.check(written)
-                        digest.update(buffer, 0, length)
                         out.write(buffer, 0, length)
                     }
                     length = source.read(buffer, 0, buffer.size)
@@ -351,6 +397,7 @@ class SpaceVault internal constructor(
         sha256: String,
         size: Long,
         temp: Path,
+        locationKept: Boolean,
     ): IngestResult =
         commitLock.withLock {
             val spaceId = storage.spaceId.value
@@ -373,6 +420,8 @@ class SpaceVault internal constructor(
                         uploaderId = uploader.participantId.value,
                         createdAt = nowMillis(),
                         state = STATE_READY,
+                        locationKept = locationKept,
+                        processingVersion = LocationScrubber.PROCESSING_VERSION,
                     )
                 try {
                     media.insert(entity)
@@ -426,7 +475,22 @@ class SpaceVault internal constructor(
             originalName = originalName,
             uploaderId = ParticipantId(uploaderId),
             createdAt = createdAt,
+            locationKept = locationKept,
         )
+
+    /** SHA-256 über die Bytes der Datei, gestreamt. Der Hash gilt für die verarbeiteten Bytes (ADR 0015, Reihenfolge). */
+    private fun sha256Of(path: Path): String {
+        val digest = MessageDigest.getInstance(SHA_256)
+        Files.newInputStream(path).use { input ->
+            val chunk = ByteArray(BUFFER_BYTES)
+            while (true) {
+                val read = input.read(chunk)
+                if (read < 0) break
+                digest.update(chunk, 0, read)
+            }
+        }
+        return digest.digest().toHex()
+    }
 
     /** Obergrenze für Bytes in dieser Anfrage: die Medienart-Grenze und das Budget aus Speicher und Gerät. */
     private inner class Limit(

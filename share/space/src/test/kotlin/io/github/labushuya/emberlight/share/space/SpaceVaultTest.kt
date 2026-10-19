@@ -1,9 +1,11 @@
 package io.github.labushuya.emberlight.share.space
 
 import androidx.test.core.app.ApplicationProvider
+import io.github.labushuya.emberlight.share.space.location.NotRemovableReason
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -138,13 +140,35 @@ class SpaceVaultTest {
         assertTrue(storedFiles().isEmpty())
     }
 
+    /**
+     * Ein Anhängsel hinter IEND ist nicht bereinigbar (ADR 0015, `trailing_data`). Ohne Einwilligung gibt es keinen
+     * Speicherort, auch nicht für das PNG-Gerüst. Die Ablehnung räumt die Temp-Datei weg.
+     */
     @Test
-    fun polyglotPngWithAppendedHtmlIsStoredAsPng() {
+    fun polyglotPngWithAppendedHtmlIsRejectedAsTrailingData() {
         val vault = vault()
 
-        val record = createdRecord(ingest(vault, guest, MediaFixtures.png(MediaFixtures.ascii("<html></html>"))))
+        val result = ingest(vault, guest, MediaFixtures.png(MediaFixtures.ascii("<html></html>")))
+
+        assertEquals(
+            IngestResult.Rejected(RejectReason.LocationNotRemovable(NotRemovableReason.TRAILING_DATA)),
+            result,
+        )
+        assertTrue(storedFiles().isEmpty())
+    }
+
+    /** Mit Einwilligung bleibt die Datei unverändert, als PNG erkannt und markiert (ADR 0015, Einwilligung). */
+    @Test
+    fun polyglotPngWithConsentIsStoredUnchangedAndMarked() {
+        val vault = vault()
+        val bytes = MediaFixtures.png(MediaFixtures.ascii("<html></html>"))
+
+        val record = createdRecord(runBlocking { vault.ingest(guest, "polyglot.png", null, BytesSource(bytes), true) })
 
         assertEquals("image/png", record.mime)
+        assertTrue(record.locationKept)
+        assertEquals(bytes.size.toLong(), record.sizeBytes)
+        assertArrayEquals(bytes, File(spacesDir, "${space.value}/${record.sha256}").readBytes())
     }
 
     @Test

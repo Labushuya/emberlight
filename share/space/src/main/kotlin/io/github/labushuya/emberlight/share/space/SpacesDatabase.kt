@@ -14,6 +14,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import java.io.File
 
 /** Teilnehmer im Space. Der Hash des Zugangsschlüssels liegt hier, nie der Schlüssel selbst (ADR 0013). */
@@ -43,6 +45,10 @@ data class MediaEntity(
     @ColumnInfo(name = "uploader_id") val uploaderId: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "state") val state: String,
+    /** `true`, wenn der Standort nicht entfernt werden konnte und der Upload ausdrücklich bestätigt wurde (ADR 0015). */
+    @ColumnInfo(name = "location_kept", defaultValue = "0") val locationKept: Boolean = false,
+    /** Version der Verarbeitung. `0` heißt vor Paket 3.1b (unverarbeitet), ab 3.1b gilt `LocationScrubber.PROCESSING_VERSION`. */
+    @ColumnInfo(name = "processing_version", defaultValue = "0") val processingVersion: Int = 0,
 )
 
 /** Zeile der Medienliste, mit dem Anzeigenamen des Uploaders. */
@@ -52,6 +58,7 @@ data class MediaRow(
     val sizeBytes: Long,
     val createdAt: Long,
     val uploaderName: String?,
+    val locationKept: Boolean,
 )
 
 @Dao
@@ -71,7 +78,7 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               p.display_name AS uploaderName
+               m.location_kept AS locationKept, p.display_name AS uploaderName
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
         ORDER BY m.created_at DESC, m.id DESC
@@ -86,7 +93,7 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               p.display_name AS uploaderName
+               m.location_kept AS locationKept, p.display_name AS uploaderName
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
           AND (m.created_at < :afterCreatedAt OR (m.created_at = :afterCreatedAt AND m.id < :afterId))
@@ -127,7 +134,7 @@ interface ParticipantDao {
  * Index des Space in Room (ADR 0014, Persistenz). Die Datei heißt `spaces.db` und liegt unter `noBackupFilesDir`, nie
  * unter `databases/`, damit sie aus Backups und Geräte-Übertragungen herausfällt.
  */
-@Database(entities = [MediaEntity::class, ParticipantEntity::class], version = 1, exportSchema = false)
+@Database(entities = [MediaEntity::class, ParticipantEntity::class], version = 2, exportSchema = false)
 abstract class SpacesDatabase : RoomDatabase() {
     abstract fun media(): MediaDao
 
@@ -135,6 +142,18 @@ abstract class SpacesDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "spaces.db"
+
+        /**
+         * Version 1 → 2 (Paket 3.1b): Markierung `location_kept` und Verarbeitungsversion. Bestehende Medien bekommen
+         * `0`, also ohne Einwilligung und ohne Verarbeitung nach 3.1b. Die Migration ist additiv und geht ohne Datenverlust.
+         */
+        val MIGRATION_1_2: Migration =
+            object : Migration(1, 2) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE media ADD COLUMN location_kept INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE media ADD COLUMN processing_version INTEGER NOT NULL DEFAULT 0")
+                }
+            }
 
         /**
          * Öffnet den Index unter [spacesDir]. Der absolute Pfad überschreibt den Standardort `databases/`. Der Pfad
@@ -147,6 +166,7 @@ abstract class SpacesDatabase : RoomDatabase() {
             spacesDir.mkdirs()
             return Room
                 .databaseBuilder(IndexLocationContext(context, spacesDir), SpacesDatabase::class.java, FILE_NAME)
+                .addMigrations(MIGRATION_1_2)
                 .build()
         }
     }
