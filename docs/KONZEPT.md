@@ -143,6 +143,12 @@ Details und Messwerte stehen in den ADRs 0006 bis 0011.
 - **Debug- und Benchmark-Varianten** haben eigene Icons. Eine Demo-Bibliothek mit synthetischen Medien gibt es nur in diesen Varianten, zum Testen auf dem Gerät. Der Release-Build enthält sie nicht, private Fotos sind nie Teil davon ([ADR 0011](adr/0011-demo-bibliothek-und-mess-build.md)).
 - **Arbeitsregel**: Gesten und Animationen werden vor dem Merge auf einem Gerät geprüft.
 
+## Nachträge aus Meilenstein 3
+
+- **Voreinstellungen beim Anlegen** (Paket 3.2, [ADR 0016](adr/0016-space-verwaltung.md)): Farbe die erste der acht Akzentfarben, Laufzeit 1 Tag, Nachhaltefrist 1 Woche, Speicherlimit 4 GiB. Der Name ist Pflicht. Laufzeiten: 2 h, 6 h, 12 h, 1 Tag, 3 Tage, 1 Woche, Eigenes Ende (nur in der Zukunft, höchstens 30 Tage). Nachhaltefrist: Sofort löschen, 1 Tag, 1 Woche, Eigene (1 bis 90 Tage). Speicherlimit: 1, 2, 4, 8, 16 GiB, Eigenes (0,5 bis 64 GiB). Warnung, wenn das Limit den freien Speicher minus 2 GiB übersteigt.
+- **Titelbild** über die System-Fotoauswahl. Das Bild wird in den Space-Speicher kopiert, mit Standort-Entfernung. Ein Bild, bei dem sich der Standort nicht entfernen lässt, wird abgewiesen. Es gibt keine Einwilligung für das Titelbild.
+- **Laufzeit als Regel**: Eine Dauer bleibt Dauer, bis der Space in Paket 3.3 startet. Ein festes Ende ist ein Zeitpunkt.
+
 ## Offene Punkte
 
 - Kompatibilität mit dem LocalSend-Protokoll: Interessant, aber kein MVP-Ziel.
