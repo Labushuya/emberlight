@@ -59,6 +59,12 @@ object UploadFilenameHeader {
     }
 }
 
+/** Einwilligung, Standort unverändert zu speichern, wenn er nicht sicher entfernbar ist (ADR 0015). */
+object KeepLocationHeader {
+    const val NAME = "X-Emberlight-Keep-Location"
+    const val YES = "1"
+}
+
 /** Antwort-Header `Content-Disposition` nach RFC 6266 (ADR 0013, Downloads). */
 object ContentDispositionHeader {
     /**

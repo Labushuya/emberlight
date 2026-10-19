@@ -25,6 +25,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
@@ -390,6 +391,92 @@ class SpaceApiTest {
 
             assertTrue(logLines.isNotEmpty())
             assertTrue(logLines.none { it.contains("tok-guest") || it.contains("BBBBBBBB") })
+        }
+
+    /** Ein HEIC lässt sich nicht bereinigen (ADR 0015). Ohne Einwilligung: 422 mit Grund, nichts gespeichert. */
+    @Test
+    fun locationNotRemovableIs422WithReasonAndStoresNothing() =
+        testApplication {
+            install()
+            val heic = MediaFixtures.ftyp("heic") + MediaFixtures.box("mdat", ByteArray(16))
+
+            val response = client.upload("tok-guest-0123456789", heic, name = "foto.heic")
+
+            assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+            val body = json(response)
+            assertEquals("location_not_removable", body.getValue("error").jsonPrimitive.content)
+            assertEquals("unsupported", body.getValue("reason").jsonPrimitive.content)
+            val list = json(client.get("/api/v1/media") { auth("tok-guest-0123456789") })
+            assertEquals(0, list.getValue("items").jsonArray.size)
+        }
+
+    /** Mit Einwilligung wird die Datei unverändert gespeichert und als „Standort enthalten“ markiert. */
+    @Test
+    fun keepLocationHeaderStoresTheFileUnchangedAndMarksIt() =
+        testApplication {
+            install()
+            val heic = MediaFixtures.ftyp("heic") + MediaFixtures.box("mdat", ByteArray(16))
+
+            val response =
+                client.post("/api/v1/media") {
+                    auth("tok-guest-0123456789")
+                    header("X-Emberlight-Filename", "foto.heic")
+                    header("X-Emberlight-Keep-Location", "1")
+                    setBody(heic)
+                }
+
+            assertEquals(HttpStatusCode.Created, response.status)
+            assertEquals(true, json(response).getValue("locationKept").jsonPrimitive.boolean)
+            val id = json(response).getValue("id").jsonPrimitive.content
+            val list = json(client.get("/api/v1/media") { auth("tok-guest-0123456789") })
+            val item =
+                list
+                    .getValue("items")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals(true, item.getValue("locationKept").jsonPrimitive.boolean)
+            assertEquals(id, item.getValue("id").jsonPrimitive.content)
+            val download = client.get("/api/v1/media/$id/content") { auth("tok-guest-0123456789") }
+            assertTrue(heic.contentEquals(download.bodyAsBytes()))
+        }
+
+    /** Der Einwilligungs-Header akzeptiert nur den Wert `1`. Alles andere ist ein Fehler. */
+    @Test
+    fun keepLocationHeaderWithAnotherValueIsBadRequest() =
+        testApplication {
+            install()
+
+            val response =
+                client.post("/api/v1/media") {
+                    auth("tok-guest-0123456789")
+                    header("X-Emberlight-Filename", "bild.jpg")
+                    header("X-Emberlight-Keep-Location", "ja")
+                    setBody(MediaFixtures.jpeg(300))
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals("bad_request", json(response).getValue("error").jsonPrimitive.content)
+        }
+
+    @Test
+    fun cleanedUploadIsNotMarkedAsLocationKept() =
+        testApplication {
+            install()
+            client.upload("tok-guest-0123456789", MediaFixtures.jpeg(300))
+
+            val list = json(client.get("/api/v1/media") { auth("tok-guest-0123456789") })
+
+            assertEquals(
+                false,
+                list
+                    .getValue("items")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("locationKept")
+                    .jsonPrimitive.boolean,
+            )
         }
 
     @Test
