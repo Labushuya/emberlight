@@ -274,6 +274,28 @@ class SpaceApiTest {
         }
 
     @Test
+    fun downloadSendsExactlyOneAcceptRangesHeaderOn200And206() =
+        testApplication {
+            install()
+            val id =
+                json(
+                    client.upload("tok-guest-0123456789", MediaFixtures.jpeg(300)),
+                ).getValue("id").jsonPrimitive.content
+
+            val full = client.get("/api/v1/media/$id/content") { auth("tok-guest-0123456789") }
+            val partial =
+                client.get("/api/v1/media/$id/content") {
+                    auth("tok-guest-0123456789")
+                    header(HttpHeaders.Range, "bytes=0-99")
+                }
+
+            assertEquals(HttpStatusCode.OK, full.status)
+            assertEquals(listOf("bytes"), full.headers.getAll(HttpHeaders.AcceptRanges).orEmpty())
+            assertEquals(HttpStatusCode.PartialContent, partial.status)
+            assertEquals(listOf("bytes"), partial.headers.getAll(HttpHeaders.AcceptRanges).orEmpty())
+        }
+
+    @Test
     fun unknownMediaIsNotFound() =
         testApplication {
             install()

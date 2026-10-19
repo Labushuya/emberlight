@@ -167,7 +167,7 @@ internal suspend fun ApplicationCall.respondContent(
     response.headers.append(HttpHeaders.ContentDisposition, disposition)
     response.headers.append(NOSNIFF_HEADER, "nosniff")
     response.headers.append(HttpHeaders.CacheControl, "no-store")
-    response.headers.append(HttpHeaders.AcceptRanges, "bytes")
+    // Accept-Ranges setzt PartialContent selbst. Ein eigener Header führte zu zwei Werten (ADR 0014, Umsetzung 3.1a).
     respond(LocalFileContent(file, contentType))
 }
 
