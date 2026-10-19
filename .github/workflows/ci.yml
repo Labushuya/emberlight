@@ -1,6 +1,8 @@
-# CI: Prüft jeden Push und jeden Pull Request auf main. Baut, lintet und testet das Projekt
+# CI: Prüft jeden Push auf main und jeden Pull Request auf main. Baut, lintet und testet das Projekt
 # (./gradlew check) und erzeugt die Debug-APK sowie eine unsignierte Release-APK, damit
-# R8-Probleme schon hier auffallen. Reine Doku-Änderungen verbrauchen keine Actions-Minuten.
+# R8-Probleme schon hier auffallen. Pull Requests laufen immer, auch bei reinen Doku-Änderungen,
+# weil der Check „Build, Lint und Tests“ Pflicht für main ist (Branch-Schutz). Auf dem Push-Pfad
+# sparen reine Doku-Änderungen Actions-Minuten.
 name: CI
 
 on:
@@ -13,11 +15,6 @@ on:
       - 'scripts/**'
   pull_request:
     branches: [main]
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - 'LICENSE'
-      - 'scripts/**'
   workflow_dispatch:
 
 permissions:
