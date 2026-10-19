@@ -339,15 +339,21 @@ internal object BmffScrubber {
         keyNames: List<String>,
     ) {
         val locationIndexes = HashSet<Long>()
+        // Jeder Key mit „location“ im Namen zählt, nicht nur das Apple-Präfix (andere Schreiber nutzen andere Namen).
         keyNames.forEachIndexed { index, name ->
-            if (name.startsWith(LOCATION_KEY_PREFIX)) locationIndexes.add(index + 1L)
+            if (name.contains("location", ignoreCase = true)) locationIndexes.add(index + 1L)
         }
         var p = list.payload
         while (p < list.end) {
             pass.count("ilst_items")
             val item = box(pass, p, list.end, top = false)
             val isLocation = item.type == COPYRIGHT_XYZ || pass.u32Be(item.start + 4, list.end) in locationIndexes
-            if (isLocation) dataValues(pass, item) else generic(pass, item)
+            // Standort-Text im Wert, auch unter einem unbekannten Key, wird ebenfalls überschrieben.
+            if (isLocation || LocationText.containsIn(pass.store, item.payload, item.end)) {
+                dataValues(pass, item)
+            } else {
+                generic(pass, item)
+            }
             p = item.end
         }
     }

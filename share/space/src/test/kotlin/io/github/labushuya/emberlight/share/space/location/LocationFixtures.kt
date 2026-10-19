@@ -343,6 +343,12 @@ internal object LocationFixtures {
                 box("ilst", ilstItem(1, LOCATION_TEXT) + ilstItem(2, "Apple")),
         )
 
+    /** `meta` mit einem einzigen Key [keyName] und dem Standort-Wert [value] (andere Schreiber nutzen andere Namen). */
+    fun metaWithLocationKey(
+        keyName: String,
+        value: String,
+    ): ByteArray = box("meta", hdlr("mdta") + keys(keyName) + box("ilst", ilstItem(1, value)))
+
     /** `loci` (3GPP): Name, Koordinaten und Notiz, alles ungleich null. */
     fun loci(): ByteArray {
         val coordinates = be32(0x000C_8000) + be32(0x0010_0000) + be32(0x0000_0A00)

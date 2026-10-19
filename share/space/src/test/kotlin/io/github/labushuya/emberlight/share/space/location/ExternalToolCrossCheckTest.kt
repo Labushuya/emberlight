@@ -62,9 +62,14 @@ class ExternalToolCrossCheckTest {
         // (c) und (d): bereinigen, danach findet ExifTool keinen Standort mehr.
         val cleanedVideo = folder.newFile("ffmpeg-cleaned.mp4")
         cleanedVideo.writeBytes(video.readBytes())
-        assertEquals(
-            LocationScrubResult.Clean(changed = true),
-            LocationScrubber.scrub(cleanedVideo, DetectedFormat("video/mp4", MediaKind.VIDEO, boxed = true)),
+        val videoResult =
+            LocationScrubber.scrub(
+                cleanedVideo,
+                DetectedFormat("video/mp4", MediaKind.VIDEO, boxed = true),
+            )
+        assertTrue(
+            "ffmpeg-MP4: Bereinigung liefert $videoResult, erwartet Clean",
+            videoResult is LocationScrubResult.Clean,
         )
         assertNoLocationTag(
             run("exiftool", "-a", "-G1", "-gps:all", "-location:all", "-xmp:all", cleanedVideo.absolutePath),

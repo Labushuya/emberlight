@@ -283,6 +283,16 @@ class LocationScrubberTest {
         assertTrue(String(cleaned, Charsets.ISO_8859_1).contains("com.apple.quicktime.location.ISO6709"))
     }
 
+    /** Ein Standort-Wert unter einem Key ohne Apple-Präfix (z. B. `location`) wird ebenfalls überschrieben. */
+    @Test
+    fun locationValueUnderAnotherKeyNameIsBlankedToo() {
+        val original =
+            box("ftyp", ascii("isom") + ByteArray(4)) +
+                box("moov", LocationFixtures.metaWithLocationKey("location", "+48.8566+002.3522/"))
+
+        assertClean(original, "video/quicktime")
+    }
+
     @Test
     fun metadataTrackWithGpmdIsNotRemovable() {
         val original = box("ftyp", ascii("isom") + ByteArray(4)) + box("moov", gpmdTrack())
