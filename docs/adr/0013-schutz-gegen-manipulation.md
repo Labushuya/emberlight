@@ -245,9 +245,9 @@ Eine Datei, die zugleich gültiges Bild und etwas anderes ist, wird als Bild ges
 ## Logging
 
 - Route-Templates statt roher URIs (z. B. `/api/v1/media/{id}/content`). Konkrete IDs gehören nicht ins Protokoll.
-- Keine Tokens, keine Header.
-- IP-Adressen nur in Debug-Builds.
-- Umsetzung in 3.1a. Heute protokolliert `requestLog` den rohen Pfad (KDoc in `KtorLocalServer.kt`).
+- Keine Tokens, keine Header, keine Hashes der Tokens.
+- IP-Adressen nur, wenn der Server über den Debug-Einstieg gestartet wurde (Flag `debugLogging`, das nur der Debug-Einstieg setzt). Das betrifft die Test-Builds `debug` und `benchmark`. Im Release-Build wird nie eine IP-Adresse protokolliert. Dass der benchmark-Build IP-Adressen protokolliert, ist damit bewusst erlaubt (Nachtrag 19.10.2026, Gerätetest 3.1a).
+- Umsetzung in 3.1a: `requestLog` protokolliert das Route-Template, nie den rohen Pfad (`ServerPipeline.kt`).
 
 ## Integrität
 
