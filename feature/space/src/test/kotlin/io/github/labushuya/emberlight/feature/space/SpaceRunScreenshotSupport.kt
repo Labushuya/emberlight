@@ -122,6 +122,7 @@ abstract class SpaceRunScreenshotSupport {
             onConfirmNetwork = {},
             onAcknowledgePause = {},
             onSetup = {},
+            onResume = {},
             modifier = Modifier.fillMaxSize(),
         )
     }

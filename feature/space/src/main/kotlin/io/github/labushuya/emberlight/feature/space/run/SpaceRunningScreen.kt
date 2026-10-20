@@ -129,7 +129,7 @@ internal fun SpaceRunningContent(
     onConfirmNetwork: () -> Unit,
     onAcknowledgePause: () -> Unit,
     onSetup: () -> Unit,
-    onResume: () -> Unit = {},
+    onResume: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
