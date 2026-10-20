@@ -29,6 +29,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** Detail-ViewModel (Paket 3.2): Auswahl aus der Route oder der Liste, Löschen samt Speicher. */
 @RunWith(RobolectricTestRunner::class)
@@ -64,11 +66,14 @@ class SpaceDetailViewModelTest {
         val vm = observed(SpaceDetailViewModel(SavedStateHandle(), repository))
 
         vm.select(ID)
-        assertEquals("Lena", waitFor(vm) { it.record != null }.record?.settings?.name)
+        assertEquals("Lena", awaitValue(vm.state) { it.record != null }.record?.settings?.name)
 
+        // Die Auswahl läuft über den Datenfluss der Datenbank und kommt asynchron an. Der Test wartet deshalb auf den
+        // leeren Zustand, statt ihn direkt nach select(null) zu lesen.
         vm.select(null)
-        assertNull(vm.state.value.record)
-        assertTrue(vm.state.value.selected == null)
+        val cleared = awaitValue(vm.state) { it.record == null && it.selected == null }
+        assertNull(cleared.record)
+        assertNull(cleared.selected)
     }
 
     @Test
@@ -76,17 +81,16 @@ class SpaceDetailViewModelTest {
         val id = SpaceId.parse(ID)!!
         runBlocking { repository.create(id, SpaceDefaults.settings().copy(name = "Weg"), null) }
         val vm = observed(SpaceDetailViewModel(SavedStateHandle(mapOf("id" to ID)), repository))
-        waitFor(vm) { it.record != null }
-        val backCalled =
-            java.util.concurrent.atomic
-                .AtomicBoolean(false)
+        awaitValue(vm.state) { it.record != null }
+        val backCalled = CountDownLatch(1)
 
-        vm.delete { backCalled.set(true) }
+        vm.delete { backCalled.countDown() }
 
-        // Das Löschen läuft auf dem Datenbank-Thread. Erst wenn der Rückruf kommt, ist es abgeschlossen.
-        val deadline = System.currentTimeMillis() + TIMEOUT_MILLIS
-        while (!backCalled.get() && System.currentTimeMillis() < deadline) Thread.sleep(POLL_MILLIS)
-        assertTrue(backCalled.get())
+        // Das Löschen läuft auf dem Datenbank-Thread. Der Test blockiert, bis der Rückruf kommt, ohne Abfrageschleife.
+        assertTrue(
+            "Der Rückruf nach dem Löschen blieb aus.",
+            backCalled.await(STATE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS),
+        )
         assertNull(runBlocking { repository.find(id) })
     }
 
@@ -96,23 +100,8 @@ class SpaceDetailViewModelTest {
         return vm
     }
 
-    private fun waitFor(
-        vm: SpaceDetailViewModel,
-        predicate: (SpaceDetailUiState) -> Boolean,
-    ): SpaceDetailUiState {
-        val deadline = System.currentTimeMillis() + TIMEOUT_MILLIS
-        while (System.currentTimeMillis() < deadline) {
-            val current = vm.state.value
-            if (predicate(current)) return current
-            Thread.sleep(POLL_MILLIS)
-        }
-        throw AssertionError("Zustand wurde nicht erreicht: ${vm.state.value}")
-    }
-
     private companion object {
         const val ID = "GGGGGGGGGGGGGGGGGGGGGG"
         const val FREE_BYTES = 64L * 1024 * 1024 * 1024
-        const val TIMEOUT_MILLIS = 5_000L
-        const val POLL_MILLIS = 5L
     }
 }

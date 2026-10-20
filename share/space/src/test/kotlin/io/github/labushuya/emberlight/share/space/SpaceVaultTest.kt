@@ -64,7 +64,9 @@ class SpaceVaultTest {
         probe: StorageProbe = StorageProbe { freeBytes },
     ): SpaceVault = SpaceVault(database, SpaceStorage(spacesDir, space), limits, probe) { clock++ }
 
-    private fun storedFiles(): List<String> = File(spacesDir, space.value).listFiles()?.map { it.name }.orEmpty()
+    /** Dateien im Space-Ordner. Fehlt der Ordner, bricht der Test ab, damit "leer" nicht ungeprüft bestehen kann. */
+    private fun storedFiles(): List<String> =
+        checkNotNull(File(spacesDir, space.value).listFiles()) { "Space-Ordner fehlt." }.map { it.name }
 
     private fun sha256Hex(bytes: ByteArray): String =
         java.security.MessageDigest
