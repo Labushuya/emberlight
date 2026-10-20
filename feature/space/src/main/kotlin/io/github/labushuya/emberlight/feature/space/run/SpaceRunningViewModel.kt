@@ -13,12 +13,13 @@ import io.github.labushuya.emberlight.share.space.management.SpaceRepository
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
 import io.github.labushuya.emberlight.share.space.run.RunClock
 import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
@@ -69,28 +70,37 @@ class SpaceRunningViewModel
     ) : ViewModel() {
         private val spaceId: SpaceId? = savedStateHandle.get<String>(ARG_ID)?.let { SpaceId.parse(it) }
 
+        /**
+         * Ohne Kennung (Route aus der Benachrichtigung) folgt der Zustand dem aktiven Space. Gibt es keinen, ist die Anzeige
+         * leer und sagt es.
+         */
+        @OptIn(ExperimentalCoroutinesApi::class)
         val state: StateFlow<SpaceRunningUiState> =
-            if (spaceId == null) {
-                MutableStateFlow(SpaceRunningUiState(loaded = true)).asStateFlow()
-            } else {
-                combine(
-                    combine(spaces.observe(spaceId), runs.observeUsedBytes(spaceId)) { record, used -> record to used },
-                    combine(runs.observeMedia(spaceId, MEDIA_LIMIT), runs.observePauses(spaceId)) { media, pauses ->
-                        media to pauses
-                    },
-                    SpaceServerService.runState,
-                    ticker(),
-                ) { (record, used), (media, pauses), runState, now ->
-                    SpaceRunningUiState(
-                        record = record,
-                        loaded = true,
-                        usedBytes = used,
-                        media = media,
-                        runState = runState,
-                        pause = pauses.firstOrNull { !it.acknowledged },
-                        nowMillis = now,
-                    )
-                }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), SpaceRunningUiState())
+            (
+                spaceId?.let { observeSpace(it) }
+                    ?: runs.observeActive().flatMapLatest { active ->
+                        active?.let { observeSpace(it.id) } ?: flowOf(SpaceRunningUiState(loaded = true))
+                    }
+            ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), SpaceRunningUiState())
+
+        private fun observeSpace(id: SpaceId): Flow<SpaceRunningUiState> =
+            combine(
+                combine(spaces.observe(id), runs.observeUsedBytes(id)) { record, used -> record to used },
+                combine(runs.observeMedia(id, MEDIA_LIMIT), runs.observePauses(id)) { media, pauses ->
+                    media to pauses
+                },
+                SpaceServerService.runState,
+                ticker(),
+            ) { (record, used), (media, pauses), runState, now ->
+                SpaceRunningUiState(
+                    record = record,
+                    loaded = true,
+                    usedBytes = used,
+                    media = media,
+                    runState = runState,
+                    pause = pauses.firstOrNull { !it.acknowledged },
+                    nowMillis = now,
+                )
             }
 
         /** Beendet den Space. Die Oberfläche hat die Bestätigung eingeholt. */

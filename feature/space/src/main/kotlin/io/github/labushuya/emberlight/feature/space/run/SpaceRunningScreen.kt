@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -36,18 +37,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.hilt.navigation.compose.hiltViewModel
 import io.github.labushuya.emberlight.feature.space.R
+import io.github.labushuya.emberlight.feature.space.formatDate
 import io.github.labushuya.emberlight.share.server.PauseCause
 import io.github.labushuya.emberlight.share.server.RunState
 import io.github.labushuya.emberlight.share.space.MediaRow
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
-import java.text.DateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Gastgeber-Ansicht des laufenden Space. Die Hülle lädt den Zustand, der Inhalt zeigt ihn ([SpaceRunningContent]). Das
@@ -56,13 +55,18 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SpaceRunningScreen(
-    id: String,
+    id: String?,
+    confirmEnd: Boolean,
     onBack: () -> Unit,
     onSetup: (String) -> Unit,
     viewModel: SpaceRunningViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var confirmEnd by rememberSaveable { mutableStateOf(false) }
+    var showEndDialog by rememberSaveable { mutableStateOf(false) }
+    // Ein Tippen auf „Beenden“ in der Benachrichtigung öffnet nur die Bestätigung, nie das Ende selbst.
+    LaunchedEffect(confirmEnd) {
+        if (confirmEnd) showEndDialog = true
+    }
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -81,28 +85,28 @@ internal fun SpaceRunningScreen(
     ) { padding ->
         SpaceRunningContent(
             state = state,
-            onEnd = { confirmEnd = true },
+            onEnd = { showEndDialog = true },
             onConfirmNetwork = viewModel::confirmNetwork,
             onAcknowledgePause = viewModel::acknowledgePauses,
-            onSetup = { onSetup(id) },
+            onSetup = { state.record?.id?.value?.let(onSetup) },
             modifier = Modifier.padding(padding),
         )
     }
-    if (confirmEnd) {
+    if (showEndDialog) {
         AlertDialog(
-            onDismissRequest = { confirmEnd = false },
+            onDismissRequest = { showEndDialog = false },
             title = { Text(stringResource(R.string.space_running_end_title)) },
             text = { Text(stringResource(R.string.space_running_end_text)) },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        confirmEnd = false
+                        showEndDialog = false
                         viewModel.end()
                     },
                 ) { Text(stringResource(R.string.space_running_end_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmEnd = false }) { Text(stringResource(R.string.space_cancel)) }
+                TextButton(onClick = { showEndDialog = false }) { Text(stringResource(R.string.space_cancel)) }
             },
         )
     }
@@ -120,7 +124,16 @@ internal fun SpaceRunningContent(
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         val record = state.record
-        if (!state.loaded || record == null) return@Surface
+        if (!state.loaded) return@Surface
+        if (record == null) {
+            Text(
+                text = stringResource(R.string.space_running_none),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+            return@Surface
+        }
         val context = LocalContext.current
         val running = record.status == SpaceStatus.ACTIVE
         Column(
@@ -339,12 +352,14 @@ private fun statusLine(
         record.status == SpaceStatus.ENDED ->
             stringResource(R.string.space_running_status_ended, formatDate(record.endedAt ?: record.updatedAt))
         state.runState is RunState.Paused -> stringResource(R.string.space_running_status_paused)
-        record.expiresAt != null ->
-            stringResource(
-                R.string.space_running_status_running,
-                remainingText(record.expiresAt - state.nowMillis),
-            )
-        else -> stringResource(R.string.space_detail_summary)
+        else -> {
+            val expires = record.expiresAt
+            if (expires != null) {
+                stringResource(R.string.space_running_status_running, remainingText(expires - state.nowMillis))
+            } else {
+                stringResource(R.string.space_detail_summary)
+            }
+        }
     }
 
 @Composable
@@ -358,12 +373,6 @@ private fun remainingText(millis: Long): String {
 }
 
 private fun minutesOf(millis: Long): Long = (millis + MILLIS_PER_MINUTE / 2) / MILLIS_PER_MINUTE
-
-/** Datum und Uhrzeit in der Sprache des Geräts (Mittel-Format), wie im Formular (ADR 0016). */
-internal fun formatDate(millis: Long): String =
-    DateFormat
-        .getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.getDefault())
-        .format(Date(millis))
 
 private const val MILLIS_PER_MINUTE = 60_000L
 private const val MINUTES_PER_HOUR = 60L

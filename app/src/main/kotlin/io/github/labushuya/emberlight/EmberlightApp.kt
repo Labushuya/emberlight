@@ -24,6 +24,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -57,8 +58,11 @@ import io.github.labushuya.emberlight.feature.gallery.viewer.LocalViewerImageSou
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerImageSourceContribution
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceDetail
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceEdit
+import io.github.labushuya.emberlight.feature.space.navigateToSpaceRunning
+import io.github.labushuya.emberlight.feature.space.navigateToSpaceSetup
 import io.github.labushuya.emberlight.feature.space.navigateToSpaces
 import io.github.labushuya.emberlight.feature.space.spacesScreens
+import io.github.labushuya.emberlight.share.server.SpaceServerService
 
 /**
  * Wurzel der Oberfläche: Navigation (unten am Handy, Rail auf großen Displays) und der NavHost mit den Top-Level-Zielen.
@@ -73,7 +77,15 @@ fun EmberlightApp(
     navController: NavHostController = rememberNavController(),
     overlays: List<AppOverlay> = emptyList(),
     viewerImageSources: List<ViewerImageSourceContribution> = emptyList(),
+    launchRoute: String? = null,
+    onLaunchRouteHandled: () -> Unit = {},
 ) {
+    // Ziel aus einer Benachrichtigung des Dienstes (Paket 3.3). Es wird einmal geöffnet, danach ist es verbraucht.
+    LaunchedEffect(launchRoute) {
+        val route = launchRoute ?: return@LaunchedEffect
+        navController.openLaunchRoute(route)
+        onLaunchRouteHandled()
+    }
     Box(modifier = modifier.fillMaxSize()) {
         // Zusätzliche Bildquellen des Viewers (ADR 0011). Ohne Beiträge gilt die Standardquelle.
         CompositionLocalProvider(LocalViewerImageSources provides viewerImageSources) {
@@ -187,8 +199,20 @@ private fun AppNavHost(navController: NavHostController) {
             onCreate = { navController.navigateToSpaceEdit() },
             onOpen = { id -> navController.navigateToSpaceDetail(id) },
             onEdit = { id -> navController.navigateToSpaceEdit(id) },
+            onStart = { id -> navController.navigateToSpaceSetup(id, startMode = true) },
+            onSetup = { id -> navController.navigateToSpaceSetup(id) },
+            onOpenRunning = { id -> navController.navigateToSpaceRunning(id) },
+            onStarted = { id -> navController.navigateToSpaceRunning(id, afterStart = true) },
             onBack = { navController.popBackStack() },
         )
+    }
+}
+
+/** Übersetzt das Ziel aus einer Benachrichtigung (ADR 0017). Unbekannte Ziele werden ignoriert. */
+private fun NavHostController.openLaunchRoute(route: String) {
+    when (route) {
+        SpaceServerService.ROUTE_CONFIRM_END -> navigateToSpaceRunning(confirmEnd = true)
+        SpaceServerService.ROUTE_OPEN_SPACE, SpaceServerService.ROUTE_CONFIRM_NETWORK -> navigateToSpaceRunning()
     }
 }
 

@@ -279,6 +279,7 @@
     <string name="space_setup_error_ok">OK</string>
     <string name="space_running_status_running">Running · %1$s left</string>
     <string name="space_running_status_paused">Paused</string>
+    <string name="space_running_none">No space is running.</string>
     <string name="space_running_status_ended">Ended on %1$s</string>
     <string name="space_running_remaining_under_minute">under 1 min</string>
     <string name="space_running_remaining_m">%1$d min</string>

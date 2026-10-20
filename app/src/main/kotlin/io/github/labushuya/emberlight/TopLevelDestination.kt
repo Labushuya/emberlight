@@ -6,6 +6,8 @@ import io.github.labushuya.emberlight.feature.gallery.GalleryRoute
 import io.github.labushuya.emberlight.feature.gallery.album.AlbumRoute
 import io.github.labushuya.emberlight.feature.space.SpaceDetailRoute
 import io.github.labushuya.emberlight.feature.space.SpaceEditRoute
+import io.github.labushuya.emberlight.feature.space.SpaceRunningRoute
+import io.github.labushuya.emberlight.feature.space.SpaceSetupRoute
 import io.github.labushuya.emberlight.feature.space.SpacesRoute
 import kotlin.reflect.KClass
 import io.github.labushuya.emberlight.core.design.R as DesignR
@@ -30,7 +32,13 @@ enum class TopLevelDestination(
         selectedIcon = DesignR.drawable.ic_groups_filled,
         unselectedIcon = DesignR.drawable.ic_groups_outlined,
         labelRes = R.string.app_nav_spaces,
-        // Detail und Formular gehören zum Ziel Spaces: Die Leiste bleibt dort markiert.
-        routes = listOf(SpacesRoute::class, SpaceDetailRoute::class, SpaceEditRoute::class),
+        // Detail, Formular, Einrichtung und laufender Space gehören zum Ziel Spaces: Die Leiste bleibt dort markiert.
+        routes = listOf(
+            SpacesRoute::class,
+            SpaceDetailRoute::class,
+            SpaceEditRoute::class,
+            SpaceSetupRoute::class,
+            SpaceRunningRoute::class,
+        ),
     ),
 }

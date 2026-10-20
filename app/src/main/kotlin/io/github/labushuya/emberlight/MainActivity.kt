@@ -7,12 +7,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.extensions.AppOverlay
 import io.github.labushuya.emberlight.extensions.LaunchIntentHandler
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerImageSourceContribution
+import io.github.labushuya.emberlight.share.server.SpaceServerService
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -29,6 +31,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var viewerImageSources: Set<@JvmSuppressWildcards ViewerImageSourceContribution>
 
+    /** Ziel aus einer Benachrichtigung des Dienstes (Paket 3.3). Die Oberfläche öffnet es und setzt es zurück. */
+    private val launchRoute = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Muss vor super.onCreate stehen, damit der Splash beim Kaltstart greift.
         installSplashScreen()
@@ -42,7 +47,12 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             EmberlightTheme {
-                EmberlightApp(overlays = appOverlays.toList(), viewerImageSources = viewerImageSources.toList())
+                EmberlightApp(
+                    overlays = appOverlays.toList(),
+                    viewerImageSources = viewerImageSources.toList(),
+                    launchRoute = launchRoute.value,
+                    onLaunchRouteHandled = { launchRoute.value = null },
+                )
             }
         }
     }
@@ -55,5 +65,10 @@ class MainActivity : ComponentActivity() {
     private fun handleLaunchIntent(intent: Intent?) {
         intent ?: return
         launchIntentHandlers.forEach { it.onLaunchIntent(intent) }
+        // Das Ziel gilt einmal: Nach dem Lesen entfernt, damit eine Neuerzeugung der Activity es nicht wiederholt.
+        intent.getStringExtra(SpaceServerService.EXTRA_ROUTE)?.let { route ->
+            intent.removeExtra(SpaceServerService.EXTRA_ROUTE)
+            launchRoute.value = route
+        }
     }
 }

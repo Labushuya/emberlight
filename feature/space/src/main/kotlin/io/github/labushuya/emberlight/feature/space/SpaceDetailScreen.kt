@@ -219,6 +219,10 @@ internal fun SpaceDetailContent(
             }
             if (!editable) {
                 Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onEdit, enabled = false, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.space_detail_edit))
+                }
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.space_detail_not_editable),
                     style = MaterialTheme.typography.bodySmall,
