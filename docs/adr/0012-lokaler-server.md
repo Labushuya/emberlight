@@ -191,7 +191,7 @@ Diese Punkte müssen erfüllt und getestet sein, bevor Paket 3.1 Routen einführ
 - **Android 8 (API 26)**: Ktor und seine Abhängigkeiten sind dort zur Laufzeit nicht geprüft. Lint erkennt fehlende Java-APIs nur zum Teil, ein Fehlen zeigt sich also erst zur Laufzeit.
 - **Engine-Kompatibilität**: Eine ausdrückliche Android-Freigabe für CIO habe ich nicht gefunden. Die Laufzeit auf Android ist nur auf dem Honor-Gerät getestet.
 - **Android 17 Laufzeitanfrage**: Der Ablauf zu `ACCESS_LOCAL_NETWORK` ist nicht am Gerät getestet, weil die Oberfläche fehlt. Der Start ohne Berechtigung auf API 37 ist per Robolectric geprüft, nicht am Gerät.
-- **Prozess-Tod**: Der Dienst startet nach einem Prozess-Tod nicht neu (`START_NOT_STICKY`). Ein Gast verliert dann die Verbindung ohne Hinweis.
+- **Prozess-Tod** (überholt, siehe Nachtrag 20.10.2026): Der Dienst startete nach einem Prozess-Tod nicht neu (`START_NOT_STICKY`). Ein Gast verlor dann die Verbindung ohne Hinweis.
 - **WifiLock-Modus**: `WIFI_MODE_FULL_HIGH_PERF` ist als veraltet markiert. Die Warnung ist mit `@Suppress("DEPRECATION")` unterdrückt. Ein Ersatz ohne Einschränkung ist nicht bekannt.
 - **Schutz gegen Zugriff**: Ohne Zugriffsprüfung antwortet der Server nur mit 401. Vor dem ersten Routen-Einsatz muss Paket 3.x die Prüfung liefern.
 - **TLS**: Der Server spricht HTTP (siehe Entscheidung).
@@ -223,3 +223,9 @@ Der Text oben bleibt unverändert. Zwei Punkte werden präzisiert:
 ## Nachtrag (19.10.2026)
 
 Die Aussage zu R8 oben („Der Release-Build prüft so R8 mit dem Server“) gilt nicht mehr. Die R8-Prüfung des Servers läuft über den **benchmark**-Build, der den Debug-Einstieg enthält (ADR 0014, Umsetzung 3.1a). Der Release-Build hat bis Paket 3.3 keinen Einstieg und entfernt den Serverpfad. Die Keep-Regeln für `KtorLocalServer` und `SpaceServerService.Companion` sind entfernt. Die `-dontwarn`-Zeilen bleiben.
+
+## Nachtrag (20.10.2026): Neustart nach Prozess-Tod
+
+Die Entscheidung `START_NOT_STICKY` aus diesem ADR ist ersetzt. Der Dienst läuft mit `START_STICKY`. Ein Prozess-Tod oder ein Abbruch durch das System beendet einen Space nicht. Nach dem Neustart setzt der Dienst einen aktiven, nicht abgelaufenen Space fort, wenn die Akku-Ausnahme besteht. Sonst bleibt der Space aktiv und unterbrochen, bis der Gastgeber ihn in der App fortsetzt.
+
+Begründung: Ein Space darf nicht durch einen Prozess-Tod enden. Der Gast verliert die Verbindung in beiden Fällen, aber nur ein beendeter Space ist verloren. Der Ablauf steht in [ADR 0017](0017-einrichtung-und-betrieb.md), Abschnitt „Neustart nach Prozess-Tod“.

@@ -1,6 +1,8 @@
 package io.github.labushuya.emberlight.share.server
 
 import io.github.labushuya.emberlight.share.space.SpaceId
+import io.github.labushuya.emberlight.share.space.run.ActiveSpan
+import io.github.labushuya.emberlight.share.space.run.MemoryRunBeatStore
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
 import io.github.labushuya.emberlight.share.space.run.RunClock
 import io.github.labushuya.emberlight.share.space.run.SpaceRunPolicy
@@ -18,6 +20,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -335,9 +338,199 @@ class SpaceRunnerTest {
             assertEquals(1, env.servers.single().stops)
             assertEquals(1, env.host.locksReleased)
             assertTrue(
-                "Der Space bleibt aktiv, bis er beim nächsten Start abgeschlossen wird.",
+                "Der Space bleibt aktiv und wird nicht beendet, auch nicht bei Prozess-Tod.",
                 env.host.ended.isEmpty(),
             )
+            assertEquals(START, env.beats.load()?.startedAtMillis)
+        }
+
+    @Test
+    fun aRestartAfterAProcessDeathResumesTheSpaceOnTheSamePortAndRecordsTheInterruption() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            clock.advance(MINUTE)
+            env.submit(RunCommand.Heartbeat)
+            runCurrent()
+
+            // Der Prozess stirbt. Zehn Minuten ohne Herzschlag. Der Neustart findet den Lauf im Speicher.
+            env.runner.shutdown()
+            runCurrent()
+            clock.skip(10 * MINUTE)
+            env.restartRunner(this).submit(RunCommand.Restart)
+            runCurrent()
+
+            val running = env.state.value as RunState.Running
+            assertEquals(spaceId, running.spaceId)
+            assertEquals(FAKE_PORT, running.port)
+            assertEquals(2, env.servers.size)
+            assertEquals(1, env.servers.last().starts)
+            val (pausedSpace, event) = env.host.pauses.single()
+            assertEquals(spaceId, pausedSpace)
+            assertEquals(START + MINUTE, event.startedAtMillis)
+            assertEquals(10 * MINUTE, event.durationMillis)
+            assertTrue(env.host.ended.isEmpty())
+        }
+
+    @Test
+    fun aRestartWithoutTheBatteryExemptionLeavesTheSpaceActiveAndIdle() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            env.submit(RunCommand.Stop(StopReason.DESTROYED))
+            runCurrent()
+            env.host.exempt = false
+            clock.skip(10 * MINUTE)
+
+            env.submit(RunCommand.Restart)
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(1, env.servers.size)
+            assertTrue(env.host.ended.isEmpty())
+            assertTrue(env.host.pauses.isEmpty())
+            assertNotNull(env.beats.load())
+        }
+
+    @Test
+    fun aRestartOfAnExpiredSpaceEndsItAtItsPlannedEnd() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            env.submit(RunCommand.Stop(StopReason.DESTROYED))
+            runCurrent()
+            clock.skip(HOUR + 5 * MINUTE)
+
+            env.submit(RunCommand.Restart)
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(listOf(spaceId to expires), env.host.ended)
+            assertNull(env.beats.load())
+            assertEquals(1, env.servers.size)
+        }
+
+    @Test
+    fun aRestartWithoutAnActiveSpaceOnlyStopsTheService() =
+        runTest {
+            val env = Env(this)
+            env.submit(RunCommand.Restart)
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(1, env.host.idles)
+            assertTrue(env.servers.isEmpty())
+        }
+
+    @Test
+    fun aResumeWithoutWifiDoesNotRevertTheSpaceToDraft() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            env.submit(RunCommand.Stop(StopReason.DESTROYED))
+            runCurrent()
+            env.wifiNow = null
+
+            env.submit(RunCommand.Restart)
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(listOf(RunEvent.NoWifi), env.host.events)
+            assertTrue("Der Space bleibt aktiv, er ist nur unterbrochen.", env.host.aborted.isEmpty())
+            assertNotNull(env.beats.load())
+        }
+
+    @Test
+    fun aWakeUpWhileIdleNotifiesAboutAnOpenInterruptedSpaceOnly() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            env.submit(RunCommand.Stop(StopReason.DESTROYED))
+            runCurrent()
+
+            env.submit(RunCommand.Expire)
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(listOf(RunEvent.Interrupted), env.host.events)
+            assertTrue(env.host.ended.isEmpty())
+        }
+
+    @Test
+    fun aWakeUpWhileIdleEndsAnExpiredSpace() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            env.submit(RunCommand.Stop(StopReason.DESTROYED))
+            runCurrent()
+            clock.skip(HOUR + 1)
+
+            env.submit(RunCommand.Expire)
+            runCurrent()
+
+            assertEquals(listOf(spaceId to expires), env.host.ended)
+            assertEquals(emptyList<RunEvent>(), env.host.events)
+            assertNull(env.beats.load())
+        }
+
+    @Test
+    fun anEarlyWakeUpWhileRunningDoesNotEndTheSpace() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.submit(RunCommand.Expire)
+            runCurrent()
+
+            assertTrue(env.state.value is RunState.Running)
+            assertEquals(0, env.servers.single().stops)
+            assertTrue(env.host.ended.isEmpty())
+        }
+
+    @Test
+    fun aUserStopClearsTheSavedRunSoNothingIsResumedLater() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            assertNull(env.beats.load())
+        }
+
+    @Test
+    fun aResumeFromTheScreenKeepsTheSpaceActiveIfTheServerCannotStart() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            env.submit(RunCommand.Stop(StopReason.DESTROYED))
+            runCurrent()
+            env.failStart = true
+
+            env.submit(RunCommand.Start(spaceId, port = 0, resume = true))
+            runCurrent()
+
+            assertEquals(listOf(RunEvent.StartFailed), env.host.events)
+            assertTrue(env.host.aborted.isEmpty())
         }
 
     @Test
@@ -376,21 +569,30 @@ class SpaceRunnerTest {
         var failStart = false
         private val stateFlow = MutableStateFlow<RunState>(RunState.Idle)
         val state: StateFlow<RunState> get() = stateFlow.asStateFlow()
-        val runner: SpaceRunner
+        val beats = MemoryRunBeatStore()
+        var runner: SpaceRunner
 
         init {
             host.env = this
-            runner =
-                SpaceRunner(
-                    scope = testScope.backgroundScope,
-                    clock = clock,
-                    host = host,
-                    state = stateFlow,
-                    heartbeatMillis = SpaceRunPolicy.HEARTBEAT_INTERVAL_MS,
-                    closeGraceMillis = SpaceRunner.CLOSE_GRACE_MILLIS,
-                )
-            runner.run()
+            runner = newRunner(testScope)
         }
+
+        /** Ein neuer Verarbeiter auf denselben Fakes und demselben Speicher, wie nach einem Neustart des Dienstes. */
+        fun restartRunner(testScope: TestScope): SpaceRunner {
+            runner = newRunner(testScope)
+            return runner
+        }
+
+        private fun newRunner(testScope: TestScope): SpaceRunner =
+            SpaceRunner(
+                scope = testScope.backgroundScope,
+                clock = clock,
+                host = host,
+                state = stateFlow,
+                beats = beats,
+                heartbeatMillis = SpaceRunPolicy.HEARTBEAT_INTERVAL_MS,
+                closeGraceMillis = SpaceRunner.CLOSE_GRACE_MILLIS,
+            ).also { it.run() }
 
         fun submit(command: RunCommand) = runner.submit(command)
 
@@ -421,7 +623,21 @@ class SpaceRunnerTest {
         val pauses = mutableListOf<Pair<SpaceId, PauseEvent>>()
         val events = mutableListOf<RunEvent>()
 
-        override suspend fun setupFor(spaceId: SpaceId): ServerSetup? = env.setup?.takeIf { it.spaceId == spaceId }
+        var exempt = true
+
+        override suspend fun setupFor(
+            spaceId: SpaceId,
+            resuming: Boolean,
+        ): ServerSetup? = env.setup?.takeIf { it.spaceId == spaceId }
+
+        /** Der aktive Space der Datenbank: der Einrichtungsstand, solange er nicht beendet oder abgebrochen wurde. */
+        override suspend fun activeSpan(): ActiveSpan? {
+            val setup = env.setup?.takeIf { it.persisted } ?: return null
+            if (ended.any { it.first == setup.spaceId } || setup.spaceId in aborted) return null
+            return ActiveSpan(setup.spaceId, setup.startedAtMillis, setup.expiresAtMillis)
+        }
+
+        override fun batteryExempt(): Boolean = exempt
 
         override suspend fun openServer(
             setup: ServerSetup,

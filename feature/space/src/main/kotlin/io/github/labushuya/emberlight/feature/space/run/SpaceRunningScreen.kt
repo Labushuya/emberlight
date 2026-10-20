@@ -34,7 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -89,6 +91,7 @@ internal fun SpaceRunningScreen(
             onEnd = { showEndDialog = true },
             onConfirmNetwork = viewModel::confirmNetwork,
             onAcknowledgePause = viewModel::acknowledgePauses,
+            onResume = viewModel::resume,
             onSetup = {
                 state.record
                     ?.id
@@ -126,6 +129,7 @@ internal fun SpaceRunningContent(
     onConfirmNetwork: () -> Unit,
     onAcknowledgePause: () -> Unit,
     onSetup: () -> Unit,
+    onResume: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -157,6 +161,11 @@ internal fun SpaceRunningContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
+
+            if (state.interrupted) {
+                InterruptedCard(failure = state.resumeFailure, onResume = onResume)
+                Spacer(Modifier.height(16.dp))
+            }
 
             state.pause?.let { pause ->
                 PauseBanner(pause = pause, onSetup = onSetup, onAcknowledge = onAcknowledgePause)
@@ -299,6 +308,53 @@ private fun PauseBanner(
     }
 }
 
+/**
+ * Hinweis, wenn der Lauf unterbrochen ist (ADR 0017). „Fortsetzen“ startet den Dienst aus der sichtbaren Oberfläche neu.
+ * Scheitert das, bleibt der Space aktiv, und der Grund steht hier.
+ */
+@Composable
+private fun InterruptedCard(
+    failure: StartOutcome?,
+    onResume: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.space_interrupted_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.semantics { heading() },
+            )
+            Text(
+                text = stringResource(R.string.space_interrupted_text),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+            failureTextRes(failure)?.let { res ->
+                Text(
+                    text = stringResource(res),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onResume) { Text(stringResource(R.string.space_interrupted_resume)) }
+        }
+    }
+}
+
+/** Text zum Scheitern des Fortsetzens. Die Texte stehen in `strings.xml`, dieselben wie beim Start. */
+private fun failureTextRes(failure: StartOutcome?): Int? =
+    when (failure) {
+        StartOutcome.NoWifi -> R.string.space_setup_error_no_wifi
+        StartOutcome.ServiceRefused -> R.string.space_setup_error_service
+        else -> null
+    }
+
 @Composable
 private fun NetworkChangedCard(onConfirm: () -> Unit) {
     Surface(
@@ -357,6 +413,10 @@ private fun statusLine(
     when {
         record.status == SpaceStatus.ENDED -> {
             stringResource(R.string.space_running_status_ended, formatDate(record.endedAt ?: record.updatedAt))
+        }
+
+        state.interrupted -> {
+            stringResource(R.string.space_running_status_interrupted)
         }
 
         state.runState is RunState.Paused -> {

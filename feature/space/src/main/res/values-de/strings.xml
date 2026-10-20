@@ -311,4 +311,8 @@
     <string name="space_running_end_text">Gäste können danach nichts mehr hochladen oder herunterladen.</string>
     <string name="space_running_end_confirm">Beenden</string>
     <string name="space_running_ended_text">Der Space ist beendet. Die Medien bleiben bis zum Ende der Aufbewahrung in der App.</string>
+    <string name="space_interrupted_title">Space wurde unterbrochen</string>
+    <string name="space_interrupted_text">emberlight wurde im Hintergrund beendet. Gäste erreichen den Space erst wieder, wenn du ihn fortsetzt.</string>
+    <string name="space_interrupted_resume">Fortsetzen</string>
+    <string name="space_running_status_interrupted">Unterbrochen · Fortsetzen nötig</string>
 </resources>

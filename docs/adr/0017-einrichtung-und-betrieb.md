@@ -1,6 +1,6 @@
 # ADR 0017: Einrichtung und Betrieb (Meilenstein 3, Paket 3.3)
 
-Status: Umgesetzt im Paket 3.3 (Stand 20.10.2026). Gerätetest offen, siehe Abschnitt „Offen“. Grundlage sind [ADR 0012](0012-lokaler-server.md) (Dienst, Stopp in der App), [ADR 0013](0013-schutz-gegen-manipulation.md) (Netz, Pflicht-Tests) und [ADR 0016](0016-space-verwaltung.md) (Entwürfe, Voreinstellungen).
+Status: Umgesetzt im Paket 3.3 (Stand 20.10.2026), nachgebessert in 3.3b am 20.10.2026: Ein Prozess-Tod oder Abbruch durch das System beendet einen Space nicht mehr (Abschnitt „Neustart nach Prozess-Tod“). Gerätetest offen, siehe Abschnitt „Offen“. Grundlage sind [ADR 0012](0012-lokaler-server.md) (Dienst, Stopp in der App), [ADR 0013](0013-schutz-gegen-manipulation.md) (Netz, Pflicht-Tests) und [ADR 0016](0016-space-verwaltung.md) (Entwürfe, Voreinstellungen).
 
 ## Kontext
 
@@ -31,11 +31,11 @@ Bis Paket 3.2 gab es Entwürfe, aber keinen Start. Paket 3.3 bringt den Betrieb:
 
 - `connectedDevice` mit `CHANGE_NETWORK_STATE` (ADR 0012). `dataSync` scheidet aus, weil es ein Zeitlimit hat.
 - Start aus der sichtbaren Activity. Verweigert Android den Vordergrund-Start (`ForegroundServiceStartNotAllowedException`, `SecurityException`), ist der Space wieder Entwurf (`SpaceStarter.launch`, `SpaceRunRepository.abortStart`).
-- `START_NOT_STICKY`. Nach einem Prozess-Tod startet der Dienst nicht neu. Der aktive Space wird beim nächsten App-Start abgeschlossen (`SpaceServerService.closeOrphanedSpaces`).
+- `START_STICKY` (Nachbesserung 3.3b, ersetzt `START_NOT_STICKY`). Nach einem Prozess-Tod startet das System den Dienst neu und entscheidet über den aktiven Space (Abschnitt „Neustart nach Prozess-Tod“). Der Space wird dadurch nicht beendet.
 
 ### Hersteller-Freigabe
 
-- Nicht abfragbar. Die Einrichtung zeigt eine eigene Anleitung je Hersteller (`space_setup_oem_*` in `strings.xml`). Die Texte stammen nicht aus fremden Quellen; sie beschreiben die Menüs in allgemeiner Form und sagen „je nach Version“.
+- Nicht abfragbar. Die Einrichtung zeigt eine eigene Anleitung je Hersteller (`space_setup_oem_*` in `strings.xml`). Die Texte sind eigene Formulierungen (siehe Quellen, Prüfung auf wörtliche Übernahme). Sie beschreiben die Menüs in allgemeiner Form und sagen „je nach Version“.
 - Erkennung über `Build.MANUFACTURER` und `Build.BRAND`, kleingeschrieben, mit Teilwörtern (`OemFamily.detect`).
 - Fallback-Kette (`OemSettingsLauncher`):
   1. Kandidaten des Herstellers, nur wenn `resolveActivity` sie findet. `startActivity` in try/catch (`ActivityNotFoundException`, `SecurityException`).
@@ -106,6 +106,33 @@ Honor und Huawei erhalten den Anleitungstext „Akku → App-Start: emberlight a
 - Ein aktiver Space hat einen Eintrag in `space`. Die Bereinigung verwaister Verzeichnisse (ADR 0016) sieht ihn deshalb nicht als verwaist (Vormerkung 3).
 - Das Speicherlimit wird beim Start geprüft: Limit ≤ freier Speicher − 2 GiB (`SpaceRunPolicy.startProblem`). Das Limit ist keine Reservierung (Vormerkung 2).
 
+### Neustart nach Prozess-Tod (Nachbesserung 3.3b)
+
+Ein Prozess-Tod, ein Abbruch durch das System (etwa ein Hersteller-Freezer oder Kill) oder das Wegwischen der App durch die Nutzerin bzw. den Nutzer beendet einen Space **nicht**. Bis 3.3 blieb der Space nach einem Prozess-Tod `ACTIVE`, ohne laufenden Server. Dieser Abbruch-Pfad war für den Neustart der App gedacht (`SpaceServerService.closeOrphanedSpaces`), er wurde aber nirgends aufgerufen und war totes Code. Die Nachbesserung entfernt ihn und ersetzt ihn durch den Neustart unten.
+
+- **Dienst mit `START_STICKY`.** Das System startet den Dienst nach einem Prozess-Tod neu, mit einem Intent ohne Auftrag. `START_NOT_STICKY` aus ADR 0012 und ADR 0014 ist damit ersetzt (Nachträge dort).
+- **Gespeicherter Lauf.** Bei jedem Herzschlag und beim Start schreibt der Dienst den letzten Stand in den `RunBeatStore`: Space, Start (Wand-Uhr und `elapsedRealtime`), letzter Herzschlag, Port. Der Speicher ist die Einstellungs-Datei `emberlight.space-run`, keine Datenbankmigration. Ohne gespeicherten Lauf stoppt der Neustart sofort, ohne in den Vordergrund zu gehen.
+- **Entscheidung (`RestartPolicy.decide`, ohne Android-Typen):**
+
+  | Zustand nach dem Neustart | Entscheidung | Ergebnis |
+  |---|---|---|
+  | kein aktiver Space | `NothingToDo` | Dienst endet |
+  | aktiv, Frist um (Wand-Uhr, oder gemessene Laufzeit auf demselben Gerät) | `Expired` | Space `ENDED` zum Zeitpunkt der Frist, die Unterbrechung bis dahin ist eine Pause |
+  | aktiv, nicht abgelaufen, keine Akku-Ausnahme | `Interrupted` | Dienst endet, Space bleibt `ACTIVE` |
+  | aktiv, nicht abgelaufen, Akku-Ausnahme | `Resume` | Dienst geht in den Vordergrund, der Server startet am selben Port |
+
+- **Vordergrund-Start.** `startForeground` läuft in try/catch. `ForegroundServiceStartNotAllowedException` (ab API 31) und `SecurityException` enden den Dienst. Der Space bleibt `ACTIVE`, er ist unterbrochen. Ein Neustart ohne Vordergrund ist damit kein Fehler für den Space.
+- **Wiederaufnahme.** Scheitert der Server bei der Wiederaufnahme (kein WLAN, Bindung, fehlende Berechtigung `ACCESS_LOCAL_NETWORK`), bleibt der Space `ACTIVE`. Ein frischer Start geht dagegen weiter auf Entwurf zurück. Der Befehl trägt dafür das Merkmal `resume` (`RunCommand.Start`, Extra `RESUME` am Intent).
+- **Frist.** Die Frist gilt wie im Lauf (`SpaceRunPolicy.isClosed`). Die gemessene Laufzeit zählt, solange dasselbe Gerät läuft. Nach einem Geräte-Neustart (`elapsedRealtime` ist kleiner als beim letzten Herzschlag) gilt nur die Wand-Uhr.
+- **Unterbrochen ist ein abgeleiteter Zustand**, kein eigener Status in der Datenbank: `ACTIVE`, kein Server läuft (`RunState.Idle`) und die Frist ist nicht um (`SpaceRunningUiState.interrupted`). Ein gespeicherter Zustand könnte beim App-Start veralten. Der abgeleitete nicht.
+- **Banner „Space wurde unterbrochen“ mit „Fortsetzen“** in der Gastgeber-Ansicht (`SpaceRunningScreen`). „Fortsetzen“ startet den Dienst aus der sichtbaren Oberfläche neu (`SpaceStarter.resume`). Scheitert das (kein WLAN, Dienst verweigert), bleibt der Space aktiv und das Banner nennt den Grund. Der Statustext lautet „Unterbrochen · Fortsetzen nötig“.
+- **Ablauf beim Öffnen.** Ist ein aktiver Space nach der Uhr abgelaufen und läuft kein Server, schickt die Gastgeber-Ansicht den Wecker-Befehl. Der Dienst beendet den Space zur Frist. Die Ansicht zeigt dann „Beendet“, nicht „unterbrochen“.
+- **Pausen (Punkt c).** Die Unterbrechung ist ein Pause-Ereignis. Beginn ist die Wand-Uhr des letzten Herzschlags. Die Dauer misst `elapsedRealtime` (ohne Messung: Wand-Uhr). Das Ereignis entsteht bei der Wiederaufnahme, also mit dem Ende der Unterbrechung. Endet der Space in einer Unterbrechung, reicht die Pause bis zur Frist. Das Pausen-Banner und die Statistik zeigen sie danach wie jede andere Pause.
+- **Benachrichtigung (Punkt d).** Feuert der Wecker, während der Space `ACTIVE`, nicht abgelaufen und ohne Server ist, erscheint „Space unterbrochen – zum Fortsetzen öffnen“. Der Hinweis öffnet die App, er ist nicht mit „Beenden“ verbunden. Bei laufendem Server gibt es ihn nicht, ein früher Wecker dort wird ignoriert. Der Wecker feuert zum geplanten Ende, ein solcher Fall tritt also nur bei einer zurückgestellten Wand-Uhr auf. Der Hinweis ist ein Schutz für diesen Fall, kein Hauptweg.
+- **Akku-Ausnahme als Voraussetzung.** Ohne sie startet der Dienst nach einem Prozess-Tod nicht selbst. Der Space bleibt dann unterbrochen, bis der Gastgeber die App öffnet und fortsetzt. Die Einrichtung zeigt die Ausnahme weiterhin als Punkt.
+- **Bekannte Lücke.** Stirbt der Prozess zwischen dem Start in der Datenbank und dem ersten Speichern des Laufs, fehlt der gespeicherte Lauf. Der Neustart greift dann nicht. Der Space ist trotzdem `ACTIVE` und erscheint als unterbrochen, die Fortsetzung funktioniert. Das Fenster ist kurz: Es liegt zwischen dem Start in der Datenbank und dem ersten gespeicherten Herzschlag.
+- **Nicht am Gerät gemessen.** Das Verhalten des Systems beim Neustart (START_STICKY mit Akku-Ausnahme, Hersteller-Freezer) ist auf dem Gerät nicht geprüft. Der Testkatalog markiert das als Entwickler-Prüfung, weil es ein Prozess-Tod per adb braucht.
+
 ### Start und Stopp in der Oberfläche
 
 - „Space starten“ im Detail eines Entwurfs öffnet die Einrichtung im Start-Modus. Der Start-Knopf ist erst aktiv, wenn die Pflicht-Punkte erfüllt sind. Empfohlene Punkte lassen sich mit „Trotzdem starten“ überspringen.
@@ -123,21 +150,28 @@ Honor und Huawei erhalten den Anleitungstext „Akku → App-Start: emberlight a
 
 ## Quellen
 
-Recherche am 20.10.2026. Ein Teil der Lizenzangaben konnte nicht bestätigt werden, das ist unten vermerkt.
+Recherche am 20.10.2026. Die Lizenzangaben sind unten am Quelltext der Quellen belegt.
 
 - Android-Referenz (Stand des lokalen SDK, Android 37): `PowerManager`, `Settings`, `ActivityManager.isBackgroundRestricted`, `UsageStatsManager.getAppStandbyBucket`, `ACCESS_LOCAL_NETWORK`, Paket-Sichtbarkeit: <https://developer.android.com/training/package-visibility>, <https://developer.android.com/reference/android/os/PowerManager#isIgnoringBatteryOptimizations(java.lang.String)>, <https://developer.android.com/reference/android/app/usage/UsageStatsManager#getAppStandbyBucket()>. Die Permission-Annotationen im lokalen SDK, siehe ADR 0013, Quelle [Q19].
 - Doze und Standby: <https://developer.android.com/training/monitoring-device-state/doze-standby>.
 - Vordergrunddienste und Typen: <https://developer.android.com/develop/background-work/services/fgs/service-types>.
 - Komponenten-Namen der Hersteller-Einstellungen: aus den Projekten AutoStarter (`judemanutd/AutoStarter`, <https://github.com/judemanutd/AutoStarter>), dont-kill-me-lib von Briar (GPL-3.0) und dem DontKillMyApp-Verzeichnis (<https://dontkillmyapp.com/apidoc>). Die Komponenten-Namen sind Fakten. Anleitungstexte sind eigene Formulierungen.
-- **Lizenzen, nicht bestätigt:** Der Auftrag nennt AutoStarter als MIT, dont-kill-me-lib als GPL-3.0 und DontKillMyApp als CC BY 4.0. Die Recherche konnte die MIT-Angabe nicht im Quelltext belegen. Für die Website dontkillmyapp.com fand sich keine CC-BY-4.0-Angabe. Die Android-App DontKillMyApp ist laut F-Droid Apache-2.0, ein anderes Projekt. Vor dem Release müssen die Lizenzen am Quelltext geprüft werden. Bis dahin verwendet das Projekt keinen Code dieser Quellen, nur Komponenten-Namen.
+- **Lizenzen, am 20.10.2026 in den Quellen selbst nachgelesen:**
+  - AutoStarter: **MIT**. Belegt durch <https://github.com/judemanutd/AutoStarter/blob/master/LICENSE.txt> („MIT License, Copyright (c) 2018 Jude Fernandes“).
+  - dont-kill-me-lib (Briar): **GPL-3.0** (GNU General Public License, Version 3 oder später). Belegt durch <https://github.com/briar/dont-kill-me-lib/blob/main/LICENSE.txt>, dem Spiegel des Projekts. GitHub zeigt die Lizenz nur als „NOASSERTION“, der Text selbst ist die GPLv3. Das Original liegt bei code.briarproject.org.
+  - dontkillmyapp.com (Urbandroid Team): **CC BY 4.0**. Belegt durch die Datei LICENCE (<https://github.com/urbandroid-team/dont-kill-my-app/blob/master/LICENCE>) und den Abschnitt „Licence“ im README desselben Repos. Danach steht der Inhalt der Website unter CC BY.
+  - Korrektur: Die frühere Angabe „keine CC-BY-4.0-Angabe für die Website“ war falsch. Die Android-App DontKillMyApp ist laut F-Droid ein anderes Projekt (Apache-2.0). Für sie gilt die Angabe nicht.
+- **Klarstellung zur Übernahme:** Übernommen wurden nur Paket- und Komponentennamen. Das sind Fakten über die Einstellungs-Aktivitäten. Kein Code und keine Texte aus den Quellen. Die Anleitungstexte in `strings.xml` (de und en) sind eigene Formulierungen.
+- **Prüfung auf wörtliche Übernahme (20.10.2026):** Die Anleitungstexte (`space_setup_oem_*`) wurden gegen die Herstellerseiten im Quellverzeichnis des dontkillmyapp-Repos geprüft (`_vendors-content`: Huawei, Xiaomi, Samsung, OnePlus, OPPO, vivo, ASUS, Nokia und allgemein). Kein Satz stimmt wörtlich überein. Übereinstimmend sind nur Menübezeichnungen in Anführungszeichen und allgemeine Wörter. Die Honor-Anleitung nennt dieselben Menüpunkte wie die Vorlage, der Wortlaut ist eigen. Die Prüfung umfasst das Quellverzeichnis, nicht die Live-Seite.
 
 ## Restrisiken
 
 - Hersteller ändern Menüs und Komponenten-Namen ohne Vorwarnung. Dann greift der Fallback.
 - Die Freigabe der Hersteller lässt sich nicht prüfen. „Erledigt“ ist eine Selbstbestätigung.
 - Die Schwelle von 2 min ist eine Annahme. Auf Geräten mit aggressivem Doze kann sie zu eng oder zu weit sein.
-- Der Wecker ist ungenau. Das Ende kann bis zur nächsten Anfrage oder bis zum nächsten Herzschlag auf sich warten lassen. Die Prüfung bei jeder Anfrage fängt das ab, solange der Server läuft. Läuft der Dienst nicht mehr, greift `closeWithoutService` beim nächsten App-Start.
-- Eine erkannte Pause gilt nur, solange der Dienst lebt. Wird der Prozess getötet, gibt es keine Pausenerkennung und keinen Neustart (`START_NOT_STICKY`).
+- Der Wecker ist ungenau. Das Ende kann bis zur nächsten Anfrage oder bis zum nächsten Herzschlag auf sich warten lassen. Die Prüfung bei jeder Anfrage fängt das ab, solange der Server läuft. Läuft der Dienst nicht mehr, übernimmt der Neustart nach Prozess-Tod (Abschnitt „Neustart nach Prozess-Tod“). Ohne Akku-Ausnahme bleibt der Space unterbrochen, bis er fortgesetzt wird.
+- Eine erkannte Pause gilt nur, solange der Dienst lebt. Wird der Prozess getötet, gibt es keine Herzschlag-Erkennung, bis der Dienst neu startet. Die Unterbrechung dazwischen hält der Neustart als Pause fest (Abschnitt „Neustart nach Prozess-Tod“).
+- Ohne Akku-Ausnahme startet der Dienst nach einem Prozess-Tod nicht selbst neu. Der Space bleibt dann unterbrochen, bis der Gastgeber ihn fortsetzt.
 - Die Erkennung „dasselbe Netz“ über Adresse, Präfix und Gateway kann bei sehr kurzem Netzwechsel mit gleicher Adresse fälschlich „dasselbe Netz“ melden. Dann fehlt die Bestätigung, der Server bindet an dieselbe Adresse. Das ist akzeptiert, weil die Zugangsschlüssel gültig bleiben.
 - Das Speicherlimit ist keine Reservierung. Ein Gerät kann nach dem Start weniger Speicher haben als vor dem Start.
 
@@ -150,7 +184,7 @@ Recherche am 20.10.2026. Ein Teil der Lizenzangaben konnte nicht bestätigt werd
 ## Offen
 
 - Gerätetest für 3.3 (Testkatalog in der PR-Beschreibung).
-- Lizenzen der Quellen am Quelltext prüfen (siehe Quellen).
+- Lizenzen am 20.10.2026 geprüft (siehe Quellen). Bei einem Wechsel der Quellen erneut prüfen.
 - Schwelle für Pausen auf dem Gerät messen.
 - Lingering close (Pflicht vor 3.5, siehe PLAN-M3.md) ist nicht Teil von 3.3.
 
@@ -163,11 +197,12 @@ Recherche am 20.10.2026. Ein Teil der Lizenzangaben konnte nicht bestätigt werd
 - WLAN-Entscheidung (gleiche Adresse, Präfix und Gateway; Verlust, Fortsetzen, Wechsel): `NetworkPolicyTest`.
 - Pausen-Logik (Schwelle, Beginn, Dauer): `SpaceRunPolicyTest` (`PauseDetector`).
 - Robolectric-Dienst-Integration: `SpaceServerServiceTest`.
+- Neustart nach Prozess-Tod (Nachbesserung 3.3b): `RestartPolicyTest` (aktiv, nicht abgelaufen oder abgelaufen, mit und ohne Akku-Ausnahme, Messung nach Geräte-Neustart), `SpaceRunnerTest` (Wiederaufnahme am selben Port mit Pause, Ende in der Unterbrechung, früher Wecker, Start ohne WLAN und ohne Berechtigung), `SpaceServerServiceTest` (Neustart mit Intent ohne Auftrag, Robolectric), `SpaceRunningViewModelTest` und `SpaceStarterTest` (Fortsetzen, Vordergrund verweigert), `SpaceRunningUiStateTest` (Ableitung „unterbrochen“, Speicherwarnung).
 - Hersteller-Fallback mit Fake-Paketzugriff (`OemPort`): `OemSettingsLauncherTest`, einschließlich der Erkennung und der Kandidatenliste.
 - Berechtigungszustände für API 36 und 37 sowie „Nicht mehr fragen“: `SetupChecksTest`.
 - Gemeinsame Datenbank: `SharedSpacesDatabaseTest`.
 - Release: `ReleaseMappingGuardTest` (Build-Logik) prüft die Mapping-Auswertung, die Aufgabe `checkReleaseServerPipeline` die Realität im R8-Lauf.
-- Goldens (`SpaceRunScreenshotTest`, `SpacesScreenshotTest`): Einrichtung, Start-Fehler, laufender Space (normal, Warnung, Pause, Netzwechsel), beendeter Space, Telefon de und en, großes Display.
+- Goldens (`SpaceRunScreenshotTest`, `SpacesScreenshotTest`): Einrichtung, Start-Fehler, laufender Space (normal, Warnung, Pause, Netzwechsel, unterbrochen mit Banner), beendeter Space, Telefon de und en, großes Display.
 
 ### Leere Aufnahmen im gemeinsamen Prozess
 

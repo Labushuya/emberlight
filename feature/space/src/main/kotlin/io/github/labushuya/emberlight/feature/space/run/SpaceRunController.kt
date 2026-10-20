@@ -23,4 +23,12 @@ class SpaceRunController
         fun confirmNetwork() {
             context.startService(SpaceServerService.confirmNetworkIntent(context))
         }
+
+        /**
+         * Schließt einen Space ab, dessen Frist um ist, während kein Server läuft. Die Oberfläche ruft das nur, wenn die Frist
+         * nach der Uhr schon erreicht ist. Der Dienst prüft die Frist selbst noch einmal.
+         */
+        fun expire() {
+            context.startService(SpaceServerService.expireIntent(context))
+        }
     }

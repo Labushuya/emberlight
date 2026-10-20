@@ -159,6 +159,6 @@ Nicht getestet: das Verhalten gegenüber einer echten Drittapp (ohne Testapp auf
 ## Bekannte Grenzen
 
 - Der Start über den Broadcast kann auf Android 12 und neuer scheitern, wenn die App im Hintergrund ist und der Systemstart keine Ausnahme hat. In dem Fall steht der Grund im Logcat (`startForeground verweigert`). Dann die App einmal öffnen und den Befehl wiederholen.
-- Der Dienst startet nach einem Prozess-Tod nicht neu. Ein Netzwechsel pausiert den Server (ADR 0013). Dasselbe Netz mit derselben IPv4-Adresse setzt ihn automatisch fort. Ein anderes Netz braucht die Bestätigung in der App (ADR 0017, Paket 3.3).
+- Der Dienst startet nach einem Prozess-Tod neu (`START_STICKY`). Ein aktiver Space geht dabei wieder an den Server, wenn die Akku-Ausnahme besteht. Sonst bleibt er unterbrochen, bis er in der App fortgesetzt wird (ADR 0017). Ein Netzwechsel pausiert den Server (ADR 0013). Dasselbe Netz mit derselben IPv4-Adresse setzt ihn automatisch fort. Ein anderes Netz braucht die Bestätigung in der App (ADR 0017, Paket 3.3).
 - Die Hashes der Test-Teilnehmer bleiben im Space-Index, bis die App-Daten gelöscht werden. Klartext-Tokens gibt es auf dem Gerät nicht. Wer einen Token verliert, startet den Test mit einem neuen.
 - Die Medien im Test-Space bleiben im App-Speicher, bis die App-Daten gelöscht werden.

@@ -2,6 +2,7 @@ package io.github.labushuya.emberlight.feature.space
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.labushuya.emberlight.feature.space.run.StartOutcome
+import io.github.labushuya.emberlight.share.server.RunState
 import io.github.labushuya.emberlight.share.space.run.StartProblem
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,6 +26,14 @@ class SpaceRunScreenshotGermanTest : SpaceRunScreenshotSupport() {
         captureOutcome(
             StartOutcome.Refused(StartProblem.STORAGE_ABOVE_FREE),
             "src/test/screenshots/SpaceStartError_phone_de.png",
+        )
+    }
+
+    @Test
+    fun runningInterruptedPhoneGerman() {
+        capture(
+            { Running(state(usedBytes = 1 * GIB_BYTES, runState = RunState.Idle)) },
+            "src/test/screenshots/SpaceRunning_interrupted_phone_de.png",
         )
     }
 

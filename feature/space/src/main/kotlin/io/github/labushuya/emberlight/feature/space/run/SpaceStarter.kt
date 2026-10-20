@@ -48,19 +48,36 @@ class SpaceStarter
                 if (wifi.currentAddress() == null) return@withContext StartOutcome.NoWifi
                 when (val result = runs.start(id, storage.usableBytes())) {
                     is StartResult.Refused -> StartOutcome.Refused(result.problem)
-                    is StartResult.Started -> launch(id)
+                    is StartResult.Started -> launch(id, resume = false)
                 }
             }
 
-        private suspend fun launch(id: SpaceId): StartOutcome =
+        /**
+         * Setzt einen aktiven, unterbrochenen Space fort (Paket 3.3, ADR 0017). Der Space bleibt aktiv, auch wenn der Start
+         * scheitert. Der Aufruf kommt aus der sichtbaren Oberfläche, deshalb darf der Dienst in den Vordergrund.
+         */
+        suspend fun resume(id: SpaceId): StartOutcome =
+            withContext(Dispatchers.IO) {
+                if (wifi.currentAddress() == null) return@withContext StartOutcome.NoWifi
+                launch(id, resume = true)
+            }
+
+        /** Startet den Dienst. Scheitert er, geht ein frischer Start zurück auf Entwurf, eine Wiederaufnahme bleibt aktiv. */
+        private suspend fun launch(
+            id: SpaceId,
+            resume: Boolean,
+        ): StartOutcome =
             try {
-                ContextCompat.startForegroundService(context, SpaceServerService.startIntent(context, id))
+                ContextCompat.startForegroundService(
+                    context,
+                    SpaceServerService.startIntent(context, id, resume = resume),
+                )
                 StartOutcome.Started
             } catch (failure: IllegalStateException) {
-                runs.abortStart(id)
+                if (!resume) runs.abortStart(id)
                 StartOutcome.ServiceRefused
             } catch (failure: SecurityException) {
-                runs.abortStart(id)
+                if (!resume) runs.abortStart(id)
                 StartOutcome.ServiceRefused
             }
     }

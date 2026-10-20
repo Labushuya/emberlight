@@ -156,26 +156,4 @@ class SpaceRunRepository(
 
     /** Markiert alle Pausen des Space als gesehen, wenn der Hinweis bestätigt wurde. */
     suspend fun acknowledgePauses(id: SpaceId): Int = pauses.acknowledgeAll(id.value)
-
-    /**
-     * Schließt aktive Spaces ab, für die kein Dienst mehr läuft. Das passiert nach einem Prozess-Tod, weil der Dienst nicht
-     * neu startet (`START_NOT_STICKY`). Ist die Frist schon vorbei, gilt sie als Ende, sonst jetzt. Der Aufrufer prüft
-     * vorher, dass kein Dienst läuft. Liefert die geschlossenen Spaces.
-     */
-    suspend fun closeWithoutService(): List<SpaceRecord> =
-        database.withTransaction {
-            val now = clock.wallMillis()
-            spaces.allActive().map { row ->
-                val expires = row.expiresAt
-                val endedAt = if (expires != null && expires < now) expires else now
-                val closed =
-                    row.copy(
-                        status = SpaceStatus.ENDED.name,
-                        endedAt = endedAt,
-                        updatedAt = now,
-                    )
-                spaces.upsert(closed)
-                closed.toSpaceRecord()
-            }
-        }
 }

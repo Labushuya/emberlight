@@ -17,5 +17,6 @@
     <string name="space_server_resume_failed">Der Server konnte nicht wieder starten. Der Space bleibt pausiert.</string>
     <string name="space_server_pause_detected">Android hat emberlight ca. %1$d Min. pausiert – Gäste konnten dich in der Zeit nicht erreichen.</string>
     <string name="space_server_network_lost">WLAN weg. Der Space ist pausiert und läuft weiter, sobald dasselbe WLAN zurück ist.</string>
+    <string name="space_server_interrupted">Space unterbrochen. Zum Fortsetzen die App öffnen.</string>
     <string name="space_server_network_changed_prompt">Neues WLAN erkannt – Space hier fortsetzen?</string>
 </resources>

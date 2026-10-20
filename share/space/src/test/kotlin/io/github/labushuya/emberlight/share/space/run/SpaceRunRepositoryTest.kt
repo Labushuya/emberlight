@@ -161,31 +161,21 @@ class SpaceRunRepositoryTest {
         }
 
     @Test
-    fun anExpiredActiveSpaceIsClosedAtItsEndAndNotAtTheRecognitionTime() =
+    fun anActiveSpaceSurvivesAProcessDeathAndIsOnlyEndedExplicitly() =
         runBlocking {
             draft(FIRST, lifetimeMillis = HOUR)
             runs.start(FIRST, freeBytes = 100 * gib)
 
-            // Der Prozess war zwei Stunden weg. Das Ende war nach einer Stunde.
+            // Der Prozess war zwei Stunden weg. Ohne Dienst bleibt der Space aktiv. Das Ende setzt erst die Entscheidung
+            // nach dem Neustart oder die Gastgeber-Ansicht (ADR 0017, Neustart).
             clock.wall = START + 2 * HOUR
-            val closed = runs.closeWithoutService()
+            assertEquals(FIRST, runs.findActive()?.id)
 
-            assertEquals(1, closed.size)
-            assertEquals(START + HOUR, closed.single().endedAt)
-            assertEquals(SpaceStatus.ENDED, closed.single().status)
+            assertTrue(runs.end(FIRST, endedAtMillis = START + HOUR))
             assertNull(runs.findActive())
-        }
-
-    @Test
-    fun aSpaceWithTimeLeftIsClosedAtTheMomentItIsRecognised() =
-        runBlocking {
-            draft(FIRST)
-            runs.start(FIRST, freeBytes = 100 * gib)
-            clock.wall = START + 60_000
-
-            val closed = runs.closeWithoutService()
-
-            assertEquals(START + 60_000, closed.single().endedAt)
+            val row = database.spaces().find(FIRST.value)
+            assertEquals(SpaceStatus.ENDED.name, row?.status)
+            assertEquals(START + HOUR, row?.endedAt)
         }
 
     private suspend fun draft(

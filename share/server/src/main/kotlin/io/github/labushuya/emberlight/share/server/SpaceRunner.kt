@@ -1,10 +1,16 @@
 package io.github.labushuya.emberlight.share.server
 
 import io.github.labushuya.emberlight.share.space.SpaceId
+import io.github.labushuya.emberlight.share.space.run.ActiveSpan
 import io.github.labushuya.emberlight.share.space.run.PauseDetector
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
+import io.github.labushuya.emberlight.share.space.run.RestartDecision
+import io.github.labushuya.emberlight.share.space.run.RestartPolicy
+import io.github.labushuya.emberlight.share.space.run.RunBeat
+import io.github.labushuya.emberlight.share.space.run.RunBeatStore
 import io.github.labushuya.emberlight.share.space.run.RunClock
 import io.github.labushuya.emberlight.share.space.run.SpaceRunPolicy
+import io.github.labushuya.emberlight.share.space.run.interruptionMillis
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -15,9 +21,14 @@ import kotlinx.coroutines.launch
 
 /** Befehle an den Betrieb. Sie laufen über einen Kanal und werden nacheinander verarbeitet (ADR 0017, Ablauf). */
 internal sealed interface RunCommand {
+    /**
+     * Start eines Space. Mit [resume] setzt die Oberfläche oder der Neustart einen bereits aktiven, unterbrochenen Space
+     * fort. Dann bleibt der Space bei einem Fehler aktiv und wird nicht auf Entwurf zurückgesetzt.
+     */
     data class Start(
         val spaceId: SpaceId,
         val port: Int,
+        val resume: Boolean = false,
     ) : RunCommand
 
     data class Stop(
@@ -29,6 +40,9 @@ internal sealed interface RunCommand {
 
     /** Die Frist ist erreicht: Wecker oder eine Anfrage an einen abgelaufenen Space. */
     data object Expire : RunCommand
+
+    /** Neustart des Dienstes ohne Auftrag (START_STICKY, Prozess-Tod). Entscheidet über den aktiven Space (ADR 0017). */
+    data object Restart : RunCommand
 
     /** Der Netzstand hat sich geändert. `null` heißt: kein WLAN mit Adresse. */
     data class Network(
@@ -46,7 +60,10 @@ internal enum class StopReason {
     /** Die Frist ist um. Der Space wird `ENDED`, das Ende ist der Zeitpunkt der Frist. */
     EXPIRED,
 
-    /** Der Dienst wird vom System beendet. Der Space bleibt aktiv, bis er beim nächsten Start abgeschlossen wird. */
+    /**
+     * Der Dienst wird beendet (System, Prozess-Tod). Der Space bleibt `ACTIVE` und wird nicht beendet. Der letzte Herzschlag
+     * bleibt gespeichert, damit der Neustart oder der Gastgeber den Lauf fortsetzt.
+     */
     DESTROYED,
 }
 
@@ -76,12 +93,27 @@ internal sealed interface RunEvent {
     data class NetworkChanged(
         val address: WifiAddress,
     ) : RunEvent
+
+    /** Der Space ist aktiv, aber nicht gestartet (Unterbrechung ohne Server). Die Benachrichtigung öffnet die App. */
+    data object Interrupted : RunEvent
 }
 
 /** Schnittstelle zur Umgebung des Betriebs: Speicher, Netz, Sperren, Wecker und Hinweise. Der Dienst setzt sie um. */
 internal interface RunHost {
-    /** Einrichtung eines aktiven Space, `null` wenn er nicht gestartet werden kann. */
-    suspend fun setupFor(spaceId: SpaceId): ServerSetup?
+    /**
+     * Einrichtung eines aktiven Space, `null` wenn er nicht gestartet werden kann. Bei [resuming] bleibt ein Space bei
+     * fehlender Berechtigung aktiv, statt auf Entwurf zurückzufallen.
+     */
+    suspend fun setupFor(
+        spaceId: SpaceId,
+        resuming: Boolean,
+    ): ServerSetup?
+
+    /** Der aktive Space aus der Datenbank, `null` wenn keiner aktiv ist. */
+    suspend fun activeSpan(): ActiveSpan?
+
+    /** `true`, wenn die App von der Akku-Optimierung ausgenommen ist. Ohne Ausnahme startet der Dienst nicht von selbst. */
+    fun batteryExempt(): Boolean
 
     /** Öffnet Speicher und Server, noch ohne Bindung. */
     suspend fun openServer(
@@ -143,6 +175,7 @@ internal class SpaceRunner(
     private val clock: RunClock,
     private val host: RunHost,
     private val state: MutableStateFlow<RunState>,
+    private val beats: RunBeatStore,
     private val heartbeatMillis: Long = SpaceRunPolicy.HEARTBEAT_INTERVAL_MS,
     private val closeGraceMillis: Long = CLOSE_GRACE_MILLIS,
 ) : SpaceClosure {
@@ -150,6 +183,9 @@ internal class SpaceRunner(
     private val pauses = PauseDetector()
     private var phase: Phase = Phase.Idle
     private var jobs: Jobs? = null
+
+    /** Der letzte Stand des laufenden, dauerhaften Space. Er wird bei jedem Herzschlag in [beats] festgehalten. */
+    private var runBeat: RunBeat? = null
 
     /** Frist für die Abfrage aus den Anfragen. Gesetzt, solange der Server läuft oder pausiert ist. */
     @Volatile
@@ -189,7 +225,8 @@ internal class SpaceRunner(
             is RunCommand.Start -> start(command)
             is RunCommand.Stop -> stop(command.reason)
             RunCommand.Heartbeat -> heartbeat()
-            RunCommand.Expire -> if (phase !is Phase.Idle) stop(StopReason.EXPIRED) else host.onIdle()
+            RunCommand.Expire -> expire()
+            RunCommand.Restart -> restart()
             is RunCommand.Network -> network(command.address)
             RunCommand.ConfirmNetwork -> confirm()
         }
@@ -197,7 +234,7 @@ internal class SpaceRunner(
 
     private suspend fun start(command: RunCommand.Start) {
         if (phase !is Phase.Idle) return
-        val setup = host.setupFor(command.spaceId)
+        val setup = host.setupFor(command.spaceId, resuming = command.resume)
         if (setup == null) {
             host.onEvent(RunEvent.NotStartable)
             host.onIdle()
@@ -205,42 +242,157 @@ internal class SpaceRunner(
         }
         val now = clock.wallMillis()
         val expires = setup.expiresAtMillis
+        // Ein fortgesetzter Space bleibt bei einem Fehler aktiv. Nur ein frischer Start fällt auf Entwurf zurück.
+        val revert = !command.resume
         if (expires != null && expires <= now) {
             // Die Frist lief schon, bevor der Dienst den Space aufnehmen konnte: Der Space ist beendet, nicht Entwurf.
-            if (setup.persisted) host.endSpace(setup.spaceId, expires)
+            if (setup.persisted) endExpired(setup.spaceId, expires)
             fail(setup, RunEvent.NotStartable, revert = false)
             return
         }
         val wifi = host.currentWifi()
         if (wifi == null) {
-            fail(setup, RunEvent.NoWifi, revert = true)
+            fail(setup, RunEvent.NoWifi, revert = revert)
             return
         }
         val opened =
             try {
                 host.openServer(setup, this)
             } catch (failure: Exception) {
-                fail(setup, RunEvent.StartFailed, revert = true)
+                fail(setup, RunEvent.StartFailed, revert = revert)
                 return
             }
+        val nowElapsed = clock.elapsedMillis()
+        val prior = if (command.resume) beats.load()?.takeIf { it.spaceId == setup.spaceId } else null
         val port =
             try {
-                val bound = opened.server.start(serverConfig(command.port, wifi, setup))
+                // Eine Wiederaufnahme nimmt den Port von vorher, damit die Adresse für die Gäste gleich bleibt.
+                val bound =
+                    if (command.resume) {
+                        bind(opened.server, wifi, prior?.port ?: command.port, setup)
+                            ?: throw IllegalStateException("Bindung verweigert.")
+                    } else {
+                        opened.server.start(serverConfig(command.port, wifi, setup))
+                    }
                 host.acquireLocks()
                 bound
             } catch (failure: Exception) {
                 closeQuietly(opened)
-                fail(setup, RunEvent.StartFailed, revert = true)
+                fail(setup, RunEvent.StartFailed, revert = revert)
                 return
             }
 
         val startedAt = setup.startedAtMillis ?: now
-        deadline = expires?.let { Deadline(it, startedAt, clock.elapsedMillis()) }
+        // Die Messung der Laufzeit läuft weiter, solange dasselbe Gerät läuft. Sonst beginnt sie jetzt (ohne Messung: Wand-Uhr).
+        val startedElapsed =
+            when {
+                prior != null && nowElapsed >= prior.startedElapsedMillis -> prior.startedElapsedMillis
+                command.resume -> nowElapsed - (now - startedAt).coerceAtLeast(0L)
+                else -> nowElapsed
+            }
+        if (prior != null) {
+            // Die Unterbrechung reicht vom letzten Herzschlag bis zur Wiederaufnahme (ADR 0017, Pausen).
+            host.recordPause(
+                setup.spaceId,
+                PauseEvent(
+                    startedAtMillis = prior.lastWallMillis,
+                    durationMillis = interruptionMillis(prior, now, nowElapsed),
+                    deepSleepMillis = 0L,
+                ),
+            )
+        }
+        deadline = expires?.let { Deadline(it, startedAt, startedElapsed) }
         phase = Phase.Running(setup, opened, wifi, port)
         pauses.reset()
+        runBeat =
+            if (setup.persisted) {
+                RunBeat(setup.spaceId, startedAt, startedElapsed, now, nowElapsed, port).also(beats::save)
+            } else {
+                null
+            }
         startJobs()
         expires?.let { host.scheduleExpiry(it) }
         publish(runningState(setup, port, wifi, startedAt))
+    }
+
+    /**
+     * Wecker oder Anfrage an einen abgelaufenen Space. Läuft der Server, endet er nur, wenn die Frist wirklich um ist (ein
+     * früher Wecker bleibt folgenlos). Ohne Server entscheidet der Stand nach dem Neustart, ob der Space endet.
+     */
+    private suspend fun expire() {
+        if (phase !is Phase.Idle) {
+            if (isClosed()) stop(StopReason.EXPIRED)
+            return
+        }
+        when (val decision = decideIdle()) {
+            is RestartDecision.Expired -> {
+                endExpired(decision.spaceId, decision.endedAtMillis)
+            }
+
+            is RestartDecision.Resume, is RestartDecision.Interrupted -> {
+                // Der Wecker startet den Server nicht selbst. Der Gastgeber soll den Space fortsetzen.
+                host.onEvent(RunEvent.Interrupted)
+            }
+
+            RestartDecision.NothingToDo -> {}
+        }
+        host.onIdle()
+    }
+
+    /**
+     * Neustart des Dienstes ohne Auftrag (Prozess-Tod, START_STICKY). Ein aktiver, nicht abgelaufener Space geht wieder an
+     * den Server, wenn die Akku-Ausnahme besteht. Sonst bleibt er `ACTIVE` und unterbrochen, der Dienst endet.
+     */
+    private suspend fun restart() {
+        if (phase !is Phase.Idle) return
+        when (val decision = decideIdle()) {
+            RestartDecision.NothingToDo, is RestartDecision.Interrupted -> {
+                host.onIdle()
+            }
+
+            is RestartDecision.Expired -> {
+                endExpired(decision.spaceId, decision.endedAtMillis)
+                host.onIdle()
+            }
+
+            is RestartDecision.Resume -> {
+                val port = beats.load()?.takeIf { it.spaceId == decision.spaceId }?.port ?: 0
+                start(RunCommand.Start(decision.spaceId, port = port, resume = true))
+            }
+        }
+    }
+
+    /** Entscheidung über den aktiven Space, wenn kein Server läuft. */
+    private suspend fun decideIdle(): RestartDecision =
+        RestartPolicy.decide(
+            active = host.activeSpan(),
+            beat = beats.load(),
+            nowWallMillis = clock.wallMillis(),
+            nowElapsedMillis = clock.elapsedMillis(),
+            batteryExempt = host.batteryExempt(),
+        )
+
+    /**
+     * Beendet einen Space, dessen Frist um ist, während kein Server läuft. Eine Unterbrechung bis zum Ende wird als Pause
+     * festgehalten, danach ist der gespeicherte Lauf erledigt.
+     */
+    private suspend fun endExpired(
+        spaceId: SpaceId,
+        endedAtMillis: Long,
+    ) {
+        beats.load()?.takeIf { it.spaceId == spaceId }?.let { beat ->
+            host.recordPause(
+                spaceId,
+                PauseEvent(
+                    startedAtMillis = beat.lastWallMillis,
+                    durationMillis = (endedAtMillis - beat.lastWallMillis).coerceAtLeast(0L),
+                    deepSleepMillis = 0L,
+                ),
+            )
+        }
+        host.endSpace(spaceId, endedAtMillis)
+        beats.clear()
+        runBeat = null
     }
 
     /**
@@ -283,6 +435,11 @@ internal class SpaceRunner(
                 StopReason.DESTROYED -> Unit
             }
         }
+        // Ein beendeter Space hat keinen Lauf mehr zum Fortsetzen. Bei DESTROYED bleibt der letzte Herzschlag erhalten.
+        if (reason != StopReason.DESTROYED) {
+            beats.clear()
+            runBeat = null
+        }
         phase = Phase.Idle
         publish(RunState.Idle)
         host.onIdle()
@@ -291,11 +448,15 @@ internal class SpaceRunner(
     private suspend fun heartbeat() {
         val current = phase
         if (current is Phase.Idle) return
-        val beat = pauses.beat(clock.wallMillis(), clock.elapsedMillis(), clock.uptimeMillis())
+        val wall = clock.wallMillis()
+        val elapsed = clock.elapsedMillis()
+        val beat = pauses.beat(wall, elapsed, clock.uptimeMillis())
         if (isClosed()) {
             stop(StopReason.EXPIRED)
             return
         }
+        // Der letzte Herzschlag gilt auch in einer Pause: Ab hier beginnt eine Unterbrechung, falls der Prozess endet.
+        runBeat = runBeat?.copy(lastWallMillis = wall, lastElapsedMillis = elapsed)?.also(beats::save)
         if (current is Phase.Running) {
             if (beat != null) {
                 host.recordPause(current.setup.spaceId, beat)

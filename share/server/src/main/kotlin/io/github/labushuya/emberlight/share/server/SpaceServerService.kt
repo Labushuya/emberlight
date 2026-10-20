@@ -26,8 +26,10 @@ import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
+import io.github.labushuya.emberlight.share.space.run.ActiveSpan
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
-import io.github.labushuya.emberlight.share.space.run.RunClock
+import io.github.labushuya.emberlight.share.space.run.PrefsRunBeatStore
+import io.github.labushuya.emberlight.share.space.run.RunBeatStore
 import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
 import io.github.labushuya.emberlight.share.space.run.SystemRunClock
 import kotlinx.coroutines.CoroutineScope
@@ -48,13 +50,15 @@ import java.util.concurrent.atomic.AtomicReference
  * Pausen und Fortsetzen seriell abarbeitet. Er stellt die Umgebung bereit: Sperren, Wecker, Netz, Benachrichtigungen.
  *
  * Solange der Server läuft, halten CPU-Wakelock und WLAN-Lock den Betrieb wach. Der Dienst startet nach einem
- * Prozess-Tod nicht neu (`START_NOT_STICKY`). Ein aktiver Space, der keinen Dienst mehr hat, wird beim nächsten
- * Start der App abgeschlossen (siehe [closeOrphanedSpaces]).
+ * Prozess-Tod neu (`START_STICKY`, ADR 0017, Neustart). Ein Prozess-Tod oder ein Abbruch durch das System beendet den
+ * Space nie. Der Neustart setzt ihn fort, wenn die Akku-Ausnahme besteht. Sonst bleibt er aktiv und unterbrochen, bis
+ * der Gastgeber ihn in der App fortsetzt.
  */
 class SpaceServerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val host = ServiceHost()
-    private val runner = SpaceRunner(scope, SystemRunClock, host, runStateFlow)
+    private val beats: RunBeatStore by lazy { beatStoreFactory(this) }
+    private val runner: SpaceRunner by lazy { SpaceRunner(scope, SystemRunClock, host, runStateFlow, beats) }
     private lateinit var runnerJob: Job
 
     /** Kennung des letzten Intents. `stopSelf` mit ihr beendet den Dienst nur, wenn kein neuerer Auftrag wartet. */
@@ -80,20 +84,25 @@ class SpaceServerService : Service() {
         startId: Int,
     ): Int {
         lastStartId = startId
-        when (intent?.action) {
+        // START_STICKY: Nach einem Prozess-Tod startet das System den Dienst mit einem Intent ohne Auftrag neu.
+        if (intent == null) {
+            restartAfterProcessDeath(startId)
+            return START_STICKY
+        }
+        when (intent.action) {
             ACTION_STOP -> {
                 runner.submit(RunCommand.Stop(StopReason.USER))
-                return START_NOT_STICKY
+                return START_STICKY
             }
 
             ACTION_EXPIRE -> {
                 runner.submit(RunCommand.Expire)
-                return START_NOT_STICKY
+                return START_STICKY
             }
 
             ACTION_CONFIRM_NETWORK -> {
                 runner.submit(RunCommand.ConfirmNetwork)
-                return START_NOT_STICKY
+                return START_STICKY
             }
         }
         // Vordergrund zuerst: Android verlangt den Aufruf kurz nach startForegroundService. Auch unbekannte Aufrufe
@@ -101,17 +110,36 @@ class SpaceServerService : Service() {
         if (!ensureForeground()) {
             Log.e(TAG, "Vordergrund-Start verweigert, der Dienst endet.")
             stopSelf(startId)
-            return START_NOT_STICKY
+            return START_STICKY
         }
-        if (intent?.action != ACTION_START) {
+        if (intent.action != ACTION_START) {
             // Unbekannter Aufruf ohne Auftrag: Der Dienst endet, wenn kein Space läuft.
             if (runState.value is RunState.Idle) stopSelf(startId)
-            return START_NOT_STICKY
+            return START_STICKY
         }
         val spaceId = intent.getStringExtra(EXTRA_SPACE_ID)?.let(::SpaceId) ?: SpaceId.generate()
         val port = intent.getIntExtra(EXTRA_PORT, 0)
-        runner.submit(RunCommand.Start(spaceId, port))
-        return START_NOT_STICKY
+        val resume = intent.getBooleanExtra(EXTRA_RESUME, false)
+        runner.submit(RunCommand.Start(spaceId, port, resume))
+        return START_STICKY
+    }
+
+    /**
+     * Neustart nach einem Prozess-Tod. Ohne gespeicherten Lauf gibt es nichts fortzusetzen: Der Dienst endet, ohne in den
+     * Vordergrund zu gehen. Sonst geht er in den Vordergrund und entscheidet der Verarbeiter. Scheitert der Vordergrund-
+     * Start, endet der Dienst. Der Space bleibt `ACTIVE` und unterbrochen (ADR 0017).
+     */
+    private fun restartAfterProcessDeath(startId: Int) {
+        if (beats.load() == null) {
+            stopSelf(startId)
+            return
+        }
+        if (!ensureForeground()) {
+            Log.w(TAG, "Neustart ohne Vordergrund: der Space bleibt unterbrochen.")
+            stopSelf(startId)
+            return
+        }
+        runner.submit(RunCommand.Restart)
     }
 
     override fun onDestroy() {
@@ -128,17 +156,25 @@ class SpaceServerService : Service() {
             SpaceRunRepository(SpacesDatabase.shared(applicationContext), SystemRunClock)
         }
 
-        override suspend fun setupFor(spaceId: SpaceId): ServerSetup? {
+        override suspend fun setupFor(
+            spaceId: SpaceId,
+            resuming: Boolean,
+        ): ServerSetup? {
             if (!localNetworkAllowed()) {
                 Log.w(TAG, "ACCESS_LOCAL_NETWORK fehlt auf API ${Build.VERSION.SDK_INT}, der Start ist abgelehnt.")
-                // Der Space ist schon aktiv, weil die Oberfläche ihn vorher gestartet hat. Er geht zurück auf Entwurf.
-                runs.abortStart(spaceId)
+                // Ein frischer Start geht zurück auf Entwurf. Ein fortgesetzter Space bleibt aktiv und unterbrochen.
+                if (!resuming) runs.abortStart(spaceId)
                 return null
             }
             serverSetupProvider()?.let { return it }
             val record = runs.findActive()?.takeIf { it.id == spaceId } ?: return null
             return record.toServerSetup()
         }
+
+        override suspend fun activeSpan(): ActiveSpan? =
+            runs.findActive()?.let { ActiveSpan(it.id, it.startedAt, it.expiresAt) }
+
+        override fun batteryExempt(): Boolean = batteryExemptFactory(this@SpaceServerService)
 
         override suspend fun openServer(
             setup: ServerSetup,
@@ -189,6 +225,10 @@ class SpaceServerService : Service() {
 
         override fun onEvent(event: RunEvent) {
             when (event) {
+                RunEvent.Interrupted -> {
+                    postAlert(getString(R.string.space_server_interrupted))
+                }
+
                 RunEvent.NotStartable -> {
                     postAlert(getString(R.string.space_server_not_startable))
                 }
@@ -452,6 +492,7 @@ class SpaceServerService : Service() {
         const val ACTION_CONFIRM_NETWORK = "io.github.labushuya.emberlight.share.server.CONFIRM_NETWORK"
         const val EXTRA_PORT = "io.github.labushuya.emberlight.share.server.PORT"
         const val EXTRA_SPACE_ID = "io.github.labushuya.emberlight.share.server.SPACE_ID"
+        const val EXTRA_RESUME = "io.github.labushuya.emberlight.share.server.RESUME"
 
         /** Ziel, das die App beim Öffnen per Benachrichtigung bekommt. Die App wertet es aus. */
         const val EXTRA_ROUTE = "io.github.labushuya.emberlight.share.server.ROUTE"
@@ -502,20 +543,33 @@ class SpaceServerService : Service() {
             ConnectivityWifiNetworkProvider(context)
         }
         internal var locksFactory: (SpaceServerService) -> ServerLocks = { service -> service.createServerLocks() }
+
+        /** Speicher für den letzten Herzschlag. Tests setzen einen Speicher im Arbeitsspeicher. */
+        internal var beatStoreFactory: (Context) -> RunBeatStore = { context -> PrefsRunBeatStore(context) }
+
+        /** Ausnahme von der Akku-Optimierung. Tests setzen einen festen Wert. */
+        internal var batteryExemptFactory: (Context) -> Boolean = { context ->
+            context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
+        }
         internal var foregroundStarter: ForegroundStarter =
             ForegroundStarter { service, notification, type ->
                 ServiceCompat.startForeground(service, NOTIFICATION_ID, notification, type)
             }
 
-        /** Startintent für einen aktiven Space. Ohne Kennung nimmt der Debug-Einstieg den Weg über [serverSetupProvider]. */
+        /**
+         * Startintent für einen aktiven Space. Ohne Kennung nimmt der Debug-Einstieg den Weg über [serverSetupProvider].
+         * Mit [resume] setzt er einen unterbrochenen, aktiven Space fort (Schaltfläche „Fortsetzen“).
+         */
         fun startIntent(
             context: Context,
             spaceId: SpaceId? = null,
             port: Int = 0,
+            resume: Boolean = false,
         ): Intent =
             Intent(context, SpaceServerService::class.java)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_PORT, port)
+                .putExtra(EXTRA_RESUME, resume)
                 .apply { spaceId?.let { putExtra(EXTRA_SPACE_ID, it.value) } }
 
         /** Stoppintent. Beendet den Space durch den Gastgeber und gibt die Sperren frei. */
@@ -529,18 +583,6 @@ class SpaceServerService : Service() {
         /** Bestätigt den Wechsel in ein neues WLAN, wenn der Dienst darauf wartet. */
         fun confirmNetworkIntent(context: Context): Intent =
             Intent(context, SpaceServerService::class.java).setAction(ACTION_CONFIRM_NETWORK)
-
-        /**
-         * Schließt aktive Spaces ab, wenn kein Dienst mehr läuft. Der Aufrufer ist die App beim Start, vor jedem Start
-         * eines Space. Liefert die geschlossenen Spaces.
-         */
-        suspend fun closeOrphanedSpaces(
-            context: Context,
-            clock: RunClock = SystemRunClock,
-        ): List<SpaceRecord> {
-            if (runStateFlow.value !is RunState.Idle) return emptyList()
-            return SpaceRunRepository(SpacesDatabase.shared(context), clock).closeWithoutService()
-        }
 
         private fun minutesOf(event: PauseEvent): Long =
             (event.durationMillis + MILLIS_PER_MINUTE / 2) / MILLIS_PER_MINUTE
