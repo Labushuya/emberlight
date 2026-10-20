@@ -224,16 +224,26 @@ class SpaceEditViewModelTest {
 
     @Test
     fun aLocationThatCannotBeRemovedIsRefusedWithoutAConsentOption() {
-        val vm = viewModel()
-        awaitLoaded(vm)
+        // Gegenbeispiel zuerst: Ein bereinigbares Bild wird als cover-Datei im Entwurfsordner abgelegt. Erst damit ist
+        // belegt, dass dieser Ordner der richtige Ablageort ist. Fehlt er, wäre "keine cover-Datei" leer wahr.
+        val accepting = viewModel()
+        awaitLoaded(accepting)
+        runBlocking { accepting.importCoverFrom { ByteArrayInputStream(jpeg()) } }
+        val accepted = awaitState(accepting) { it.form.coverSha256 != null }.form.coverSha256
+        assertNotNull(accepted)
+        assertEquals(listOf("cover-$accepted"), draftCoverFiles())
+
+        // Ein frischer Zustand ohne das Gegenbeispiel: Das nicht bereinigbare Bild darf keine weitere cover-Datei hinterlassen.
+        val refusing = viewModel()
+        awaitLoaded(refusing)
         val notRemovable = CoverFixtures.pngWithCompressedLocation()
 
-        runBlocking { vm.importCoverFrom { ByteArrayInputStream(notRemovable) } }
+        runBlocking { refusing.importCoverFrom { ByteArrayInputStream(notRemovable) } }
 
-        val state = awaitState(vm) { it.coverProblem != null }
+        val state = awaitState(refusing) { it.coverProblem != null }
         assertEquals(CoverProblem.LOCATION, state.coverProblem)
         assertNull(state.form.coverSha256)
-        assertTrue(File(spacesDir, DRAFT).listFiles().orEmpty().none { it.name.startsWith("cover-") })
+        assertEquals(listOf("cover-$accepted"), draftCoverFiles())
     }
 
     @Test
@@ -431,6 +441,14 @@ class SpaceEditViewModelTest {
             Lifetime.Until(expected),
             runBlocking { repository.find(SpaceId.parse(DRAFT)!!) }?.settings?.lifetime,
         )
+    }
+
+    /**
+     * Namen der Titelbilder im Entwurfsordner, sortiert. Fehlt der Ordner, bricht der Test ab, statt leer zu bestehen.
+     */
+    private fun draftCoverFiles(): List<String> {
+        val entries = checkNotNull(File(spacesDir, DRAFT).listFiles()) { "Entwurfsordner fehlt." }
+        return entries.map { it.name }.filter { it.startsWith("cover-") }.sorted()
     }
 
     private fun wordLists(): Pair<List<String>, List<String>> =
