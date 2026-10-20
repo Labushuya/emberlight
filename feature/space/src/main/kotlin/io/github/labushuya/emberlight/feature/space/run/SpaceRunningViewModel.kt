@@ -170,7 +170,16 @@ class SpaceRunningViewModel
         /** Erneuert die Einladung. Alte QR-Codes sind danach ungültig, Beigetretene bleiben. */
         fun rotateInvite() {
             val id = state.value.record?.id ?: spaceId ?: return
-            viewModelScope.launch { hostActions.rotateInvite(id) }
+            viewModelScope.launch {
+                hostActions.rotateInvite(id)
+                // Eine manuelle Erneuerung beantwortet den Hinweis zur automatischen Erneuerung gleich mit.
+                if (state.value.inviteRenewed) controller.acknowledgeInvite()
+            }
+        }
+
+        /** Der Gastgeber bestätigt den Hinweis zur automatisch erneuerten Einladung. */
+        fun acknowledgeInvite() {
+            controller.acknowledgeInvite()
         }
 
         /**

@@ -51,6 +51,12 @@ internal sealed interface RunCommand {
 
     /** Der Gastgeber bestätigt den Wechsel in ein neues Netz. */
     data object ConfirmNetwork : RunCommand
+
+    /**
+     * Der Gastgeber hat den Hinweis zur automatisch erneuerten Einladung bestätigt oder die Einladung selbst erneuert. Der
+     * Hinweis kehrt bis zum nächsten Start nicht zurück (Paket 3.4b).
+     */
+    data object InviteSettled : RunCommand
 }
 
 internal enum class StopReason {
@@ -243,6 +249,7 @@ internal class SpaceRunner(
             RunCommand.Restart -> restart()
             is RunCommand.Network -> network(command.address)
             RunCommand.ConfirmNetwork -> confirm()
+            RunCommand.InviteSettled -> settleInvite()
         }
     }
 
@@ -536,6 +543,21 @@ internal class SpaceRunner(
         if (paused.pending == null) return
         val current = host.currentWifi() ?: return
         resume(paused, current)
+    }
+
+    /** Der Gastgeber hat den Hinweis zur erneuerten Einladung beantwortet. Der Lauf selbst bleibt unverändert. */
+    private fun settleInvite() {
+        if (!inviteRenewed) return
+        inviteRenewed = false
+        val running = phase as? Phase.Running ?: return
+        publish(
+            runningState(
+                running.setup,
+                running.port,
+                running.address,
+                running.setup.startedAtMillis ?: clock.wallMillis(),
+            ),
+        )
     }
 
     private suspend fun pauseRunning(

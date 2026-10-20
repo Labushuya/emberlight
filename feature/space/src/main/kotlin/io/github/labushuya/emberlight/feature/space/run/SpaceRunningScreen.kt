@@ -104,6 +104,7 @@ internal fun SpaceRunningScreen(
             },
             onRemoveRequest = { removing = it },
             onRotateRequest = { rotating = true },
+            onAcknowledgeInvite = viewModel::acknowledgeInvite,
             modifier = Modifier.padding(padding),
         )
     }
@@ -157,6 +158,7 @@ internal fun SpaceRunningContent(
     onResume: () -> Unit,
     onRemoveRequest: (ParticipantInfo) -> Unit,
     onRotateRequest: () -> Unit,
+    onAcknowledgeInvite: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -221,6 +223,7 @@ internal fun SpaceRunningContent(
                         addressChanged = state.addressChanged,
                         onRotate = onRotateRequest,
                         inviteRenewed = state.inviteRenewed,
+                        onAcknowledgeInvite = onAcknowledgeInvite,
                     )
                 } else {
                     Text(

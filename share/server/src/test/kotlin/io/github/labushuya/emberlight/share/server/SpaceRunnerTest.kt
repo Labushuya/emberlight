@@ -83,6 +83,42 @@ class SpaceRunnerTest {
         }
 
     @Test
+    fun aSettledRenewedInviteHidesTheHintAndTheHeartbeatDoesNotBringItBack() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.inviteRenewed = true
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.submit(RunCommand.InviteSettled)
+            runCurrent()
+            assertFalse((env.state.value as RunState.Running).inviteRenewed)
+
+            advanceTimeBy(SpaceRunPolicy.HEARTBEAT_INTERVAL_MS)
+            runCurrent()
+
+            val running = env.state.value as RunState.Running
+            assertFalse(running.inviteRenewed)
+            assertEquals(1, env.servers.single().starts)
+        }
+
+    @Test
+    fun settlingWithoutARenewedInviteChangesNothing() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            val before = env.state.value
+
+            env.submit(RunCommand.InviteSettled)
+            runCurrent()
+
+            assertEquals(before, env.state.value)
+        }
+
+    @Test
     fun aFirstStartWithoutAFixedPortSavesTheBoundPort() =
         runTest {
             val env = Env(this)

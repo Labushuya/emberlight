@@ -106,6 +106,13 @@ class SpaceServerService : Service() {
                 runner.submit(RunCommand.ConfirmNetwork)
                 return START_STICKY
             }
+
+            ACTION_INVITE_SETTLED -> {
+                runner.submit(RunCommand.InviteSettled)
+                // Ohne laufenden Space gibt es nichts zu quittieren. Der Dienst endet dann gleich wieder.
+                if (runState.value is RunState.Idle) stopSelf(startId)
+                return START_STICKY
+            }
         }
         // Vordergrund zuerst: Android verlangt den Aufruf kurz nach startForegroundService. Auch unbekannte Aufrufe
         // erfüllen diese Pflicht, bevor der Dienst wieder endet.
@@ -506,6 +513,7 @@ class SpaceServerService : Service() {
         const val ACTION_STOP = "io.github.labushuya.emberlight.share.server.STOP"
         const val ACTION_EXPIRE = "io.github.labushuya.emberlight.share.server.EXPIRE"
         const val ACTION_CONFIRM_NETWORK = "io.github.labushuya.emberlight.share.server.CONFIRM_NETWORK"
+        const val ACTION_INVITE_SETTLED = "io.github.labushuya.emberlight.share.server.INVITE_SETTLED"
         const val EXTRA_PORT = "io.github.labushuya.emberlight.share.server.PORT"
         const val EXTRA_SPACE_ID = "io.github.labushuya.emberlight.share.server.SPACE_ID"
         const val EXTRA_RESUME = "io.github.labushuya.emberlight.share.server.RESUME"
@@ -602,6 +610,10 @@ class SpaceServerService : Service() {
         /** Bestätigt den Wechsel in ein neues WLAN, wenn der Dienst darauf wartet. */
         fun confirmNetworkIntent(context: Context): Intent =
             Intent(context, SpaceServerService::class.java).setAction(ACTION_CONFIRM_NETWORK)
+
+        /** Quittiert den Hinweis zur erneuerten Einladung. Kein Start, kein Vordergrund nötig. */
+        fun inviteSettledIntent(context: Context): Intent =
+            Intent(context, SpaceServerService::class.java).setAction(ACTION_INVITE_SETTLED)
 
         private fun minutesOf(event: PauseEvent): Long =
             (event.durationMillis + MILLIS_PER_MINUTE / 2) / MILLIS_PER_MINUTE

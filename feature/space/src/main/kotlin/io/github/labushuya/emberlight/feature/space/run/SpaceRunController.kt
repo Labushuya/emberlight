@@ -24,6 +24,11 @@ class SpaceRunController
             context.startService(SpaceServerService.confirmNetworkIntent(context))
         }
 
+        /** Quittiert den Hinweis zur automatisch erneuerten Einladung. Nur aufrufen, solange ein Server läuft. */
+        fun acknowledgeInvite() {
+            context.startService(SpaceServerService.inviteSettledIntent(context))
+        }
+
         /**
          * Schließt einen Space ab, dessen Frist um ist, während kein Server läuft. Die Oberfläche ruft das nur, wenn die Frist
          * nach der Uhr schon erreicht ist. Der Dienst prüft die Frist selbst noch einmal.

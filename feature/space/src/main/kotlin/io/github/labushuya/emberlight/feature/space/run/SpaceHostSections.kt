@@ -49,6 +49,7 @@ internal fun InviteSection(
     addressChanged: Boolean,
     inviteRenewed: Boolean,
     onRotate: () -> Unit,
+    onAcknowledgeInvite: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -74,6 +75,10 @@ internal fun InviteSection(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
             )
+            Spacer(Modifier.height(4.dp))
+            OutlinedButton(onClick = onAcknowledgeInvite, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.space_invite_renewed_ok))
+            }
         }
         Spacer(Modifier.height(12.dp))
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {

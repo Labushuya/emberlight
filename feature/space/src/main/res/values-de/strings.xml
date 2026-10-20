@@ -326,6 +326,7 @@
     <string name="space_invite_rotate_confirm">Erneuern</string>
     <string name="space_invite_address_changed">Neue Adresse. Gäste brauchen den neuen QR-Code.</string>
     <string name="space_invite_renewed">Einladung wurde erneuert – bitte neuen QR teilen</string>
+    <string name="space_invite_renewed_ok">Verstanden</string>
     <string name="space_participants_title">Teilnehmer (%1$d)</string>
     <string name="space_participant_host">Gastgeber</string>
     <string name="space_participant_remove">Entfernen</string>

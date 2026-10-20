@@ -135,6 +135,7 @@ abstract class SpaceRunScreenshotSupport {
             onResume = {},
             onRemoveRequest = {},
             onRotateRequest = {},
+            onAcknowledgeInvite = {},
             modifier = Modifier.fillMaxSize(),
         )
     }
@@ -154,7 +155,10 @@ abstract class SpaceRunScreenshotSupport {
             nowMillis = SpaceFixtures.NOW,
         )
 
-    protected fun runningState(addressChanged: Boolean = false): RunState.Running =
+    protected fun runningState(
+        addressChanged: Boolean = false,
+        inviteRenewed: Boolean = false,
+    ): RunState.Running =
         RunState.Running(
             spaceId = SPACE_ID,
             spaceName = SPACE_NAME,
@@ -163,6 +167,7 @@ abstract class SpaceRunScreenshotSupport {
             startedAtMillis = SpaceFixtures.NOW - HOUR,
             expiresAtMillis = SpaceFixtures.NOW + 2 * HOUR,
             addressChanged = addressChanged,
+            inviteRenewed = inviteRenewed,
         )
 
     protected fun pausedNetworkChanged(): RunState.Paused =
@@ -197,8 +202,11 @@ abstract class SpaceRunScreenshotSupport {
         )
 
     /** Zustand des laufenden Space mit Einladung und Teilnehmern (Paket 3.4). */
-    protected fun hostState(addressChanged: Boolean = false): SpaceRunningUiState =
-        state(usedBytes = 1 * GIB, runState = runningState(addressChanged)).copy(
+    protected fun hostState(
+        addressChanged: Boolean = false,
+        inviteRenewed: Boolean = false,
+    ): SpaceRunningUiState =
+        state(usedBytes = 1 * GIB, runState = runningState(addressChanged, inviteRenewed)).copy(
             invite = InviteLink.of("192.168.1.20", 8787, INVITE),
             participants = participants(),
         )
