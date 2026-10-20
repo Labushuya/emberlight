@@ -154,6 +154,52 @@ jobs:
           fi
           rm -f "$err"
 
+      # Monotonie (ADR 0004, Nachtrag): Der neue versionCode muss strikt über dem aller veröffentlichten Releases liegen,
+      # sonst aktualisieren sich installierte Versionen nicht. Verglichen wird mit derselben Formel, also auch für die
+      # Alt-Tags: v0.1.0 ergibt 10099, v0.2.0 ergibt 20099. Veröffentlicht wurden 100 und 200 (altes Schema), das ist für
+      # den Vergleich richtig so. Entwurfs-Releases und Tags ohne Schema werden ignoriert, siehe scripts/release-monotonie.sh.
+      # Im Probelauf wird nur berechnet und gemeldet, nicht abgebrochen.
+      - name: Monotonie gegen veröffentlichte Releases prüfen
+        id: monotonic
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          err="${RUNNER_TEMP}/gh-release-list.err"
+          tags=""
+          if ! tags=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 1000 --json tagName --jq '.[].tagName' 2> "$err"); then
+            cat "$err" >&2
+            if [[ "$EVENT_NAME" == "push" ]]; then
+              echo "::error title=Monotonie unklar::Die veröffentlichten Releases konnten nicht gelesen werden. Der Lauf wird abgebrochen, siehe Fehlerbilder in docs/RELEASE.md."
+              exit 1
+            fi
+            echo "::warning title=Monotonie unklar::Die veröffentlichten Releases konnten im Probelauf nicht gelesen werden."
+            echo "monotonic_result=nicht prüfbar, Releases nicht lesbar" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          rc=0
+          result=$(bash scripts/release-monotonie.sh "$VERSION" <<< "$tags") || rc=$?
+          echo "$result"
+          case "$rc" in
+            0)
+              verdict="bestanden" ;;
+            1)
+              verdict="nicht größer als das höchste Release"
+              if [[ "$EVENT_NAME" == "push" ]]; then
+                echo "::error title=Monotonie verletzt::Die Version ${VERSION} ist nicht größer als das bisher höchste veröffentlichte Release. Installierte Versionen ließen sich nicht aktualisieren. Eine höhere Version wählen, siehe docs/RELEASE.md."
+                echo "monotonic_result=${verdict}: ${result}" >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
+              echo "::warning title=Monotonie verletzt (Probelauf)::Die Version ${VERSION} wäre als Release nicht zulässig."
+              ;;
+            *)
+              echo "::error title=Monotonie-Prüfung fehlgeschlagen::Die Monotonie-Prüfung konnte nicht ausgeführt werden (Code ${rc})."
+              exit 1 ;;
+          esac
+          echo "monotonic_result=${verdict}: ${result}" >> "$GITHUB_OUTPUT"
+
       - name: JDK 21 und 17 einrichten
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
@@ -378,6 +424,7 @@ jobs:
           IS_PRERELEASE: ${{ steps.version.outputs.is_prerelease }}
           APK_SHA256: ${{ steps.verify.outputs.apk_sha256 }}
           CERT_SHA256: ${{ steps.verify.outputs.cert_sha256 }}
+          MONOTONIC: ${{ steps.monotonic.outputs.monotonic_result }}
           UPLOAD_OUTCOME: ${{ steps.upload.outcome }}
         run: |
           set -euo pipefail
@@ -402,6 +449,7 @@ jobs:
             printf '| Vorab-Version | %s |\n' "$IS_PRERELEASE"
             printf '| APK-SHA-256 | `%s` |\n' "$APK_SHA256"
             printf '| Zertifikat-SHA-256 | `%s` |\n' "$CERT_SHA256"
+            printf '| Monotonie | %s |\n' "$MONOTONIC"
             printf '| Probelauf | %s |\n' "$dry"
             if [[ -n "$artifact" ]]; then
               printf '| Artefakt hochgeladen | %s |\n' "$artifact"

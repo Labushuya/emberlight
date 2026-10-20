@@ -10,7 +10,7 @@ Der Workflow `.github/workflows/release.yml` hat zwei Auslöser:
 - **Tag `vX.Y.Z-alpha.N`, `-beta.N` oder `-rc.N`** veröffentlicht eine Vorab-Version als GitHub-Prerelease. Sie ist nicht als „Latest“ markiert. Die Regeln sind dieselben wie bei finalen Tags (Commit in `main`, kein bestehendes Release).
 - **Manueller Lauf** (`workflow_dispatch`) mit der Eingabe `version` ist immer ein Probelauf. Er baut, signiert und prüft die APK und legt das Artefakt `release-dry-run` ab. Es entstehen kein Release und kein Tag. Die Eingabe akzeptiert finale und Vorab-Versionen.
 
-Der Lauf bricht ab, wenn die Signierung nicht eingerichtet ist, die Version ungültig ist oder die APK die Prüfung nicht besteht. Geprüft werden Signatur, Paketname, `versionName`, `versionCode` und, wenn gesetzt, das Zertifikat.
+Der Lauf bricht ab, wenn die Signierung nicht eingerichtet ist, die Version ungültig ist, der `versionCode` nicht über dem aller veröffentlichten Releases liegt (Abschnitt 5) oder die APK die Prüfung nicht besteht. Geprüft werden Signatur, Paketname, `versionName`, `versionCode` und, wenn gesetzt, das Zertifikat.
 
 ## 2. Signierschlüssel
 
@@ -94,7 +94,7 @@ Tags werden nicht verschoben und nicht überschrieben.
 - `versionCode = (X * 10000 + Y * 100 + Z) * 100 + Stufe`. Stufen: alpha.N = N, beta.N = 20 + N, rc.N = 40 + N, final = 99. Beispiele: `0.1.0` (altes Schema, veröffentlicht) ergab 100. `0.3.0-alpha.1` ergibt 30001, `0.3.0-rc.19` ergibt 30059, `0.3.0` ergibt 30099. Der größte Code ist 2 099 999 999 (Grenze von Google Play: 2 100 000 000).
 - `versionName` ist die Version ohne `v`, also `0.3.0-alpha.1`.
 - Vorab-Tags werden als GitHub-Prerelease veröffentlicht. Die Begründung steht in [ADR 0004](adr/0004-versionierung-und-release.md), Nachtrag 20.10.2026.
-- Ein Tag, dessen Code kleiner ist als der des zuletzt veröffentlichten Releases, aktualisiert installierte Versionen nicht. Eine automatische Prüfung dafür gibt es noch nicht. Vor dem Tag bitte selbst gegen das letzte Release prüfen.
+- Monotonie: Ein Tag, dessen Code nicht über dem höchsten veröffentlichten Release liegt, aktualisiert installierte Versionen nicht. Der Tag-Lauf prüft das vor dem Build und bricht ab. Die Vergleichswerte der Alt-Tags kommen aus derselben Formel: `v0.1.0` gilt als 10099, `v0.2.0` als 20099 (veröffentlicht mit 100 bzw. 200). Entwurfs-Releases und Tags ohne Schema werden ignoriert. Im Probelauf wird der Vergleich nur gemeldet.
 - Commits folgen Conventional Commits, siehe [CLAUDE.md](../CLAUDE.md).
 
 ## 6. APK prüfen
@@ -128,6 +128,8 @@ Der Wert hinter „Signer #1 certificate SHA-256 digest“ muss mit dem Fingerpr
 | „Signierung nicht eingerichtet“ | Ein oder mehrere Secrets fehlen | Secrets setzen, siehe Abschnitt 2, dann den Lauf wiederholen |
 | „Tag zeigt nicht auf main“ | Der Tag liegt auf einem Commit außerhalb von `main` | Tag lokal und auf origin löschen: `git tag -d vX.Y.Z` und `git push origin :refs/tags/vX.Y.Z`. Dann den richtigen Commit in `main` taggen und pushen. Solange kein Release existiert, ist das zulässig |
 | „Release existiert bereits“ | Zu dieser Version gibt es schon ein Release | Nichts überschreiben. Eine neue Version wählen, z. B. `0.1.1` |
+| „Monotonie verletzt“ | Der `versionCode` der Version liegt nicht über dem des höchsten veröffentlichten Releases (siehe Abschnitt 5). Installierte Versionen ließen sich nicht aktualisieren | Eine höhere Version wählen, z. B. `0.3.0-alpha.2` statt `0.2.1`. Den Vergleichswert zeigt der Schritt „Monotonie gegen veröffentlichte Releases prüfen“ |
+| „Monotonie unklar“ | Die veröffentlichten Releases konnten nicht gelesen werden, etwa wegen Rechten oder Netz | Logausgabe des Schritts prüfen und den Lauf neu starten |
 | „Release-Status unklar“ | `gh` konnte den Status nicht prüfen, etwa wegen Rechten oder Netz | Logausgabe des Schritts prüfen und den Lauf neu starten |
 | „Falscher Signaturschlüssel“ | Die APK ist mit einem anderen Schlüssel signiert als in `RELEASE_CERT_SHA256` hinterlegt | Nicht weitermachen. Prüfen, ob die Secrets zum gesicherten Keystore gehören, Fingerprint aus `LIESMICH.txt`. Niemals einen neuen Schlüssel erzeugen, um den Fehler zu umgehen |
 | „Ungültige Version“ | Eingabe oder Tag entspricht nicht `X.Y.Z` bzw. `X.Y.Z-alpha.N` (`-beta.N`, `-rc.N`), oder Y, Z liegen über 99, N liegt außerhalb von 1 bis 19 | Version korrigieren. Im Tag ein `v` davor, in der Eingabe nicht |

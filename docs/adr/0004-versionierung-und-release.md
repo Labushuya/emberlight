@@ -61,7 +61,15 @@ Die Stufe steht in den letzten zwei Stellen. Dadurch ist der Code über die SemV
 
 - Veröffentlicht sind `v0.1.0` (Code 100) und `v0.2.0` (Code 200) nach dem alten Schema. Beide bleiben unverändert. Das Beispiel `0.2.0` = 20099 in der Formel zeigt nur das neue Schema, `v0.2.0` wird nicht neu gebaut.
 - Ab `0.2.0` liegt jeder Code des neuen Schemas über 200. Installierte Versionen lassen sich also ohne Deinstallation auf neue Versionen aktualisieren.
-- Monotonie: Ein Tag mit kleinerem Code als das zuletzt veröffentlichte Release, z. B. `v0.2.1` nach `v0.3.0-alpha.1`, würde Installationen nicht aktualisieren. Eine automatische Prüfung dafür gibt es noch nicht, siehe [RELEASE.md](../RELEASE.md).
+- Monotonie: Ein Tag mit kleinerem Code als das bisher höchste veröffentlichte Release, z. B. `v0.2.1` nach `v0.3.0-alpha.1`, würde Installationen nicht aktualisieren. Dafür gibt es die Prüfung unten.
+
+### Monotonie-Prüfung
+
+- Der Release-Lauf vergleicht vor dem Build den versionCode der neuen Version mit allen veröffentlichten Releases (`gh release list --exclude-drafts`, inkl. Prereleases). Verglichen wird strikt größer. Gleich oder kleiner bricht den Tag-Lauf ab, bevor ein Release angelegt wird.
+- Der Vergleichswert jedes Tags entsteht mit derselben Formel wie für die neue Version. Die Alt-Tags `v0.1.0` und `v0.2.0` ergeben so 10099 bzw. 20099. Veröffentlicht wurden 100 bzw. 200 nach dem alten Schema. Für den Vergleich ist die neue Formel richtig, weil jede neue Version darüber liegen soll.
+- Entwurfs-Releases und Tags, die nicht dem Schema entsprechen, bleiben außen vor.
+- Im Probelauf wird der Vergleich nur berechnet und in der Zusammenfassung gemeldet. Abgebrochen wird dort nicht.
+- Umsetzung: `scripts/release-monotonie.sh`, Aufruf aus `release.yml`. Die Schritte lassen sich lokal in Bash nachvollziehen.
 
 ### Quellen
 
