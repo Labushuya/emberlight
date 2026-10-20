@@ -80,21 +80,9 @@ jobs:
           path: ~/.m2/repository/org/robolectric/android-all-instrumented
           key: robolectric-${{ steps.robolectric.outputs.version }}-sdk${{ steps.robolectric.outputs.sdk }}-${{ runner.os }}
 
-      # Gegenprobe der Standortentfernung (ADR 0015, Tests): ExifTool, ffmpeg, heif-enc (HEIC mit dem x265-Plugin)
-      # und avifenc (AVIF) nur auf dem Runner, nie auf dem Rechner der Entwicklung. Der Test in share:space bricht
-      # ohne sie ab, weil CI=true gesetzt ist. Paketnamen geprüft für ubuntu-latest (noble, 24.04): libheif-examples
-      # 1.17.6, libheif-plugin-x265 1.17.6, libavif-bin 1.0.4.
+      # Gegenprobe der Standortentfernung (ADR 0015): Werkzeuge per Composite-Action, die auch release.yml (Test-Job) nutzt.
       - name: Werkzeuge für die Standort-Gegenprobe installieren
-        run: |
-          set -euo pipefail
-          sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends \
-            libimage-exiftool-perl ffmpeg libheif-examples libheif-plugin-x265 libavif-bin
-          exiftool -ver
-          ffmpeg -version | head -1
-          # Nur zur Protokollierung. Fehlt ein Werkzeug, bricht der Test in share:space mit CI=true ab.
-          heif-enc --version 2>&1 | head -1 || true
-          avifenc --version 2>&1 | head -1 || true
+        uses: ./.github/actions/install-cross-check-tools
 
       # Der frühere Schritt „Toolchains anzeigen“ war nur eine Ausgabe. Fehlt eine JDK, bricht dieser Build selbst ab.
       # testForks=2 passt zu den 4 vCPU des Runners (ADR 0006).
