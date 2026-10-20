@@ -44,7 +44,8 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 
 /**
- * Beitritt, `/me` und die Gastgeber-Routen über die Ktor-Testumgebung mit echter Datenbank (ADR 0018). Die Drosselung läuft
+ * Beitritt, `/me` und die Gastgeber-Routen über die Ktor-Testumgebung mit echter Datenbank (ADR 0018). Die
+ * Drosselung läuft
  * mit fester Uhr, keine echten Wartezeiten.
  */
 @RunWith(RobolectricTestRunner::class)

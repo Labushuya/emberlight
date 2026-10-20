@@ -36,6 +36,8 @@ ktor = "3.6.0"
 room = "2.8.5"
 # JSON für die Server-Antworten (CLAUDE.md, Technik). Keine Play-Services-Abhängigkeit.
 kotlinx-serialization = "1.11.0"
+# QR-Codes erzeugen und lesen (Paket 3.4, ADR 0018). Apache-2.0, keine Play-Services-Abhängigkeit. Nur die Kernbibliothek.
+zxing = "3.5.4"
 
 [libraries]
 # Build-Logic (Classpath der Convention-Plugins)
@@ -80,6 +82,7 @@ kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
 # Debug-only (Tooling und Test-Manifest, über die BOM versioniert)
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }

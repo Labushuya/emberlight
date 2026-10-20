@@ -19,6 +19,8 @@ dependencies {
     // Keine Netzwerk-Module, keine Galerie-Medien.
     implementation(libs.coil.core)
     implementation(libs.coil.compose)
+    // QR-Code des Beitritts (Paket 3.4, ADR 0018): erzeugen und in der Prüfung zurücklesen. Nur ZXing core.
+    implementation(libs.zxing.core)
 
     testImplementation(libs.kotlinx.coroutines.test)
 }

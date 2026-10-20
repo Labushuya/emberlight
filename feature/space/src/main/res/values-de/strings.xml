@@ -289,7 +289,6 @@
     <string name="space_running_remaining_m">%1$d Min.</string>
     <string name="space_running_remaining_hm">%1$d Std. %2$d Min.</string>
     <string name="space_running_address_label">Adresse im WLAN</string>
-    <string name="space_running_address_hint">QR-Code folgt. Bis dahin geben Gäste die Adresse im Browser ein.</string>
     <string name="space_running_storage_label">Speicher</string>
     <string name="space_running_storage_value">%1$s von %2$s belegt</string>
     <string name="space_running_storage_warning">Der Speicher ist zu 80 % oder mehr belegt. Bald nehmen Uploads nichts mehr auf.</string>
@@ -315,4 +314,23 @@
     <string name="space_interrupted_text">emberlight wurde im Hintergrund beendet. Gäste erreichen den Space erst wieder, wenn du ihn fortsetzt.</string>
     <string name="space_interrupted_resume">Fortsetzen</string>
     <string name="space_running_status_interrupted">Unterbrochen · Fortsetzen nötig</string>
+    <string name="space_invite_title">Einladung</string>
+    <string name="space_invite_qr_description">QR-Code zum Beitritt zum Space</string>
+    <string name="space_invite_hint">Gäste scannen den Code oder öffnen den Link im Browser im selben WLAN.</string>
+    <string name="space_invite_share">Link teilen</string>
+    <string name="space_invite_copy">Kopieren</string>
+    <string name="space_invite_copied">Link kopiert</string>
+    <string name="space_invite_rotate">Einladung erneuern</string>
+    <string name="space_invite_rotate_title">Einladung erneuern?</string>
+    <string name="space_invite_rotate_text">Der aktuelle QR-Code und Link funktionieren danach nicht mehr. Wer schon beigetreten ist, bleibt im Space.</string>
+    <string name="space_invite_rotate_confirm">Erneuern</string>
+    <string name="space_invite_address_changed">Neue Adresse. Gäste brauchen den neuen QR-Code.</string>
+    <string name="space_participants_title">Teilnehmer (%1$d)</string>
+    <string name="space_participant_host">Gastgeber</string>
+    <string name="space_participant_remove">Entfernen</string>
+    <string name="space_participant_remove_title">%1$s entfernen?</string>
+    <string name="space_participant_remove_text">Der Zugang endet sofort, laufende Uploads brechen ab. Die Uploads bleiben im Space und sind als entfernt markiert.</string>
+    <string name="space_participant_remove_uploads">Auch alle Uploads von %1$s löschen</string>
+    <string name="space_participant_remove_confirm">Entfernen</string>
+    <string name="space_running_media_uploader_removed">%1$s (entfernt)</string>
 </resources>

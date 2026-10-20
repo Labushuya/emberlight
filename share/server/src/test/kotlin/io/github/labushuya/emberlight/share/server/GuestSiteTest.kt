@@ -18,7 +18,8 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Gäste-Seite W1 (ADR 0018): Auslieferung ohne Zugriffsprüfung, Sicherheits-Header und statische Regeln für die Dateien
+ * Gäste-Seite W1 (ADR 0018): Auslieferung ohne Zugriffsprüfung, Sicherheits-Header und statische Regeln
+ * für die Dateien
  * (keine Inline-Skripte, keine Inline-Stile, keine externen Quellen, Ausgabe nur per textContent).
  */
 class GuestSiteTest {
@@ -80,11 +81,12 @@ class GuestSiteTest {
         testApplication {
             install()
 
-            val german = Json.parseToJsonElement(client.get("/i18n/de.json") { header(HttpHeaders.Host, "localhost") }.bodyAsText())
-            val english = Json.parseToJsonElement(client.get("/i18n/en.json") { header(HttpHeaders.Host, "localhost") }.bodyAsText())
+            val german = client.get("/i18n/de.json") { header(HttpHeaders.Host, "localhost") }.bodyAsText()
+            val english = client.get("/i18n/en.json") { header(HttpHeaders.Host, "localhost") }.bodyAsText()
 
-            assertEquals(german.jsonObject.keys, english.jsonObject.keys)
-            assertTrue(german.jsonObject.keys.contains("note"))
+            val germanKeys = Json.parseToJsonElement(german).jsonObject.keys
+            assertEquals(germanKeys, Json.parseToJsonElement(english).jsonObject.keys)
+            assertTrue(germanKeys.contains("note"))
         }
 
     @Test
@@ -92,7 +94,8 @@ class GuestSiteTest {
         testApplication {
             install()
 
-            assertEquals(HttpStatusCode.Unauthorized, client.get("/nicht-da") { header(HttpHeaders.Host, "localhost") }.status)
+            val unknown = client.get("/nicht-da") { header(HttpHeaders.Host, "localhost") }
+            assertEquals(HttpStatusCode.Unauthorized, unknown.status)
             assertEquals(HttpStatusCode.Unauthorized, client.post("/") { header(HttpHeaders.Host, "localhost") }.status)
         }
 
@@ -108,7 +111,8 @@ class GuestSiteTest {
     fun theStartPageHasNoInlineScriptsOrStylesAndNoExternalSources() {
         val html = File(assetDir, "index.html").readText()
 
-        assertFalse("Inline-Skript", Regex("<script(?![^>]*\\ssrc=)[^>]*>", RegexOption.IGNORE_CASE).containsMatchIn(html))
+        val inlineScript = Regex("<script(?![^>]*\\ssrc=)[^>]*>", RegexOption.IGNORE_CASE)
+        assertFalse("Inline-Skript", inlineScript.containsMatchIn(html))
         assertFalse("<style>-Element", html.contains("<style", ignoreCase = true))
         assertFalse("style-Attribut", Regex("\\sstyle\\s*=", RegexOption.IGNORE_CASE).containsMatchIn(html))
         assertFalse("Ereignis-Attribut", Regex("\\son[a-z]+\\s*=", RegexOption.IGNORE_CASE).containsMatchIn(html))
@@ -126,8 +130,10 @@ class GuestSiteTest {
     @Test
     fun theScriptNeverWritesHtmlAndOnlyUsesTextOutput() {
         val script = File(assetDir, "guest.js").readText()
-        listOf("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function").forEach { forbidden ->
-            assertFalse("Verboten im Skript: $forbidden", script.contains(forbidden))
+        val forbidden =
+            listOf("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function")
+        forbidden.forEach { term ->
+            assertFalse("Verboten im Skript: $term", script.contains(term))
         }
         assertTrue(script.contains("textContent"))
     }
