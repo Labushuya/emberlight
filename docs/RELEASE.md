@@ -7,9 +7,17 @@ Dieses Dokument beschreibt, wie emberlight als signierte APK über GitHub Releas
 Der Workflow `.github/workflows/release.yml` hat zwei Auslöser:
 
 - **Tag `vX.Y.Z`** veröffentlicht ein GitHub-Release mit `emberlight-vX.Y.Z.apk` und `emberlight-vX.Y.Z.apk.sha256`. Der Tag muss auf einem Commit in `main` liegen.
-- **Manueller Lauf** (`workflow_dispatch`) mit der Eingabe `version` ist immer ein Probelauf. Er baut, signiert und prüft die APK und legt das Artefakt `release-dry-run` ab. Es entstehen kein Release und kein Tag.
+- **Tag `vX.Y.Z-alpha.N`, `-beta.N` oder `-rc.N`** veröffentlicht eine Vorab-Version als GitHub-Prerelease. Sie ist nicht als „Latest“ markiert. Die Regeln sind dieselben wie bei finalen Tags (Commit in `main`, kein bestehendes Release).
+- **Manueller Lauf** (`workflow_dispatch`) mit der Eingabe `version` ist immer ein Probelauf. Er baut, signiert und prüft die APK und legt das Artefakt `release-dry-run` ab. Es entstehen kein Release und kein Tag. Die Eingabe akzeptiert finale und Vorab-Versionen.
 
-Der Lauf bricht ab, wenn die Signierung nicht eingerichtet ist, die Version ungültig ist oder die APK die Prüfung nicht besteht. Geprüft werden Signatur, Paketname, `versionName`, `versionCode` und, wenn gesetzt, das Zertifikat.
+Der Lauf bricht ab, wenn die Signierung nicht eingerichtet ist, die Version ungültig ist, der `versionCode` nicht über dem aller veröffentlichten Releases liegt (Abschnitt 5) oder die APK die Prüfung nicht besteht. Geprüft werden Signatur, Paketname, `versionName`, `versionCode` und, wenn gesetzt, das Zertifikat.
+
+Der Workflow hat zwei Jobs (Nachtrag in [ADR 0004](adr/0004-versionierung-und-release.md), 20.10.2026, Teil 2):
+
+1. **`test`** läuft ohne Signier-Secrets und mit Leserechten. Er bestimmt die Version, prüft Tag und Monotonie, installiert die Werkzeuge für die Standort-Gegenprobe und führt `./gradlew check` aus.
+2. **`release`** läuft nur, wenn `test` grün ist. Er hat die Signier-Secrets und Schreibrechte nur für `gh release create`. Er baut die APK neu (`assembleRelease`, ohne `check`), prüft sie und veröffentlicht sie nur bei einem Tag. Beim Probelauf entsteht nur das Artefakt `release-dry-run`.
+
+Schlägt `test` fehl, gibt es kein Release und keine signierte APK. Die Fehlermeldung steht im Job `test`.
 
 ## 2. Signierschlüssel
 
@@ -48,6 +56,8 @@ Das Skript erzeugt im Zielordner die Keystore-Datei und eine `LIESMICH.txt` mit 
 gh workflow run release.yml -R Labushuya/emberlight --ref main -f version=0.1.0
 ```
 
+Für eine Vorab-Version: `-f version=0.3.0-alpha.1`.
+
 Alternativ im Browser: Actions, Workflow „Release“, „Run workflow“, Version eintragen.
 
 Das Ergebnis liegt im Lauf unter „Artifacts“ als `release-dry-run` (7 Tage): APK, `.sha256` und Release-Notes. Die Zusammenfassung des Laufs zeigt Version, versionCode, SHA-256 und Zertifikat. Vor jedem Release gehört ein Probelauf mit derselben Version.
@@ -81,12 +91,17 @@ Nach Erfolg steht das Release unter `https://github.com/Labushuya/emberlight/rel
 
 Tags werden nicht verschoben und nicht überschrieben.
 
+**Vorab-Version testen:** Dieselben Schritte mit einem Vorab-Tag, z. B. `v0.3.0-alpha.1`. Der Lauf veröffentlicht ein Prerelease. Die Release-Notes warnen, dass eine Rückkehr zu einer älteren stabilen Version nur per Deinstallation möglich ist. Die Space-Daten gehen dabei verloren. Vor dem Tag gehört auch hier ein Probelauf mit derselben Version.
+
 ## 5. Versionsschema
 
-- SemVer `X.Y.Z`. Der Tag trägt ein `v` davor, die Version selbst nicht.
-- Y und Z liegen zwischen 0 und 99, X höchstens bei 214747 (Grenze des Android-`versionCode`).
-- `versionCode = X * 10000 + Y * 100 + Z`. Beispiele: `0.1.0` ergibt 100, `1.2.3` ergibt 10203.
-- Vorabversionen wie `1.0.0-rc1` werden abgewiesen.
+- SemVer. Der Tag trägt ein `v` davor, die Version selbst nicht.
+- Form: `X.Y.Z` (final) oder `X.Y.Z-alpha.N`, `X.Y.Z-beta.N`, `X.Y.Z-rc.N` mit N von 1 bis 19.
+- Y und Z liegen zwischen 0 und 99, X höchstens bei 2099.
+- `versionCode = (X * 10000 + Y * 100 + Z) * 100 + Stufe`. Stufen: alpha.N = N, beta.N = 20 + N, rc.N = 40 + N, final = 99. Beispiele: `0.1.0` (altes Schema, veröffentlicht) ergab 100. `0.3.0-alpha.1` ergibt 30001, `0.3.0-rc.19` ergibt 30059, `0.3.0` ergibt 30099. Der größte Code ist 2 099 999 999 (Grenze von Google Play: 2 100 000 000).
+- `versionName` ist die Version ohne `v`, also `0.3.0-alpha.1`.
+- Vorab-Tags werden als GitHub-Prerelease veröffentlicht. Die Begründung steht in [ADR 0004](adr/0004-versionierung-und-release.md), Nachtrag 20.10.2026.
+- Monotonie: Ein Tag, dessen Code nicht über dem höchsten veröffentlichten Release liegt, aktualisiert installierte Versionen nicht. Der Tag-Lauf prüft das vor dem Build und bricht ab. Die Vergleichswerte der Alt-Tags kommen aus derselben Formel: `v0.1.0` gilt als 10099, `v0.2.0` als 20099 (veröffentlicht mit 100 bzw. 200). Entwurfs-Releases und Tags ohne Schema werden ignoriert. Im Probelauf wird der Vergleich nur gemeldet.
 - Commits folgen Conventional Commits, siehe [CLAUDE.md](../CLAUDE.md).
 
 ## 6. APK prüfen
@@ -120,9 +135,11 @@ Der Wert hinter „Signer #1 certificate SHA-256 digest“ muss mit dem Fingerpr
 | „Signierung nicht eingerichtet“ | Ein oder mehrere Secrets fehlen | Secrets setzen, siehe Abschnitt 2, dann den Lauf wiederholen |
 | „Tag zeigt nicht auf main“ | Der Tag liegt auf einem Commit außerhalb von `main` | Tag lokal und auf origin löschen: `git tag -d vX.Y.Z` und `git push origin :refs/tags/vX.Y.Z`. Dann den richtigen Commit in `main` taggen und pushen. Solange kein Release existiert, ist das zulässig |
 | „Release existiert bereits“ | Zu dieser Version gibt es schon ein Release | Nichts überschreiben. Eine neue Version wählen, z. B. `0.1.1` |
+| „Monotonie verletzt“ | Der `versionCode` der Version liegt nicht über dem des höchsten veröffentlichten Releases (siehe Abschnitt 5). Installierte Versionen ließen sich nicht aktualisieren | Eine höhere Version wählen, z. B. `0.3.0-alpha.2` statt `0.2.1`. Den Vergleichswert zeigt der Schritt „Monotonie gegen veröffentlichte Releases prüfen“ |
+| „Monotonie unklar“ | Die veröffentlichten Releases konnten nicht gelesen werden, etwa wegen Rechten oder Netz | Logausgabe des Schritts prüfen und den Lauf neu starten |
 | „Release-Status unklar“ | `gh` konnte den Status nicht prüfen, etwa wegen Rechten oder Netz | Logausgabe des Schritts prüfen und den Lauf neu starten |
 | „Falscher Signaturschlüssel“ | Die APK ist mit einem anderen Schlüssel signiert als in `RELEASE_CERT_SHA256` hinterlegt | Nicht weitermachen. Prüfen, ob die Secrets zum gesicherten Keystore gehören, Fingerprint aus `LIESMICH.txt`. Niemals einen neuen Schlüssel erzeugen, um den Fehler zu umgehen |
-| „Ungültige Version“ | Eingabe oder Tag entspricht nicht `X.Y.Z`, oder Y bzw. Z sind 100 oder größer | Version korrigieren. Im Tag ein `v` davor, in der Eingabe nicht |
+| „Ungültige Version“ | Eingabe oder Tag entspricht nicht `X.Y.Z` bzw. `X.Y.Z-alpha.N` (`-beta.N`, `-rc.N`), oder Y, Z liegen über 99, N liegt außerhalb von 1 bis 19 | Version korrigieren. Im Tag ein `v` davor, in der Eingabe nicht |
 | „Falsches Paket“, „Falsche Version“, „Falscher versionCode“ | Die gebaute APK passt nicht zur Eingabe | Logausgabe des Schritts „APK prüfen“ ansehen, meist stimmt Tag oder Eingabe nicht |
 | Warnung „Artefakt nicht hochgeladen“ (CI) oder „Artefakt hochgeladen: nein“ (Probelauf) | Der Upload scheitert, meist wegen des Speicherkontingents des Accounts. Der Build selbst ist erfolgreich | Nichts zu tun. Die Prüfwerte in der Job-Zusammenfassung sind maßgeblich. Speicher aufräumen, wenn Artefakte gebraucht werden |
 | Warnung „RELEASE_CERT_SHA256 fehlt“ | Die Variable ist nicht gesetzt | Variable im Browser setzen: Settings, Secrets and variables, Actions, Variables. Den Fingerprint aus `LIESMICH.txt` ohne Doppelpunkte eintragen. Die Prüfung läuft erst dann gegen den Sollwert |
