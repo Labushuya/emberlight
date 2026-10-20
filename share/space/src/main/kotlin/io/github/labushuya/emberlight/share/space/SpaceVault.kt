@@ -4,6 +4,12 @@ import android.content.Context
 import io.github.labushuya.emberlight.share.space.location.LocationScrubResult
 import io.github.labushuya.emberlight.share.space.location.LocationScrubber
 import io.github.labushuya.emberlight.share.space.location.NotRemovableReason
+import io.github.labushuya.emberlight.share.space.participants.Credential
+import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
+import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
+import io.github.labushuya.emberlight.share.space.participants.ParticipantName
+import io.github.labushuya.emberlight.share.space.participants.ParticipantRoster
+import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -37,6 +43,8 @@ data class MediaListEntry(
     val createdAt: Long,
     val uploaderName: String?,
     val locationKept: Boolean = false,
+    /** `true`, wenn der Uploader entfernt wurde. Die Anzeige nennt das (ADR 0018). */
+    val uploaderRemoved: Boolean = false,
 )
 
 data class MediaPage(
@@ -153,6 +161,7 @@ class SpaceVault internal constructor(
 ) {
     private val media = database.media()
     private val participants = database.participants()
+    private val roster = ParticipantRoster(database, storage.spaceId, nowMillis)
     private val commitLock = Mutex()
 
     /**
@@ -246,7 +255,15 @@ class SpaceVault internal constructor(
             }
         val page =
             rows.take(limit).map {
-                MediaListEntry(MediaId(it.id), it.mime, it.sizeBytes, it.createdAt, it.uploaderName, it.locationKept)
+                MediaListEntry(
+                    MediaId(it.id),
+                    it.mime,
+                    it.sizeBytes,
+                    it.createdAt,
+                    it.uploaderName,
+                    it.locationKept,
+                    it.uploaderRevoked,
+                )
             }
         val next =
             if (rows.size > limit && page.isNotEmpty()) {
@@ -318,6 +335,55 @@ class SpaceVault internal constructor(
         }
     }
 
+    /** Legt den Gastgeber an oder aktualisiert seinen Token-Hash (ADR 0018). Die Kennung bleibt gleich. */
+    suspend fun ensureHost(tokenSha256Hex: String): ParticipantId =
+        commitLock.withLock { roster.ensureHost(tokenSha256Hex) }
+
+    /** Einladung bereitstellen: [known] bleibt, wenn es zum gespeicherten Hash passt, sonst entsteht eine neue. */
+    suspend fun ensureInvite(known: String?): String = commitLock.withLock { roster.ensureInvite(known) }
+
+    /** Erneuert die Einladung. Alte QR-Codes sind danach ungültig, Beigetretene bleiben (ADR 0018). */
+    suspend fun rotateInvite(): String = commitLock.withLock { roster.rotateInvite() }
+
+    /** Beitritt mit Einladungsgeheimnis und Anzeigenamen (ADR 0018). */
+    suspend fun join(
+        inviteSecret: String,
+        rawName: String,
+    ): JoinOutcome = commitLock.withLock { roster.join(inviteSecret, rawName) }
+
+    /**
+     * Entfernt einen Gast. Der Gastgeber ist nicht entfernbar. Mit [deleteUploads] verschwinden auch seine Medien.
+     * Ohne das bleiben sie und zeigen „entfernt“ (ADR 0018).
+     */
+    suspend fun removeParticipant(
+        id: ParticipantId,
+        deleteUploads: Boolean,
+    ): RemoveOutcome =
+        commitLock.withLock {
+            val outcome = roster.revoke(id)
+            if (outcome == RemoveOutcome.Removed && deleteUploads) deleteMediaUploadedBy(id)
+            outcome
+        }
+
+    /** Aktive Zugangsschlüssel für die Zugriffsprüfung. Entfernte fehlen. */
+    suspend fun credentials(): List<Credential> = roster.activeCredentials()
+
+    /** Aktive Teilnehmer, Gastgeber zuerst. */
+    suspend fun participants(): List<ParticipantInfo> = roster.active()
+
+    /** Ein aktiver Teilnehmer, sonst `null`. */
+    suspend fun participant(id: ParticipantId): ParticipantInfo? = roster.find(id)
+
+    /** Löscht alle Medien eines Teilnehmers samt Datei (ADR 0018, „Auch alle Uploads löschen“). */
+    private suspend fun deleteMediaUploadedBy(id: ParticipantId) {
+        val rows = media.allOf(storage.spaceId.value).filter { it.uploaderId == id.value && it.state == STATE_READY }
+        rows.forEach { row ->
+            media.markDeleting(row.id)
+            withContext(Dispatchers.IO) { Files.deleteIfExists(storage.contentPath(row.sha256)) }
+            media.deleteById(row.id)
+        }
+    }
+
     /** Registriert einen Teilnehmer im Index, zum Beispiel beim Einrichten des Space. Pro ID ein Datensatz. */
     suspend fun registerParticipant(
         id: ParticipantId,
@@ -325,7 +391,17 @@ class SpaceVault internal constructor(
         role: Role,
         tokenSha256Hex: String,
     ) {
-        participants.upsert(ParticipantEntity(id.value, displayName, role.name, tokenSha256Hex))
+        participants.upsert(
+            ParticipantEntity(
+                id = id.value,
+                spaceId = storage.spaceId.value,
+                displayName = displayName,
+                nameKey = ParticipantName.keyOf(displayName),
+                role = role.name,
+                tokenHash = tokenSha256Hex,
+                createdAt = nowMillis(),
+            ),
+        )
     }
 
     private suspend fun writeBody(

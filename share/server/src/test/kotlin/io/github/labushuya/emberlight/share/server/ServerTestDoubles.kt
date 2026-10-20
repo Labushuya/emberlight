@@ -66,3 +66,27 @@ internal class FakeLocalServer(
         const val FAKE_PORT = 4711
     }
 }
+
+/**
+ * Sitzung für Tests mit echter Vault. Die Einladung ist zufällig, der Gastgeber-Token ebenfalls. [credentials] bestimmen,
+ * wer sich ausweisen darf.
+ */
+internal fun testAccess(
+    vault: io.github.labushuya.emberlight.share.space.SpaceVault,
+    spaceId: io.github.labushuya.emberlight.share.space.SpaceId,
+    credentials: List<io.github.labushuya.emberlight.share.space.participants.Credential> = emptyList(),
+    name: String = "Test",
+): SpaceAccess =
+    SpaceAccess(
+        vault = vault,
+        spaceId = spaceId,
+        spaceName = name,
+        live = LiveAuthorizer(credentials),
+        uploads = ActiveUploads(),
+        invite =
+            io.github.labushuya.emberlight.share.space.participants.Secrets
+                .generate(),
+        hostToken =
+            io.github.labushuya.emberlight.share.space.participants.Secrets
+                .generate(),
+    )

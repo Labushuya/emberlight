@@ -9,6 +9,8 @@ import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
+import io.github.labushuya.emberlight.share.space.participants.Credential
+import io.github.labushuya.emberlight.share.space.participants.Secrets
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -39,6 +41,7 @@ class UploadSocketTest {
     private lateinit var vault: SpaceVault
     private lateinit var spacesDir: File
     private lateinit var server: KtorLocalServer
+    private lateinit var access: SpaceAccess
     private var port = 0
 
     /** Bild 2000 Byte, Video 6000 Byte. Kleine Grenzen, damit die Tests schnell bleiben. */
@@ -63,7 +66,8 @@ class UploadSocketTest {
                 StorageProbe { Long.MAX_VALUE / 4 },
             )
         runBlocking { vault.registerParticipant(guest.participantId, "Gast", Role.GUEST, "0".repeat(64)) }
-        server = newServer(TokenAuthorizer(mapOf(sha(token) to guest)))
+        access = testAccess(vault, spaceId, listOf(Credential(Secrets.hashHex(token), guest.participantId, guest.role)))
+        server = newServer(access.live)
         port = runBlocking { server.start(ServerConfig(subnet = Ipv4Subnet("127.0.0.1", 8))) }
     }
 
@@ -76,7 +80,7 @@ class UploadSocketTest {
     private fun newServer(authorizer: RequestAuthorizer): KtorLocalServer {
         val gates = ServerGates()
         return KtorLocalServer(
-            routes = spaceRoutes(vault, "Test", gates, UploadTuning(pollMillis = 1)),
+            routes = spaceRoutes(access, gates, UploadTuning(pollMillis = 1)),
             authorizer = authorizer,
             gates = gates,
         )

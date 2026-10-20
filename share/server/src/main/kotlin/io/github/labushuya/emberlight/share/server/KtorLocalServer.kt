@@ -40,6 +40,7 @@ class KtorLocalServer(
     private val requestLog: (String) -> Unit = {},
     private val gates: ServerGates = ServerGates(),
     private val closure: SpaceClosure = SpaceClosure.Open,
+    private val joinLimiter: JoinLimiter = JoinLimiter(),
 ) : LocalServer {
     private val lock = Mutex()
     private val mutableState = MutableStateFlow<ServerState>(ServerState.Stopped)
@@ -60,6 +61,7 @@ class KtorLocalServer(
                     requestLog = requestLog,
                     debugLogging = config.debugLogging,
                     closure = closure,
+                    joinLimiter = joinLimiter,
                 )
             val server =
                 embeddedServer(

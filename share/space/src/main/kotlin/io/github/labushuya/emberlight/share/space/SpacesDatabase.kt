@@ -19,13 +19,24 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 
-/** Teilnehmer im Space. Der Hash des Zugangsschlüssels liegt hier, nie der Schlüssel selbst (ADR 0013). */
-@Entity(tableName = "participant")
+/**
+ * Teilnehmer im Space (ADR 0013, ADR 0018). Der Hash des Zugangsschlüssels liegt hier, nie der Schlüssel selbst.
+ * [nameKey] trägt den Eindeutigkeitsschlüssel des Namens (NFKC, Kleinschreibung). Entfernte Teilnehmer behalten
+ * ihren Eintrag, bekommen [revokedAt] und einen Schlüssel `#revoked:<id>`, damit der Name wieder frei wird.
+ */
+@Entity(
+    tableName = "participant",
+    indices = [Index(value = ["space_id", "name_key"], unique = true)],
+)
 data class ParticipantEntity(
     @PrimaryKey @ColumnInfo(name = "id") val id: String,
+    @ColumnInfo(name = "space_id", defaultValue = "''") val spaceId: String = "",
     @ColumnInfo(name = "display_name") val displayName: String,
+    @ColumnInfo(name = "name_key", defaultValue = "''") val nameKey: String = "",
     @ColumnInfo(name = "role") val role: String,
     @ColumnInfo(name = "token_hash") val tokenHash: String,
+    @ColumnInfo(name = "created_at", defaultValue = "0") val createdAt: Long = 0L,
+    @ColumnInfo(name = "revoked_at") val revokedAt: Long? = null,
 )
 
 /** Medium im Index. `state` ist `READY` oder `DELETING` (Bereinigung nach einem Absturz, ADR 0013, Löschen). */
@@ -60,6 +71,8 @@ data class MediaRow(
     val createdAt: Long,
     val uploaderName: String?,
     val locationKept: Boolean,
+    /** `true`, wenn der Uploader inzwischen entfernt wurde. Das Medium bleibt, die Anzeige nennt das (ADR 0018). */
+    val uploaderRevoked: Boolean = false,
 )
 
 @Dao
@@ -79,7 +92,7 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               m.location_kept AS locationKept, p.display_name AS uploaderName
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
         ORDER BY m.created_at DESC, m.id DESC
@@ -94,7 +107,7 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               m.location_kept AS locationKept, p.display_name AS uploaderName
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
           AND (m.created_at < :afterCreatedAt OR (m.created_at = :afterCreatedAt AND m.id < :afterId))
@@ -119,7 +132,7 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               m.location_kept AS locationKept, p.display_name AS uploaderName
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
         ORDER BY m.created_at DESC, m.id DESC
@@ -146,8 +159,34 @@ interface ParticipantDao {
     @Upsert
     suspend fun upsert(participant: ParticipantEntity)
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insert(participant: ParticipantEntity)
+
+    @Query("SELECT * FROM participant WHERE space_id = :spaceId AND role = 'HOST' LIMIT 1")
+    suspend fun findHost(spaceId: String): ParticipantEntity?
+
     @Query("SELECT * FROM participant WHERE id = :id")
     suspend fun findById(id: String): ParticipantEntity?
+
+    /** Alle aktiven Teilnehmer des Space (ohne entfernte). */
+    @Query("SELECT * FROM participant WHERE space_id = :spaceId AND revoked_at IS NULL ORDER BY created_at, id")
+    suspend fun activeOf(spaceId: String): List<ParticipantEntity>
+
+    @Query("SELECT COUNT(*) FROM participant WHERE space_id = :spaceId AND revoked_at IS NULL")
+    suspend fun countActive(spaceId: String): Int
+
+    @Query("SELECT * FROM participant WHERE space_id = :spaceId AND name_key = :nameKey LIMIT 1")
+    suspend fun findByNameKey(
+        spaceId: String,
+        nameKey: String,
+    ): ParticipantEntity?
+
+    @Query("UPDATE participant SET revoked_at = :revokedAt, name_key = :revokedKey WHERE id = :id")
+    suspend fun revoke(
+        id: String,
+        revokedAt: Long,
+        revokedKey: String,
+    ): Int
 }
 
 /** Eigenschaften eines Space (Paket 3.2, ADR 0016). Die Laufzeit ist entweder eine Dauer oder ein festes Ende. */
@@ -170,6 +209,14 @@ data class SpaceEntity(
     @ColumnInfo(name = "expires_at") val expiresAt: Long? = null,
     /** Tatsächliches Ende in UTC-Millisekunden, gesetzt beim Übergang nach ENDED (Paket 3.3). */
     @ColumnInfo(name = "ended_at") val endedAt: Long? = null,
+    /** SHA-256 (Hex) des aktuellen Einladungsgeheimnisses. Das Geheimnis selbst wird nicht gespeichert (ADR 0018). */
+    @ColumnInfo(name = "invite_hash") val inviteHash: String? = null,
+    /** Zeitpunkt, zu dem die aktuelle Einladung erzeugt wurde, in UTC-Millisekunden (Paket 3.4). */
+    @ColumnInfo(name = "invite_created_at") val inviteCreatedAt: Long? = null,
+    /** Zeitpunkt der letzten Erneuerung der Einladung, in UTC-Millisekunden (Paket 3.4). */
+    @ColumnInfo(name = "invite_rotated_at") val inviteRotatedAt: Long? = null,
+    /** Fester Port des Space, beim ersten Start gewählt (ADR 0017, Paket 3.4). `null` vor dem ersten Start. */
+    @ColumnInfo(name = "port") val port: Int? = null,
 )
 
 /**
@@ -237,6 +284,24 @@ interface SpaceDao {
 
     @Query("DELETE FROM media WHERE space_id = :spaceId")
     suspend fun deleteMediaOf(spaceId: String): Int
+
+    /** Einladung setzen: nur der Hash, die Zeitstempel. Bei einer Erneuerung bleibt [rotatedAt] gesetzt. */
+    @Query(
+        "UPDATE space SET invite_hash = :hash, invite_created_at = :createdAt, invite_rotated_at = :rotatedAt " +
+            "WHERE id = :id",
+    )
+    suspend fun setInvite(
+        id: String,
+        hash: String,
+        createdAt: Long,
+        rotatedAt: Long?,
+    ): Int
+
+    @Query("UPDATE space SET port = :port WHERE id = :id")
+    suspend fun setPort(
+        id: String,
+        port: Int,
+    ): Int
 }
 
 /**
@@ -245,7 +310,7 @@ interface SpaceDao {
  */
 @Database(
     entities = [MediaEntity::class, ParticipantEntity::class, SpaceEntity::class, PauseEventEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class SpacesDatabase : RoomDatabase() {
@@ -279,6 +344,31 @@ abstract class SpacesDatabase : RoomDatabase() {
                         context.applicationContext,
                         spacesDirectory(context.applicationContext),
                     ).also { shared = it }
+            }
+
+        /**
+         * Version 4 → 5 (Paket 3.4, ADR 0018): Teilnehmer bekommen Space-Bezug, Namensschlüssel, Anlagezeit und
+         * Widerruf. Eindeutig ist der Name pro Space über `(space_id, name_key)`. Der Space bekommt die Felder der
+         * Einladung und den festen Port. Alles additiv. Bestehende Teilnehmer stammen nur aus dem Debug-Einstieg und
+         * bekommen einen Platzhalter-Schlüssel, der keinem Namen entspricht.
+         */
+        val MIGRATION_4_5: Migration =
+            object : Migration(4, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `participant` ADD COLUMN `space_id` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `participant` ADD COLUMN `name_key` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `participant` ADD COLUMN `created_at` INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE `participant` ADD COLUMN `revoked_at` INTEGER")
+                    db.execSQL("UPDATE `participant` SET `name_key` = '#legacy:' || `id`")
+                    db.execSQL(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS `index_participant_space_id_name_key` " +
+                            "ON `participant` (`space_id`, `name_key`)",
+                    )
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_hash` TEXT")
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_created_at` INTEGER")
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_rotated_at` INTEGER")
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `port` INTEGER")
+                }
             }
 
         /**
@@ -344,7 +434,7 @@ abstract class SpacesDatabase : RoomDatabase() {
             spacesDir.mkdirs()
             return Room
                 .databaseBuilder(IndexLocationContext(context, spacesDir), SpacesDatabase::class.java, FILE_NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
         }
     }

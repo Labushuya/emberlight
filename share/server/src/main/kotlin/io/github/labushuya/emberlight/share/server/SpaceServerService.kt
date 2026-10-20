@@ -168,11 +168,18 @@ class SpaceServerService : Service() {
             }
             serverSetupProvider()?.let { return it }
             val record = runs.findActive()?.takeIf { it.id == spaceId } ?: return null
-            return record.toServerSetup()
+            return record.toServerSetup(port = runs.portOf(spaceId))
         }
 
         override suspend fun activeSpan(): ActiveSpan? =
             runs.findActive()?.let { ActiveSpan(it.id, it.startedAt, it.expiresAt) }
+
+        override suspend fun savePort(
+            spaceId: SpaceId,
+            port: Int,
+        ) {
+            runs.savePort(spaceId, port)
+        }
 
         override fun batteryExempt(): Boolean = batteryExemptFactory(this@SpaceServerService)
 
@@ -181,7 +188,8 @@ class SpaceServerService : Service() {
             closure: SpaceClosure,
         ): OpenedServer {
             val runtime = SpaceRuntime.open(applicationContext, setup)
-            return OpenedServer(serverFactory(runtime, setup, closure), release = {})
+            ActiveSpaces.publish(runtime.access)
+            return OpenedServer(serverFactory(runtime, setup, closure), release = { ActiveSpaces.clear(setup.spaceId) })
         }
 
         override fun currentWifi(): WifiAddress? = networkProvider.currentAddress()
@@ -277,7 +285,7 @@ class SpaceServerService : Service() {
     }
 
     /** Einrichtung eines gespeicherten, aktiven Space für den Server. */
-    private fun SpaceRecord.toServerSetup(): ServerSetup =
+    private fun SpaceRecord.toServerSetup(port: Int?): ServerSetup =
         ServerSetup(
             spaceId = id,
             spaceName = settings.name,
@@ -285,6 +293,7 @@ class SpaceServerService : Service() {
             startedAtMillis = startedAt,
             expiresAtMillis = expiresAt,
             persisted = true,
+            port = port,
         )
 
     /**
@@ -531,9 +540,13 @@ class SpaceServerService : Service() {
         internal var serverFactory: (SpaceRuntime, ServerSetup, SpaceClosure) -> LocalServer =
             { runtime, setup, closure ->
                 val gates = ServerGates()
+                val space = spaceRoutes(runtime.access, gates)
                 KtorLocalServer(
-                    routes = spaceRoutes(runtime.spaceVault, setup.spaceName, gates),
-                    authorizer = runtime.authorizer,
+                    routes = {
+                        guestSite(runtime.guestAssets)
+                        space()
+                    },
+                    authorizer = runtime.access.live,
                     requestLog = { line -> if (setup.debugLogging) Log.i(TAG, line) },
                     gates = gates,
                     closure = closure,

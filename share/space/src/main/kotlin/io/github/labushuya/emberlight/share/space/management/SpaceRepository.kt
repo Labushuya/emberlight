@@ -177,7 +177,16 @@ class SpaceRepository(
                 createdAt = createdAt ?: now,
                 updatedAt = now,
             )
-        dao.upsert(row)
+        // Einladung und Port gehören nicht zum Formular. Ein Speichern darf sie nicht löschen (Paket 3.4).
+        val previous = dao.find(id.value)
+        dao.upsert(
+            row.copy(
+                inviteHash = previous?.inviteHash,
+                inviteCreatedAt = previous?.inviteCreatedAt,
+                inviteRotatedAt = previous?.inviteRotatedAt,
+                port = previous?.port,
+            ),
+        )
         // Nach dem Speichern bleibt nur das Titelbild, das der Space nun verweist. Ein ersetztes Bild verschwindet.
         covers.retainOnly(id, setOfNotNull(coverSha256))
         return SaveResult.Saved(row.toRecord())

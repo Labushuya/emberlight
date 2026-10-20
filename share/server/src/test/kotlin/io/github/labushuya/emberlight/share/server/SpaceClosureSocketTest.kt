@@ -1,5 +1,8 @@
 package io.github.labushuya.emberlight.share.server
 
+import io.github.labushuya.emberlight.share.space.ParticipantId
+import io.github.labushuya.emberlight.share.space.Principal
+import io.github.labushuya.emberlight.share.space.Role
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -16,10 +19,10 @@ class SpaceClosureSocketTest {
     fun aClosedSpaceAnswersGoneWithoutAnyKeyAndReportsTheRequest() =
         runBlocking {
             val closure = FixedClosure(closed = true)
-            val server = KtorLocalServer(routes = {}, closure = closure)
+            val server = KtorLocalServer(routes = {}, authorizer = allowAll, closure = closure)
             val port = server.start(ServerConfig(subnet = localSubnet))
 
-            val response = RawHttp.get(port, "/health", "Host" to "127.0.0.1:$port")
+            val response = RawHttp.get(port, "/health", "Host" to "127.0.0.1:$port", "Authorization" to "Bearer abc")
 
             assertEquals(410, response.status)
             assertEquals("""{"error":"space_closed"}""", response.body)
@@ -54,6 +57,9 @@ class SpaceClosureSocketTest {
             assertEquals(0, closure.reported.get())
             server.stop()
         }
+
+    // Nach 3.4 kommt die Zugriffsprüfung vor dem Ablauf (ADR 0018, Reihenfolge). Ohne gültigen Schlüssel also 401.
+    private val allowAll = RequestAuthorizer { Principal(ParticipantId.generate(), Role.GUEST) }
 
     private class FixedClosure(
         private val closed: Boolean,

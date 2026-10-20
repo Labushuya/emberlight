@@ -147,6 +147,12 @@ internal interface RunHost {
         event: PauseEvent,
     )
 
+    /** Merkt den gebundenen Port am Space, damit er beim nächsten Start gilt (Paket 3.4). */
+    suspend fun savePort(
+        spaceId: SpaceId,
+        port: Int,
+    ) {}
+
     fun onEvent(event: RunEvent)
 
     /** Aktualisiert die Dauermeldung des laufenden Space (z. B. „noch 2 Std.“). */
@@ -183,6 +189,9 @@ internal class SpaceRunner(
     private val pauses = PauseDetector()
     private var phase: Phase = Phase.Idle
     private var jobs: Jobs? = null
+
+    /** Der feste Port war belegt, der Space läuft auf einer neuen Adresse (Paket 3.4). */
+    private var addressChanged = false
 
     /** Der letzte Stand des laufenden, dauerhaften Space. Er wird bei jedem Herzschlag in [beats] festgehalten. */
     private var runBeat: RunBeat? = null
@@ -266,14 +275,13 @@ internal class SpaceRunner(
         val prior = if (command.resume) beats.load()?.takeIf { it.spaceId == setup.spaceId } else null
         val port =
             try {
-                // Eine Wiederaufnahme nimmt den Port von vorher, damit die Adresse für die Gäste gleich bleibt.
+                // Der feste Port des Space gilt bei jedem Start (ADR 0017, Paket 3.4). Eine Wiederaufnahme nimmt den Port von
+                // vorher, damit die Adresse für die Gäste gleich bleibt. Ist der Port belegt, nimmt der Server einen freien.
+                val preferred = prior?.port ?: setup.port ?: command.port
                 val bound =
-                    if (command.resume) {
-                        bind(opened.server, wifi, prior?.port ?: command.port, setup)
-                            ?: throw IllegalStateException("Bindung verweigert.")
-                    } else {
-                        opened.server.start(serverConfig(command.port, wifi, setup))
-                    }
+                    bind(opened.server, wifi, preferred, setup) ?: throw IllegalStateException("Bindung verweigert.")
+                addressChanged = setup.port != null && bound != setup.port
+                if (setup.persisted && bound != setup.port) host.savePort(setup.spaceId, bound)
                 host.acquireLocks()
                 bound
             } catch (failure: Exception) {
@@ -567,6 +575,7 @@ internal class SpaceRunner(
             address = address,
             startedAtMillis = startedAtMillis,
             expiresAtMillis = setup.expiresAtMillis,
+            addressChanged = addressChanged,
         )
 
     /** Bindet an die Adresse. Gelingt der alte Port nicht, nimmt der Server einen freien. Liefert `null` bei Misserfolg. */
