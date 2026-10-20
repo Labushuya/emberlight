@@ -64,6 +64,7 @@ class UploadSocketTest {
                 spaceId,
                 limits,
                 StorageProbe { Long.MAX_VALUE / 4 },
+                InviteSecretCipherFake(),
             )
         runBlocking { vault.registerParticipant(guest.participantId, "Gast", Role.GUEST, "0".repeat(64)) }
         access = testAccess(vault, spaceId, listOf(Credential(Secrets.hashHex(token), guest.participantId, guest.role)))

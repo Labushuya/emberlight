@@ -9,6 +9,8 @@ import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
+import io.github.labushuya.emberlight.share.space.participants.AndroidKeyStoreInviteSecretCipher
+import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
 import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
 import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +29,8 @@ class SpaceHostActions
     @Inject
     constructor(
         @ApplicationContext private val context: Context,
+        private val database: SpacesDatabase,
+        private val inviteCipher: InviteSecretCipher,
     ) {
         private val changes = MutableStateFlow(0)
 
@@ -47,7 +51,8 @@ class SpaceHostActions
             val outcome =
                 running?.removeGuest(participant, deleteUploads)
                     ?: vaultFor(spaceId).removeParticipant(participant, deleteUploads)
-            changes.value += 1
+            // Nur eine tatsächliche Entfernung ändert den Bestand. Abgelehnte Versuche laden die Anzeige nicht neu.
+            if (outcome == RemoveOutcome.Removed) changes.value += 1
             return outcome
         }
 
@@ -67,10 +72,11 @@ class SpaceHostActions
         private fun vaultFor(spaceId: SpaceId): SpaceVault =
             runningFor(spaceId)?.vault
                 ?: SpaceVault.open(
-                    SpacesDatabase.shared(context),
+                    database,
                     SpacesDatabase.spacesDirectory(context),
                     spaceId,
                     SpaceLimits(),
                     StorageProbe { 0L },
+                    inviteCipher,
                 )
     }

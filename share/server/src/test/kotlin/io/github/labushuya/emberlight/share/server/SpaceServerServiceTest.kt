@@ -46,6 +46,7 @@ class SpaceServerServiceTest {
     private val originalForeground = SpaceServerService.foregroundStarter
     private val originalBeats = SpaceServerService.beatStoreFactory
     private val originalBattery = SpaceServerService.batteryExemptFactory
+    private val originalCipher = SpaceServerService.inviteCipherFactory
     private var controller: ServiceController<SpaceServerService>? = null
 
     @Before
@@ -56,6 +57,7 @@ class SpaceServerServiceTest {
             .grantPermissions(LOCAL_NETWORK_PERMISSION)
         SpaceServerService.serverSetupProvider =
             { ServerSetup(spaceId = spaceId, spaceName = "Test", debugLogging = false) }
+        SpaceServerService.inviteCipherFactory = { InviteSecretCipherFake() }
         SpaceServerService.serverFactory = { _, _, _ ->
             serverStarts++
             FakeLocalServer()
@@ -75,6 +77,7 @@ class SpaceServerServiceTest {
         }
         SpaceServerService.serverSetupProvider = originalSetup
         SpaceServerService.serverFactory = originalServer
+        SpaceServerService.inviteCipherFactory = originalCipher
         SpaceServerService.networkFactory = originalNetwork
         SpaceServerService.locksFactory = originalLocks
         SpaceServerService.foregroundStarter = originalForeground

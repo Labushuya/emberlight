@@ -139,6 +139,16 @@ class GuestSiteTest {
     }
 
     @Test
+    fun thePreviewUsesOnlyTheHexPaletteColorAndTheTextOfTheName() {
+        val script = File(assetDir, "guest.js").readText()
+        assertTrue(script.contains("/api/v1/join/preview"))
+        // Die Farbe kommt nur als Hex-Wert durch die Prüfung, nie als freier CSS-Wert (ADR 0018).
+        assertTrue(script.contains("ACCENT_PATTERN = /^#[0-9A-Fa-f]{6}$/"))
+        assertTrue(script.contains("el.preview.textContent = text(\"previewJoin\""))
+        assertFalse(script.contains("el.preview.innerHTML"))
+    }
+
+    @Test
     fun everyTranslatedKeyUsedInTheStartPageExistsInBothLanguages() {
         val html = File(assetDir, "index.html").readText()
         val used = Regex("data-i18n=\"([^\"]+)\"").findAll(html).map { it.groupValues[1] }.toSet()

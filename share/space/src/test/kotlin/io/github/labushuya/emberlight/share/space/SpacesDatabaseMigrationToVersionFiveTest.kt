@@ -3,6 +3,7 @@ package io.github.labushuya.emberlight.share.space
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
+import io.github.labushuya.emberlight.share.space.participants.FakeInviteSecretCipher
 import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
 import io.github.labushuya.emberlight.share.space.participants.Secrets
 import kotlinx.coroutines.runBlocking
@@ -73,8 +74,9 @@ class SpacesDatabaseMigrationToVersionFiveTest {
                         Long.MAX_VALUE /
                             4
                     },
+                    FakeInviteSecretCipher(),
                 )
-            val secret = vault.ensureInvite(null)
+            val secret = vault.ensureInvite().secret
             val outcome = vault.join(secret, "Neu")
             assertTrue("Erwartet Joined, war $outcome", outcome is JoinOutcome.Joined)
             assertTrue(Secrets.isWellFormed(secret))

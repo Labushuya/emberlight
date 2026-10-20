@@ -293,3 +293,8 @@ Die Entscheidung `START_NOT_STICKY` aus diesem ADR ist ersetzt. Der Dienst läuf
 - **Gäste-Seite**: Die statischen Dateien unter `/` sind die einzigen Pfade ohne Zugriffsprüfung. Sie tragen die CSP aus ADR 0018, Entscheidung 15.
 - **lingering close**: Jede frühe Ablehnung läuft über `refuseEarly`. Die Antwort trägt `Connection: close`. Danach wird der Körper bis 64 MiB oder 2 s verworfen. Die Grenze von 1 MiB aus dem Entwurf ist verworfen, weil die Statuszeile damit auf dem Windows-Loopback verloren ging. Die Gegenprobe ohne Verwerfen belegt die Ursache. Der Widerspruch „64 MiB in 0,14 s“ gegen „Stau ab ca. 1 MiB“ ist in [ADR 0018](0018-einladung-und-beitritt.md), Messung, aufgelöst.
 - **Version**: `SERVER_API_VERSION` bleibt 1. Die neuen Routen sind vor dem ersten Release mit Routen, daher keine Erhöhung.
+
+## Nachtrag (Paket 3.4b): Vorschau vor dem Beitritt
+
+- `POST /api/v1/join/preview` mit JSON-Körper `{"inviteSecret": "…"}`. Antwort `200` mit `{"spaceName", "accentColor"}`, `accentColor` ist ein Hex-Wert aus der festen Palette. Ohne gültiges Geheimnis `403 invite_invalid`. Fehlversuche zählen im selben Drosselungszähler wie der Beitritt. Körpergrenze, Content-Type-Prüfung und Torwache gelten wie beim Beitritt. Begründung und Abweichung zu ADR 0018, Entscheidung 19.
+- Die Pfade `join` und `join/preview` teilen die Ausnahme von der Zugriffsprüfung (`isInviteRequest`). Der Ablauf (`410`) gilt für beide.

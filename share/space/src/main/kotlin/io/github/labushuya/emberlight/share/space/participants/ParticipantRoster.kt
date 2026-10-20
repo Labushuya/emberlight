@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import io.github.labushuya.emberlight.share.space.ParticipantEntity
 import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.Role
+import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 
@@ -52,12 +53,22 @@ data class ParticipantInfo(
 )
 
 /**
+ * Einladung für den QR-Code. [renewed] ist `true`, wenn eine bestehende Einladung nicht mehr wiederherstellbar war und
+ * deshalb eine neue entstanden ist. Der Gastgeber muss dann den neuen QR-Code teilen (ADR 0018).
+ */
+data class InviteState(
+    val secret: String,
+    val renewed: Boolean,
+)
+
+/**
  * Teilnehmer und Einladung eines Space (ADR 0018). Die Datenbank ist der Maßstab. Schreibvorgänge laufen über den
  * Commit-Lock der Vault, daher ist die Reihenfolge der Änderungen festgelegt. Ohne Dateizugriff: Medien entfernt die Vault.
  */
 class ParticipantRoster internal constructor(
     private val database: SpacesDatabase,
     private val spaceId: SpaceId,
+    private val inviteCipher: InviteSecretCipher,
     private val nowMillis: () -> Long,
 ) {
     private val dao = database.participants()
@@ -93,48 +104,76 @@ class ParticipantRoster internal constructor(
         }
 
     /**
-     * Einladung bereitstellen. Gehört [known] zum gespeicherten Hash, bleibt sie. Sonst wird eine neue erzeugt und der
-     * Hash ersetzt die alte Einladung (alte QR-Codes sind dann ungültig).
+     * Einladung bereitstellen (ADR 0018). Ist ein Geheimnis gespeichert, das zum Hash passt, bleibt die Einladung und
+     * derselbe QR-Code gilt auch nach einem Prozess-Neustart. Fehlt der Schlüssel oder ist das Geheimnis verändert, entsteht
+     * eine neue Einladung und [InviteState.renewed] ist `true`. Ohne gespeicherte Einladung entsteht sie ohne Hinweis.
      */
-    suspend fun ensureInvite(known: String?): String {
-        val stored = database.spaces().find(spaceId.value)?.inviteHash
-        if (known != null && stored != null && Secrets.hashesEqual(Secrets.hashHex(known), stored)) return known
-        val fresh = Secrets.generate()
+    suspend fun ensureInvite(): InviteState {
+        val space = database.spaces().find(spaceId.value)
+        val storedHash = space?.inviteHash
+        if (space == null || storedHash == null) {
+            return InviteState(issueInvite(createdAt = nowMillis(), rotatedAt = null), renewed = false)
+        }
+        recoverSecret(space, storedHash)?.let { return InviteState(it, renewed = false) }
         val now = nowMillis()
+        return InviteState(issueInvite(createdAt = now, rotatedAt = now), renewed = true)
+    }
+
+    /** Erneuert die Einladung. Alte QR-Codes sind danach ungültig, Beigetretene bleiben. */
+    suspend fun rotateInvite(): String {
+        val now = nowMillis()
+        val createdAt = database.spaces().find(spaceId.value)?.inviteCreatedAt ?: now
+        return issueInvite(createdAt = createdAt, rotatedAt = now)
+    }
+
+    /** Erzeugt ein neues Geheimnis, speichert Hash und verschlüsseltes Geheimnis und gibt den Klartext zurück. */
+    private suspend fun issueInvite(
+        createdAt: Long,
+        rotatedAt: Long?,
+    ): String {
+        val fresh = Secrets.generate()
+        val sealed = inviteCipher.seal(fresh)
         database.spaces().setInvite(
             id = spaceId.value,
             hash = Secrets.hashHex(fresh),
-            createdAt = now,
-            rotatedAt = if (stored == null) null else now,
+            createdAt = createdAt,
+            rotatedAt = rotatedAt,
+            ciphertext = sealed.ciphertext,
+            iv = sealed.iv,
         )
         return fresh
     }
 
-    /** Erneuert die Einladung. Beigetretene Teilnehmer bleiben. */
-    suspend fun rotateInvite(): String {
-        val fresh = Secrets.generate()
-        val now = nowMillis()
-        val current = database.spaces().find(spaceId.value)
-        database.spaces().setInvite(
-            id = spaceId.value,
-            hash = Secrets.hashHex(fresh),
-            createdAt = current?.inviteCreatedAt ?: now,
-            rotatedAt = now,
-        )
-        return fresh
+    /**
+     * Stellt das gespeicherte Geheimnis wieder her. `null` bei fehlendem Ciphertext, unlesbarem Schlüssel oder einem
+     * Geheimnis, das nicht zum gespeicherten Hash passt.
+     */
+    private fun recoverSecret(
+        space: SpaceEntity,
+        storedHash: String,
+    ): String? {
+        val ciphertext = space.inviteCiphertext ?: return null
+        val iv = space.inviteIv ?: return null
+        val secret =
+            try {
+                inviteCipher.open(SealedInvite(ciphertext, iv))
+            } catch (_: InviteSecretUnreadableException) {
+                return null
+            }
+        return secret.takeIf { Secrets.isWellFormed(it) && Secrets.hashesEqual(Secrets.hashHex(it), storedHash) }
+    }
+
+    /** Prüft ein Einladungsgeheimnis, ohne etwas zu ändern. Grundlage für Beitritt und Vorschau (ADR 0018). */
+    suspend fun inviteMatches(inviteSecret: String): Boolean {
+        val stored = database.spaces().find(spaceId.value)?.inviteHash ?: return false
+        return Secrets.isWellFormed(inviteSecret) && Secrets.hashesEqual(Secrets.hashHex(inviteSecret), stored)
     }
 
     suspend fun join(
         inviteSecret: String,
         rawName: String,
     ): JoinOutcome {
-        val space = database.spaces().find(spaceId.value)
-        val stored = space?.inviteHash
-        val inviteOk =
-            Secrets.isWellFormed(inviteSecret) &&
-                stored != null &&
-                Secrets.hashesEqual(Secrets.hashHex(inviteSecret), stored)
-        if (!inviteOk) return JoinOutcome.InviteInvalid
+        if (!inviteMatches(inviteSecret)) return JoinOutcome.InviteInvalid
         val name =
             when (val result = ParticipantName.normalize(rawName)) {
                 is ParticipantName.Result.Invalid -> return JoinOutcome.NameInvalid(result.reason)

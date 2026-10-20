@@ -217,3 +217,8 @@ Der Testkatalog für die Nutzerin bzw. den Nutzer steht in der PR-Beschreibung. 
 - **Fester Port pro Space**: Der Port wird beim ersten Start gewählt und in `space.port` gespeichert. Jeder spätere Start, auch nach einer Pause oder einem Prozess-Neustart, versucht diesen Port zuerst. Ist er belegt, wählt der Server einen freien Port. Der Betrieb speichert den neuen Port und meldet die Adressänderung (`RunState.Running.addressChanged`). Die Oberfläche zeigt dann „Neue Adresse. Gäste brauchen den neuen QR-Code.“.
 - **Einladung im Betrieb**: Die Einladung bleibt über Pausen im selben Prozess gleich. Nach einem Prozess-Neustart entsteht eine neue Einladung, weil nur ihr Hash gespeichert ist (ADR 0018, Abweichungen). Die Gäste bleiben angemeldet.
 - **Ablauf nach der Authentifizierung**: Ein abgelaufener Space antwortet ohne gültigen Schlüssel mit `401`, mit gültigem Schlüssel mit `410` (ADR 0018, Abweichungen). Diese Reihenfolge gilt seit 3.4.
+
+## Nachtrag (Paket 3.4b): R8-Prüfung auf Methoden, keine Keep-Regel
+
+- Die Keep-Regel für `KtorLocalServer` aus Paket 3.4 ist entfernt. R8 hatte die Klasse nicht entfernt, sondern zusammengelegt. Ihr Code steht im Mapping als Inline-Frame und in der dex (`api/v1/join`, `invite_invalid`). Die Prüfung `checkReleaseServerPipeline` sucht deshalb Methoden der Pipeline (Member oder Inline-Frame mit Besitzer) und nicht nur Klassenzeilen. Belege und Begründung in ADR 0018, Abweichungen.
+- Die Aussage „keine Keep-Regeln für den Serverpfad“ bleibt gültig.

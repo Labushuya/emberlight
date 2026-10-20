@@ -220,6 +220,7 @@ internal fun SpaceRunningContent(
                         link = link,
                         addressChanged = state.addressChanged,
                         onRotate = onRotateRequest,
+                        inviteRenewed = state.inviteRenewed,
                     )
                 } else {
                     Text(

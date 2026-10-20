@@ -49,7 +49,17 @@ class LingeringCloseSocketTest {
     fun start() {
         spacesDir = folder.newFolder("spaces")
         database = SpacesDatabase.open(ApplicationProvider.getApplicationContext<Context>(), spacesDir)
-        val vault = SpaceVault.open(database, spacesDir, spaceId, LIMITS, StorageProbe { Long.MAX_VALUE / 4 })
+        val vault =
+            SpaceVault.open(
+                database,
+                spacesDir,
+                spaceId,
+                LIMITS,
+                StorageProbe {
+                    Long.MAX_VALUE / 4
+                },
+                InviteSecretCipherFake(),
+            )
         runBlocking { vault.registerParticipant(guestId, "Gast", Role.GUEST, Secrets.hashHex(guestToken)) }
         access =
             testAccess(

@@ -321,6 +321,7 @@
     <string name="space_invite_rotate_text">The current QR code and link stop working. Guests who have already joined stay in the space.</string>
     <string name="space_invite_rotate_confirm">Renew</string>
     <string name="space_invite_address_changed">New address. Guests need the new QR code.</string>
+    <string name="space_invite_renewed">Invitation was renewed. Please share the new QR code.</string>
     <string name="space_participants_title">Participants (%1$d)</string>
     <string name="space_participant_host">Host</string>
     <string name="space_participant_remove">Remove</string>

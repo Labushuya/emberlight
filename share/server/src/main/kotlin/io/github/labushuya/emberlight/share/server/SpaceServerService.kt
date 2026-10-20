@@ -26,6 +26,8 @@ import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
+import io.github.labushuya.emberlight.share.space.participants.AndroidKeyStoreInviteSecretCipher
+import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
 import io.github.labushuya.emberlight.share.space.run.ActiveSpan
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
 import io.github.labushuya.emberlight.share.space.run.PrefsRunBeatStore
@@ -187,9 +189,13 @@ class SpaceServerService : Service() {
             setup: ServerSetup,
             closure: SpaceClosure,
         ): OpenedServer {
-            val runtime = SpaceRuntime.open(applicationContext, setup)
+            val runtime = SpaceRuntime.open(applicationContext, setup, inviteCipherFactory())
             ActiveSpaces.publish(runtime.access)
-            return OpenedServer(serverFactory(runtime, setup, closure), release = { ActiveSpaces.clear(setup.spaceId) })
+            return OpenedServer(
+                serverFactory(runtime, setup, closure),
+                release = { ActiveSpaces.clear(setup.spaceId) },
+                inviteRenewed = runtime.access.inviteRenewed,
+            )
         }
 
         override fun currentWifi(): WifiAddress? = networkProvider.currentAddress()
@@ -289,6 +295,7 @@ class SpaceServerService : Service() {
         ServerSetup(
             spaceId = id,
             spaceName = settings.name,
+            colorIndex = settings.colorIndex,
             limits = SpaceLimits(storageLimitBytes = settings.storageLimitBytes),
             startedAtMillis = startedAt,
             expiresAtMillis = expiresAt,
@@ -535,6 +542,9 @@ class SpaceServerService : Service() {
          */
         @Volatile
         var serverSetupProvider: () -> ServerSetup? = { null }
+
+        // Verschlüsselung des Einladungsgeheimnisses (ADR 0018). Tests setzen ein Fake, weil Robolectric keinen Keystore hat.
+        internal var inviteCipherFactory: () -> InviteSecretCipher = { AndroidKeyStoreInviteSecretCipher() }
 
         /** Test-Nähte. Produktion nutzt die Standardwerte. */
         internal var serverFactory: (SpaceRuntime, ServerSetup, SpaceClosure) -> LocalServer =

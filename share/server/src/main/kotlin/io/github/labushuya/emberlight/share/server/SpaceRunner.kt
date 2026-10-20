@@ -166,6 +166,8 @@ internal interface RunHost {
 internal class OpenedServer(
     val server: LocalServer,
     val release: () -> Unit,
+    /** `true`, wenn die Einladung nach einem Neustart neu entstand (Paket 3.4, ADR 0018). */
+    val inviteRenewed: Boolean = false,
 )
 
 /**
@@ -192,6 +194,9 @@ internal class SpaceRunner(
 
     /** Der feste Port war belegt, der Space läuft auf einer neuen Adresse (Paket 3.4). */
     private var addressChanged = false
+
+    /** Die Einladung entstand neu, weil das gespeicherte Geheimnis nicht lesbar war (ADR 0018). */
+    private var inviteRenewed = false
 
     /** Der letzte Stand des laufenden, dauerhaften Space. Er wird bei jedem Herzschlag in [beats] festgehalten. */
     private var runBeat: RunBeat? = null
@@ -271,6 +276,7 @@ internal class SpaceRunner(
                 fail(setup, RunEvent.StartFailed, revert = revert)
                 return
             }
+        inviteRenewed = opened.inviteRenewed
         val nowElapsed = clock.elapsedMillis()
         val prior = if (command.resume) beats.load()?.takeIf { it.spaceId == setup.spaceId } else null
         val port =
@@ -576,6 +582,7 @@ internal class SpaceRunner(
             startedAtMillis = startedAtMillis,
             expiresAtMillis = setup.expiresAtMillis,
             addressChanged = addressChanged,
+            inviteRenewed = inviteRenewed,
         )
 
     /** Bindet an die Adresse. Gelingt der alte Port nicht, nimmt der Server einen freien. Liefert `null` bei Misserfolg. */

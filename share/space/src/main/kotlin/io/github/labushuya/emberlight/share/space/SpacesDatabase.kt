@@ -217,6 +217,13 @@ data class SpaceEntity(
     @ColumnInfo(name = "invite_rotated_at") val inviteRotatedAt: Long? = null,
     /** Fester Port des Space, beim ersten Start gewählt (ADR 0017, Paket 3.4). `null` vor dem ersten Start. */
     @ColumnInfo(name = "port") val port: Int? = null,
+    /**
+     * Einladungsgeheimnis, AES-256-GCM mit einem Schlüssel im AndroidKeyStore (Paket 3.4, ADR 0018). Der Hash in
+     * [inviteHash] bleibt für die Prüfung beim Beitritt. `null`, wenn das Geheimnis nicht gespeichert ist.
+     */
+    @ColumnInfo(name = "invite_ciphertext") val inviteCiphertext: ByteArray? = null,
+    /** Initialisierungsvektor zu [inviteCiphertext] (Paket 3.4, ADR 0018). */
+    @ColumnInfo(name = "invite_iv") val inviteIv: ByteArray? = null,
 )
 
 /**
@@ -285,16 +292,21 @@ interface SpaceDao {
     @Query("DELETE FROM media WHERE space_id = :spaceId")
     suspend fun deleteMediaOf(spaceId: String): Int
 
-    /** Einladung setzen: nur der Hash, die Zeitstempel. Bei einer Erneuerung bleibt [rotatedAt] gesetzt. */
+    /**
+     * Einladung setzen: Hash, verschlüsseltes Geheimnis mit IV und die Zeitstempel. Bei einer Erneuerung bleibt
+     * [rotatedAt] gesetzt. Alte Einladungen sind damit vollständig ersetzt.
+     */
     @Query(
-        "UPDATE space SET invite_hash = :hash, invite_created_at = :createdAt, invite_rotated_at = :rotatedAt " +
-            "WHERE id = :id",
+        "UPDATE space SET invite_hash = :hash, invite_created_at = :createdAt, invite_rotated_at = :rotatedAt, " +
+            "invite_ciphertext = :ciphertext, invite_iv = :iv WHERE id = :id",
     )
     suspend fun setInvite(
         id: String,
         hash: String,
         createdAt: Long,
         rotatedAt: Long?,
+        ciphertext: ByteArray,
+        iv: ByteArray,
     ): Int
 
     @Query("UPDATE space SET port = :port WHERE id = :id")
@@ -310,7 +322,7 @@ interface SpaceDao {
  */
 @Database(
     entities = [MediaEntity::class, ParticipantEntity::class, SpaceEntity::class, PauseEventEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class SpacesDatabase : RoomDatabase() {
@@ -368,6 +380,19 @@ abstract class SpacesDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_created_at` INTEGER")
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_rotated_at` INTEGER")
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `port` INTEGER")
+                }
+            }
+
+        /**
+         * Version 5 → 6 (Paket 3.4, ADR 0018): verschlüsseltes Einladungsgeheimnis (Ciphertext und IV) an `space`. Additiv.
+         * Bestehende Spaces haben `NULL`. Ihre Einladung lässt sich nicht wiederherstellen, der Beitritt erzeugt dann eine
+         * neue, und der Gastgeber wird darauf hingewiesen.
+         */
+        val MIGRATION_5_6: Migration =
+            object : Migration(5, 6) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_ciphertext` BLOB")
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_iv` BLOB")
                 }
             }
 
@@ -434,7 +459,7 @@ abstract class SpacesDatabase : RoomDatabase() {
             spacesDir.mkdirs()
             return Room
                 .databaseBuilder(IndexLocationContext(context, spacesDir), SpacesDatabase::class.java, FILE_NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
         }
     }

@@ -5,6 +5,8 @@ import io.github.labushuya.emberlight.share.space.location.LocationScrubResult
 import io.github.labushuya.emberlight.share.space.location.LocationScrubber
 import io.github.labushuya.emberlight.share.space.location.NotRemovableReason
 import io.github.labushuya.emberlight.share.space.participants.Credential
+import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
+import io.github.labushuya.emberlight.share.space.participants.InviteState
 import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
 import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
 import io.github.labushuya.emberlight.share.space.participants.ParticipantName
@@ -157,11 +159,12 @@ class SpaceVault internal constructor(
     private val storage: SpaceStorage,
     private val limits: SpaceLimits,
     private val probe: StorageProbe,
+    private val inviteCipher: InviteSecretCipher,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     private val media = database.media()
     private val participants = database.participants()
-    private val roster = ParticipantRoster(database, storage.spaceId, nowMillis)
+    private val roster = ParticipantRoster(database, storage.spaceId, inviteCipher, nowMillis)
     private val commitLock = Mutex()
 
     /**
@@ -339,8 +342,11 @@ class SpaceVault internal constructor(
     suspend fun ensureHost(tokenSha256Hex: String): ParticipantId =
         commitLock.withLock { roster.ensureHost(tokenSha256Hex) }
 
-    /** Einladung bereitstellen: [known] bleibt, wenn es zum gespeicherten Hash passt, sonst entsteht eine neue. */
-    suspend fun ensureInvite(known: String?): String = commitLock.withLock { roster.ensureInvite(known) }
+    /** Einladung bereitstellen. Nach einem Neustart bleibt der QR-Code, sofern das Geheimnis lesbar ist (ADR 0018). */
+    suspend fun ensureInvite(): InviteState = commitLock.withLock { roster.ensureInvite() }
+
+    /** Prüft ein Einladungsgeheimnis ohne Änderung, für die Vorschau vor dem Beitritt (ADR 0018). */
+    suspend fun inviteMatches(inviteSecret: String): Boolean = roster.inviteMatches(inviteSecret)
 
     /** Erneuert die Einladung. Alte QR-Codes sind danach ungültig, Beigetretene bleiben (ADR 0018). */
     suspend fun rotateInvite(): String = commitLock.withLock { roster.rotateInvite() }
@@ -586,7 +592,8 @@ class SpaceVault internal constructor(
             spaceId: SpaceId,
             limits: SpaceLimits,
             probe: StorageProbe,
-        ): SpaceVault = SpaceVault(database, SpaceStorage(spacesDir, spaceId), limits, probe)
+            inviteCipher: InviteSecretCipher,
+        ): SpaceVault = SpaceVault(database, SpaceStorage(spacesDir, spaceId), limits, probe, inviteCipher)
 
         const val MAX_PAGE = 100
         const val DEFAULT_PAGE = 50

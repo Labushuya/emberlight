@@ -47,6 +47,7 @@ import io.github.labushuya.emberlight.share.space.Role as ParticipantRole
 internal fun InviteSection(
     link: String,
     addressChanged: Boolean,
+    inviteRenewed: Boolean,
     onRotate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -62,6 +63,14 @@ internal fun InviteSection(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.space_invite_address_changed),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (inviteRenewed) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.space_invite_renewed),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
             )

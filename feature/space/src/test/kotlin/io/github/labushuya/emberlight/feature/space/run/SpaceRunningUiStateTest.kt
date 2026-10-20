@@ -84,6 +84,16 @@ class SpaceRunningUiStateTest {
         assertEquals(0, state(status = SpaceStatus.ACTIVE, expiresAt = null, usedBytes = GIB, limit = 0L).usedPercent)
     }
 
+    @Test
+    fun aRenewedInviteIsOnlyFlaggedWhileTheServerRuns() {
+        val renewed = state(SpaceStatus.ACTIVE, expiresAt = NOW + HOUR, runState = running().copy(inviteRenewed = true))
+        val kept = state(SpaceStatus.ACTIVE, expiresAt = NOW + HOUR, runState = running())
+
+        assertTrue(renewed.inviteRenewed)
+        assertFalse(kept.inviteRenewed)
+        assertFalse(state(SpaceStatus.ACTIVE, expiresAt = NOW + HOUR).inviteRenewed)
+    }
+
     private fun running() =
         RunState.Running(
             spaceId = id,

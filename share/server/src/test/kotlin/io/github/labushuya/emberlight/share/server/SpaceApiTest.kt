@@ -77,7 +77,15 @@ class SpaceApiTest {
         spacesDir = folder.newFolder("spaces")
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         database = SpacesDatabase.open(context, spacesDir)
-        vault = SpaceVault.open(database, spacesDir, spaceId, limits, StorageProbe { Long.MAX_VALUE / 4 })
+        vault =
+            SpaceVault.open(
+                database,
+                spacesDir,
+                spaceId,
+                limits,
+                StorageProbe { Long.MAX_VALUE / 4 },
+                InviteSecretCipherFake(),
+            )
         runBlocking {
             vault.registerParticipant(host.participantId, "Gastgeberin", Role.HOST, "0".repeat(64))
             vault.registerParticipant(guest.participantId, "Gast", Role.GUEST, "0".repeat(64))

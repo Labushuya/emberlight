@@ -6,6 +6,7 @@
   "join": "Join",
   "leave": "Leave",
   "joinedAs": "You are in, {name}",
+  "previewJoin": "You are joining ‚{name}‘",
   "joinedNote": "Uploads and downloads will follow in a later version of this page.",
   "nameEmpty": "Please enter a name.",
   "nameTooLong": "The name is too long (24 characters at most).",

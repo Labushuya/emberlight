@@ -9,6 +9,9 @@ import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
+import io.github.labushuya.emberlight.share.space.management.SpaceAccentPalette
+import io.github.labushuya.emberlight.share.space.participants.AndroidKeyStoreInviteSecretCipher
+import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
 import io.github.labushuya.emberlight.share.space.participants.Secrets
 import java.io.File
 
@@ -51,6 +54,8 @@ data class ServerSetup(
     val persisted: Boolean = false,
     /** Fester Port des Space (ADR 0017, Paket 3.4). `null` vor dem ersten Start, dann wählt der Server einen freien. */
     val port: Int? = null,
+    /** Farbe des Space als Index in die feste Palette (Paket 3.4, ADR 0018). */
+    val colorIndex: Int = 0,
 )
 
 /**
@@ -76,11 +81,19 @@ internal class SpaceRuntime private constructor(
         suspend fun open(
             context: Context,
             setup: ServerSetup,
+            inviteCipher: InviteSecretCipher = AndroidKeyStoreInviteSecretCipher(),
         ): SpaceRuntime {
             val spacesDir = SpacesDatabase.spacesDirectory(context)
             val probe = StorageProbe { File(spacesDir, setup.spaceId.value).usableSpace }
             val vault =
-                SpaceVault.open(SpacesDatabase.shared(context), spacesDir, setup.spaceId, setup.limits, probe)
+                SpaceVault.open(
+                    SpacesDatabase.shared(context),
+                    spacesDir,
+                    setup.spaceId,
+                    setup.limits,
+                    probe,
+                    inviteCipher,
+                )
             setup.participants.forEach { seed ->
                 vault.registerParticipant(
                     seed.principal.participantId,
@@ -98,8 +111,7 @@ internal class SpaceRuntime private constructor(
                 } else {
                     Secrets.generate().also { vault.ensureHost(Secrets.hashHex(it)) }
                 }
-            val invite = vault.ensureInvite(InviteMemory.known(setup.spaceId))
-            InviteMemory.remember(setup.spaceId, invite)
+            val invite = vault.ensureInvite()
             val access =
                 SpaceAccess(
                     vault = vault,
@@ -107,7 +119,9 @@ internal class SpaceRuntime private constructor(
                     spaceName = setup.spaceName,
                     live = LiveAuthorizer(vault.credentials()),
                     uploads = ActiveUploads(),
-                    invite = invite,
+                    invite = invite.secret,
+                    inviteRenewed = invite.renewed,
+                    accentColor = SpaceAccentPalette.hexAt(setup.colorIndex),
                     hostToken = hostToken,
                 )
             return SpaceRuntime(access, AssetGuestAssets(context.applicationContext.assets))

@@ -8,6 +8,7 @@ import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
+import io.github.labushuya.emberlight.share.space.management.SpaceAccentPalette
 import io.github.labushuya.emberlight.share.space.participants.ParticipantRoster
 import io.github.labushuya.emberlight.share.space.participants.Secrets
 import io.ktor.client.HttpClient
@@ -66,7 +67,17 @@ class JoinApiTest {
     fun setUp() {
         spacesDir = folder.newFolder("spaces")
         database = SpacesDatabase.open(ApplicationProvider.getApplicationContext<Context>(), spacesDir)
-        val vault = SpaceVault.open(database, spacesDir, spaceId, LIMITS, StorageProbe { Long.MAX_VALUE / 4 })
+        val vault =
+            SpaceVault.open(
+                database,
+                spacesDir,
+                spaceId,
+                LIMITS,
+                StorageProbe {
+                    Long.MAX_VALUE / 4
+                },
+                InviteSecretCipherFake(),
+            )
         val invite =
             runBlocking {
                 database.spaces().upsert(
@@ -85,7 +96,7 @@ class JoinApiTest {
                     ),
                 )
                 vault.ensureHost(Secrets.hashHex(hostToken))
-                vault.ensureInvite(null)
+                vault.ensureInvite().secret
             }
         access =
             SpaceAccess(
@@ -135,6 +146,13 @@ class JoinApiTest {
                     put("displayName", name)
                 }.toString(),
             )
+        }
+
+    private suspend fun HttpClient.preview(secret: String): HttpResponse =
+        post("/api/v1/join/preview") {
+            header(HttpHeaders.Host, "localhost")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("inviteSecret", secret) }.toString())
         }
 
     private suspend fun HttpClient.api(
@@ -396,6 +414,103 @@ class JoinApiTest {
                 }
 
             assertEquals(HttpStatusCode.BadRequest, response.status)
+        }
+
+    @Test
+    fun previewWithTheInviteShowsOnlyTheNameAndTheAccentColor() =
+        testApplication {
+            install()
+
+            val response = client.preview(currentInvite())
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = json(response)
+            assertEquals(setOf("spaceName", "accentColor"), body.keys)
+            assertEquals("Test-Space", body.getValue("spaceName").jsonPrimitive.content)
+            assertTrue(Regex("#[0-9A-F]{6}").matches(body.getValue("accentColor").jsonPrimitive.content))
+        }
+
+    @Test
+    fun previewNeedsNoAuthorizationAndAWrongInviteIsForbidden() =
+        testApplication {
+            install()
+
+            val response = client.preview(Secrets.generate())
+
+            assertEquals(HttpStatusCode.Forbidden, response.status)
+            assertEquals("invite_invalid", json(response).getValue("error").jsonPrimitive.content)
+        }
+
+    @Test
+    fun previewRequiresJsonAndAWellFormedBody() =
+        testApplication {
+            install()
+
+            val plain =
+                client.post("/api/v1/join/preview") {
+                    header(HttpHeaders.Host, "localhost")
+                    contentType(ContentType.Text.Plain)
+                    setBody("""{"inviteSecret":"x"}""")
+                }
+            val malformed =
+                client.post("/api/v1/join/preview") {
+                    header(HttpHeaders.Host, "localhost")
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"nichts":1}""")
+                }
+
+            assertEquals(HttpStatusCode.UnsupportedMediaType, plain.status)
+            assertEquals(HttpStatusCode.BadRequest, malformed.status)
+        }
+
+    @Test
+    fun previewFailuresCountTowardsTheSameLimitAsJoin() =
+        testApplication {
+            install()
+
+            repeat(10) {
+                assertEquals(HttpStatusCode.Forbidden, client.preview(Secrets.generate()).status)
+            }
+
+            assertEquals(HttpStatusCode.TooManyRequests, client.preview(currentInvite()).status)
+            assertEquals(HttpStatusCode.TooManyRequests, client.join(currentInvite(), "Anna").status)
+        }
+
+    @Test
+    fun aSpaceNameWithMarkupComesBackAsPlainJsonTextAndTheAccentStaysInThePalette() =
+        testApplication {
+            val name = "<img src=x onerror=alert(1)> & \"Ü\""
+            val named =
+                SpaceAccess(
+                    vault = access.vault,
+                    spaceId = spaceId,
+                    spaceName = name,
+                    live = access.live,
+                    uploads = ActiveUploads(),
+                    invite = currentInvite(),
+                    hostToken = hostToken,
+                    accentColor = SpaceAccentPalette.hexAt(5),
+                )
+            application {
+                installEmberlightModule(
+                    ServerEnvironment(
+                        authorizer = named.live,
+                        expectedHost = { "localhost" },
+                        senderAllowed = { true },
+                        gates = gates,
+                        requestLog = {},
+                        debugLogging = false,
+                        closure = SpaceClosure.Open,
+                        joinLimiter = limiter,
+                    ),
+                    routes = spaceRoutes(named, gates, UploadTuning(pollMillis = 1)),
+                )
+            }
+
+            val body = json(client.preview(currentInvite()))
+
+            assertEquals(name, body.getValue("spaceName").jsonPrimitive.content)
+            assertEquals("#D9774A", body.getValue("accentColor").jsonPrimitive.content)
         }
 
     private companion object {

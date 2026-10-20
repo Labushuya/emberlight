@@ -50,6 +50,9 @@ data class SpaceRunningUiState(
     /** Die Adresse hat sich geändert, weil der feste Port belegt war (Paket 3.4). */
     val addressChanged: Boolean get() = (runState as? RunState.Running)?.addressChanged == true
 
+    /** Die Einladung entstand neu, weil das gespeicherte Geheimnis nicht lesbar war. Der QR-Code muss neu geteilt werden (ADR 0018). */
+    val inviteRenewed: Boolean get() = (runState as? RunState.Running)?.inviteRenewed == true
+
     /** Speicher in Prozent des Limits, am Ende bei 100. Ohne Limit `0`. */
     val usedPercent: Int
         get() {

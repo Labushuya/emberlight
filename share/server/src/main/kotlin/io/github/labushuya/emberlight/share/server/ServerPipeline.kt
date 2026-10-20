@@ -43,6 +43,9 @@ private const val UNMATCHED_ROUTE = "(keine Route)"
 /** Pfad des Beitritts. Er braucht keine Zugriffsprüfung, aber eine Drosselung (ADR 0018). */
 internal const val JOIN_PATH = "/api/v1/join"
 
+/** Vorschau vor dem Beitritt (Paket 3.4, ADR 0018). Wie der Beitritt: ohne Zugriffsprüfung, mit derselben Drosselung. */
+internal const val JOIN_PREVIEW_PATH = "/api/v1/join/preview"
+
 /** Header, der Browser am MIME-Sniffing hindert (ADR 0013, Downloads). */
 private const val NOSNIFF_HEADER = "X-Content-Type-Options"
 
@@ -127,7 +130,7 @@ internal fun Application.installEmberlightModule(
         }
     }
     intercept(ApplicationCallPipeline.Setup) {
-        if (context.isJoinRequest()) {
+        if (context.isInviteRequest()) {
             val wait = env.joinLimiter.retryAfterSeconds(context.request.origin.remoteAddress)
             if (wait != null) {
                 context.response.headers.append(HttpHeaders.RetryAfter, wait.toString())
@@ -137,7 +140,7 @@ internal fun Application.installEmberlightModule(
         }
     }
     intercept(ApplicationCallPipeline.Setup) {
-        if (!context.isPublicSite() && !context.isJoinRequest()) {
+        if (!context.isPublicSite() && !context.isInviteRequest()) {
             val values =
                 context.request.headers
                     .getAll(HttpHeaders.Authorization)
@@ -193,9 +196,11 @@ internal fun Application.installEmberlightModule(
     }
 }
 
-/** Beitritts-Anfrage? Nur `POST /api/v1/join`. */
-internal fun ApplicationCall.isJoinRequest(): Boolean =
-    request.local.method == HttpMethod.Post && request.path() == JOIN_PATH
+/** Beitritts-Anfrage? `POST /api/v1/join` und die Vorschau `POST /api/v1/join/preview` (ADR 0018). */
+internal fun ApplicationCall.isInviteRequest(): Boolean =
+    request.local.method == HttpMethod.Post && request.path() in INVITE_PATHS
+
+private val INVITE_PATHS = setOf(JOIN_PATH, JOIN_PREVIEW_PATH)
 
 /** Gäste-Seite und ihre Dateien. Ohne Zugriffsprüfung, weil die Dateien keine Daten des Space enthalten (ADR 0018). */
 internal fun ApplicationCall.isPublicSite(): Boolean =

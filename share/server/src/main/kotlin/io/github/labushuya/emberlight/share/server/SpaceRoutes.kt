@@ -62,6 +62,12 @@ private data class JoinRequest(
     val displayName: String,
 )
 
+/** Körper von `POST /api/v1/join/preview`. Das Geheimnis steht nur im Körper (ADR 0018). */
+@Serializable
+private data class PreviewRequest(
+    val inviteSecret: String,
+)
+
 /**
  * Routen der Schnittstelle v1 (ADR 0014, ADR 0018). Alle liegen unter `/api/v1` und hinter der Zugriffskette des Servers.
  * Der Server bedient genau einen Space. Die Pfade enthalten keine Space-ID.
@@ -96,6 +102,11 @@ fun spaceRoutes(
             post("/join") {
                 call.routeTemplate(JOIN_PATH)
                 call.handleJoin(access)
+            }
+
+            post("/join/preview") {
+                call.routeTemplate(JOIN_PREVIEW_PATH)
+                call.handleJoinPreview(access)
             }
 
             get("/me") {
@@ -321,6 +332,47 @@ private suspend fun ApplicationCall.handleJoin(access: SpaceAccess) {
             respondError(HttpStatusCode.Conflict, "space_full")
         }
     }
+}
+
+/**
+ * Vorschau vor dem Beitritt (Paket 3.4, ADR 0018). Name und Farbe gibt es nur mit gültigem Einladungsgeheimnis. Fehlversuche
+ * zählen wie beim Beitritt. Das Titelbild und die Teilnehmer bleiben außen vor.
+ */
+private suspend fun ApplicationCall.handleJoinPreview(access: SpaceAccess) {
+    if (request.contentType().withoutParameters() != ContentType.Application.Json) {
+        refuseEarly(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
+        return
+    }
+    val text = receiveBoundedText(JOIN_MAX_BODY_BYTES)
+    if (text == null) {
+        refuseEarly(
+            HttpStatusCode.PayloadTooLarge,
+            "payload_too_large",
+            mapOf("limit" to JsonPrimitive(JOIN_MAX_BODY_BYTES)),
+        )
+        return
+    }
+    val body =
+        try {
+            json.decodeFromString<PreviewRequest>(text)
+        } catch (malformed: SerializationException) {
+            respondError(HttpStatusCode.BadRequest, "bad_request")
+            return
+        }
+    if (!access.invitePreview(body.inviteSecret)) {
+        attributes.put(JoinFailedKey, true)
+        refuseEarly(HttpStatusCode.Forbidden, "invite_invalid")
+        return
+    }
+    respondJson(
+        HttpStatusCode.OK,
+        JsonObject(
+            mapOf(
+                "spaceName" to JsonPrimitive(access.spaceName),
+                "accentColor" to JsonPrimitive(access.accentColor),
+            ),
+        ),
+    )
 }
 
 /** Liest den Körper bis [limit] Bytes. Liefert `null`, wenn er größer ist (ohne ihn ganz zu lesen). */

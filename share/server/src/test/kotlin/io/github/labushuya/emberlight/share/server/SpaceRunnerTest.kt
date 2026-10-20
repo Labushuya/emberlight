@@ -70,6 +70,19 @@ class SpaceRunnerTest {
         }
 
     @Test
+    fun aRenewedInviteIsShownAsAStatusOfTheRunningSpace() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.inviteRenewed = true
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertTrue((env.state.value as RunState.Running).inviteRenewed)
+        }
+
+    @Test
     fun aFirstStartWithoutAFixedPortSavesTheBoundPort() =
         runTest {
             val env = Env(this)
@@ -614,6 +627,7 @@ class SpaceRunnerTest {
 
         /** Ein Port, der belegt ist: Bindung schlägt fehl. */
         var busyPort: Int? = null
+        var inviteRenewed: Boolean = false
         private val stateFlow = MutableStateFlow<RunState>(RunState.Idle)
         val state: StateFlow<RunState> get() = stateFlow.asStateFlow()
         val beats = MemoryRunBeatStore()
@@ -698,7 +712,7 @@ class SpaceRunnerTest {
         override suspend fun openServer(
             setup: ServerSetup,
             closure: SpaceClosure,
-        ): OpenedServer = OpenedServer(env.newServer(), release = {})
+        ): OpenedServer = OpenedServer(env.newServer(), release = {}, inviteRenewed = env.inviteRenewed)
 
         override fun currentWifi(): WifiAddress? = env.wifiNow
 

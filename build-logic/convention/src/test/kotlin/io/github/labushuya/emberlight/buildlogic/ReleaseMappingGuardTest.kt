@@ -118,7 +118,9 @@ class ReleaseMappingGuardTest {
     @Test
     fun theServerPipelineRequirementsNameThePipelineRoutesServerAndEngine() {
         val names = ReleaseMappingGuard.SERVER_PIPELINE_REQUIREMENTS
-        assertTrue(names.contains("io.github.labushuya.emberlight.share.server.ServerPipelineKt#installEmberlightModule"))
+        assertTrue(
+            names.contains("io.github.labushuya.emberlight.share.server.ServerPipelineKt#installEmberlightModule"),
+        )
         assertTrue(names.contains("io.github.labushuya.emberlight.share.server.SpaceRoutesKt#spaceRoutes"))
         assertTrue(names.contains("io.github.labushuya.emberlight.share.server.KtorLocalServer#start"))
         assertTrue(names.contains("io.ktor.server.cio.CIOApplicationEngine"))

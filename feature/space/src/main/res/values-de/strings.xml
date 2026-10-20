@@ -325,6 +325,7 @@
     <string name="space_invite_rotate_text">Der aktuelle QR-Code und Link funktionieren danach nicht mehr. Wer schon beigetreten ist, bleibt im Space.</string>
     <string name="space_invite_rotate_confirm">Erneuern</string>
     <string name="space_invite_address_changed">Neue Adresse. Gäste brauchen den neuen QR-Code.</string>
+    <string name="space_invite_renewed">Einladung wurde erneuert – bitte neuen QR teilen</string>
     <string name="space_participants_title">Teilnehmer (%1$d)</string>
     <string name="space_participant_host">Gastgeber</string>
     <string name="space_participant_remove">Entfernen</string>

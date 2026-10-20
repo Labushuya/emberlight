@@ -4,6 +4,7 @@ import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceVault
+import io.github.labushuya.emberlight.share.space.management.SpaceAccentPalette
 import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
 import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
 import java.util.concurrent.ConcurrentHashMap
@@ -20,6 +21,10 @@ class SpaceAccess internal constructor(
     val live: LiveAuthorizer,
     val uploads: ActiveUploads,
     invite: String,
+    /** `true`, wenn die Einladung nach einem Neustart neu entstand, weil das Geheimnis nicht lesbar war (ADR 0018). */
+    val inviteRenewed: Boolean = false,
+    /** Akzentfarbe des Space als Hex-Wert aus der festen Palette (Paket 3.4, ADR 0018). */
+    val accentColor: String = SpaceAccentPalette.hexAt(0),
     /** Token des Gastgebers, nur im Speicher. Die Datenbank hat den Hash (ADR 0018). */
     val hostToken: String?,
 ) {
@@ -57,34 +62,19 @@ class SpaceAccess internal constructor(
         return outcome
     }
 
+    /** Prüft ein Einladungsgeheimnis für die Vorschau. Ändert nichts. */
+    suspend fun invitePreview(inviteSecret: String): Boolean = vault.inviteMatches(inviteSecret)
+
     /** Erneuert die Einladung. Der alte QR-Code ist sofort ungültig, Beigetretene bleiben. */
     suspend fun rotateInvite(): String {
         val fresh = vault.rotateInvite()
         inviteSecret = fresh
-        InviteMemory.remember(spaceId, fresh)
         return fresh
     }
 
     /** Gleicht die Zugriffsprüfung mit der Datenbank ab, etwa nach einem Neustart der Sitzung. */
     suspend fun refreshAccess() {
         live.replace(vault.credentials())
-    }
-}
-
-/**
- * Einladungen je Space im Prozess. Eine Pause oder Wiederaufnahme im selben Prozess behält den QR-Code (ADR 0013,
- * Netz). Nach einem Prozess-Neustart fehlt das Geheimnis, dann entsteht eine neue Einladung.
- */
-internal object InviteMemory {
-    private val secrets = ConcurrentHashMap<String, String>()
-
-    fun known(spaceId: SpaceId): String? = secrets[spaceId.value]
-
-    fun remember(
-        spaceId: SpaceId,
-        secret: String,
-    ) {
-        secrets[spaceId.value] = secret
     }
 }
 

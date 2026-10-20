@@ -217,7 +217,7 @@ class SpaceRunningViewModelTest {
                 controller = SpaceRunController(context),
                 starter = SpaceStarter(context, runs, StorageProbe { FREE_BYTES }, FixedWifi { wifi }),
                 clock = clock,
-                hostActions = SpaceHostActions(context),
+                hostActions = SpaceHostActions(context, database, FakeInviteSecretCipher()),
             )
         collector = CoroutineScope(Dispatchers.Unconfined).launch { vm.state.collect { latest = it } }
         return vm

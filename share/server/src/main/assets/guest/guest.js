@@ -7,6 +7,8 @@
 
   var STORAGE_PREFIX = "emberlight.guest:";
   var INVITE_FRAGMENT = /^#i=([A-Za-z0-9_-]{43})$/;
+  // Akzentfarbe aus der Vorschau. Nur ein Hex-Wert wird übernommen, kein freier CSS-Wert (ADR 0018).
+  var ACCENT_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 
   // Das Einladungsgeheimnis lebt nur in dieser Variable. Es steht nie im Speicher des Browsers.
   var invite = null;
@@ -26,7 +28,8 @@
     joinedSection: document.getElementById("joined-section"),
     welcome: document.getElementById("welcome"),
     spaceName: document.getElementById("space-name"),
-    leaveButton: document.getElementById("leave-button")
+    leaveButton: document.getElementById("leave-button"),
+    preview: document.getElementById("preview")
   };
 
   function hasText(key) {
@@ -54,6 +57,19 @@
 
   function setStatus(message) {
     el.status.textContent = message || "";
+  }
+
+  /** Vorschau vor dem Beitritt: „Du trittst ‚<Name>‘ bei“ in der Akzentfarbe. Name nur als Text (ADR 0018). */
+  function showPreview(data) {
+    el.preview.textContent = text("previewJoin", { name: data.spaceName });
+    el.preview.style.color = ACCENT_PATTERN.test(data.accentColor) ? data.accentColor : "";
+    el.preview.hidden = false;
+  }
+
+  function hidePreview() {
+    el.preview.textContent = "";
+    el.preview.style.color = "";
+    el.preview.hidden = true;
   }
 
   function setNameError(message) {
@@ -147,6 +163,7 @@
 
   function showJoined(current) {
     session = current;
+    hidePreview();
     showSection("joined");
     el.welcome.textContent = text("joinedAs", { name: current.displayName });
     el.spaceName.textContent = "";
@@ -200,6 +217,34 @@
       .catch(function () {
         setStatus(text("network"));
         return false;
+      });
+  }
+
+  /**
+   * Prüft das Geheimnis vor dem Beitritt (ADR 0018). Erst bei Erfolg zeigt die Seite Name und Farbe. Bei 403 ist die
+   * Einladung verbraucht, bei 429 bleibt sie für einen späteren Versuch erhalten.
+   */
+  function previewInvite() {
+    hidePreview();
+    return api("POST", "/api/v1/join/preview", null, { inviteSecret: invite })
+      .then(function (result) {
+        if (result.status === 200 && result.data && typeof result.data.spaceName === "string") {
+          showPreview(result.data);
+          return;
+        }
+        if (result.status === 429) {
+          showSection("none");
+          setStatus(text("rateLimited", { seconds: result.retryAfter || "" }));
+          return;
+        }
+        invite = null;
+        showSection("none");
+        if (result.status === 403) setStatus(text("inviteInvalid"));
+        else if (result.status === 410) setStatus(text("spaceClosed"));
+        else setStatus(text("genericError"));
+      })
+      .catch(function () {
+        setStatus(text("network"));
       });
   }
 
@@ -313,6 +358,7 @@
         if (invite) {
           showSection("join");
           el.name.focus();
+          previewInvite();
         } else {
           showSection("none");
           setStatus(text("noInvite"));

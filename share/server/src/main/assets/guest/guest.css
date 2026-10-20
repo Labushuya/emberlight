@@ -65,6 +65,14 @@ h1 {
   color: var(--ember-muted);
 }
 
+/* Vorschau vor dem Beitritt. Die Akzentfarbe setzt guest.js nur nach Prüfung auf einen Hex-Wert aus der festen Palette. */
+.preview {
+  margin: 0 0 12px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 form {
   display: flex;
   flex-direction: column;

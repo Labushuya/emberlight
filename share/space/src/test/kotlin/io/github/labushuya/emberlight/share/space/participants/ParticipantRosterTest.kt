@@ -40,7 +40,11 @@ class ParticipantRosterTest {
     private lateinit var spacesDir: File
     private var clock = 1_000L
     private val space = SpaceId.generate()
-    private val vault by lazy {
+    private val cipher = FakeInviteSecretCipher()
+    private val vault by lazy { newVault() }
+
+    /** Eine Vault auf derselben Datenbank. Eine zweite Instanz simuliert den Neustart des Prozesses. */
+    private fun newVault(): SpaceVault =
         SpaceVault(
             database,
             SpaceStorage(spacesDir, space),
@@ -49,8 +53,8 @@ class ParticipantRosterTest {
                 Long.MAX_VALUE /
                     4
             },
+            cipher,
         ) { clock++ }
-    }
 
     @Before
     fun setUp() {
@@ -85,7 +89,7 @@ class ParticipantRosterTest {
         return outcome as JoinOutcome.Joined
     }
 
-    private fun invite(): String = runBlocking { vault.ensureInvite(null) }
+    private fun invite(): String = runBlocking { vault.ensureInvite().secret }
 
     private fun join(
         secret: String,
@@ -149,12 +153,87 @@ class ParticipantRosterTest {
     }
 
     @Test
-    fun ensureInviteKeepsAKnownSecretAndReplacesAnUnknownOne() {
+    fun aRestartKeepsTheSameInviteAndTheSameQrCodeCanStillJoin() {
         val secret = invite()
-        assertEquals(secret, runBlocking { vault.ensureInvite(secret) })
-        val replaced = runBlocking { vault.ensureInvite(Secrets.generate()) }
-        assertFalse(replaced == secret)
-        assertEquals(JoinOutcome.InviteInvalid, join(secret, "Dora"))
+
+        val afterRestart = runBlocking { newVault().ensureInvite() }
+
+        assertEquals(secret, afterRestart.secret)
+        assertFalse(afterRestart.renewed)
+        joinedOrFail(join(secret, "Dora"))
+    }
+
+    @Test
+    fun aLostKeyRenewsTheInviteAndSaysSo() {
+        val old = invite()
+        cipher.keyLost = true
+
+        val renewed = runBlocking { newVault().ensureInvite() }
+
+        assertTrue(renewed.renewed)
+        assertFalse(renewed.secret == old)
+        assertEquals(JoinOutcome.InviteInvalid, join(old, "Dora"))
+        joinedOrFail(join(renewed.secret, "Dora"))
+    }
+
+    @Test
+    fun aTamperedSecretIsTreatedAsLostAndRenewed() {
+        val old = invite()
+        // Ein fremdes Geheimnis unter dem gespeicherten Hash: die Prüfung gegen den Hash schlägt fehl.
+        val other = Secrets.generate()
+        val sealed = cipher.seal(other)
+        runBlocking {
+            database.spaces().setInvite(
+                id = space.value,
+                hash = Secrets.hashHex(old),
+                createdAt = clock,
+                rotatedAt = null,
+                ciphertext = sealed.ciphertext,
+                iv = sealed.iv,
+            )
+        }
+
+        val state = runBlocking { newVault().ensureInvite() }
+
+        assertTrue(state.renewed)
+        assertFalse(state.secret == other)
+        assertEquals(JoinOutcome.InviteInvalid, join(other, "Dora"))
+    }
+
+    @Test
+    fun anInviteWithoutStoredSecretFromBeforeTheMigrationIsRenewed() {
+        // Stand nach Migration 5 → 6: Hash vorhanden, Geheimnis und IV sind NULL.
+        val legacyHash = Secrets.hashHex(Secrets.generate())
+        database.openHelper.writableDatabase.execSQL(
+            "UPDATE space SET invite_hash = ?, invite_ciphertext = NULL, invite_iv = NULL WHERE id = ?",
+            arrayOf(legacyHash, space.value),
+        )
+
+        val state = runBlocking { newVault().ensureInvite() }
+
+        assertTrue(state.renewed)
+        assertFalse(Secrets.hashHex(state.secret) == legacyHash)
+    }
+
+    @Test
+    fun theStoredSecretIsEncryptedAndOnlyItsHashIsReadable() {
+        val secret = invite()
+        val stored = runBlocking { database.spaces().find(space.value) }!!
+
+        assertEquals(Secrets.hashHex(secret), stored.inviteHash)
+        assertFalse(stored.inviteCiphertext!!.contentEquals(secret.toByteArray(Charsets.UTF_8)))
+        assertNotNull(stored.inviteIv)
+    }
+
+    @Test
+    fun rotatingStoresTheNewSecretEncryptedAndTheRestartShowsIt() {
+        invite()
+        val fresh = runBlocking { vault.rotateInvite() }
+
+        val afterRestart = runBlocking { newVault().ensureInvite() }
+
+        assertEquals(fresh, afterRestart.secret)
+        assertFalse(afterRestart.renewed)
     }
 
     @Test
