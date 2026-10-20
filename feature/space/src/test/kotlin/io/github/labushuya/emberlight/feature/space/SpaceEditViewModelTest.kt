@@ -69,6 +69,8 @@ class SpaceEditViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
+        // Jeder Test beginnt mit dem Standard-Speicher, auch wenn ein früherer Lauf die Vorgabe geändert hat.
+        freeBytes = 64 * gib
         spacesDir = folder.newFolder("spaces")
         database = SpacesDatabase.open(context, spacesDir)
         repository = SpaceRepository(database, SpaceCoverStore(spacesDir), spacesDir, StorageProbe { freeBytes })
@@ -97,15 +99,7 @@ class SpaceEditViewModelTest {
     private fun awaitState(
         vm: SpaceEditViewModel,
         predicate: (SpaceEditUiState) -> Boolean,
-    ): SpaceEditUiState {
-        val deadline = System.currentTimeMillis() + TIMEOUT_MILLIS
-        while (System.currentTimeMillis() < deadline) {
-            val current = vm.state.value
-            if (predicate(current)) return current
-            Thread.sleep(POLL_MILLIS)
-        }
-        throw AssertionError("Zustand wurde nicht erreicht: ${vm.state.value}")
-    }
+    ): SpaceEditUiState = awaitValue(vm.state, predicate = predicate)
 
     private fun awaitLoaded(vm: SpaceEditViewModel): SpaceEditUiState = awaitState(vm) { it.loaded }
 
@@ -451,6 +445,5 @@ class SpaceEditViewModelTest {
         const val ARG_ID = "id"
         const val KEY_DRAFT = "draftId"
         const val TIMEOUT_MILLIS = 5_000L
-        const val POLL_MILLIS = 5L
     }
 }
