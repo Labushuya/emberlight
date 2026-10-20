@@ -281,3 +281,7 @@ Offen: Die Messung zeigt, dass die Verbindung nach der Antwort oft schon 1 bis 4
 - GPS-Entfernung folgt in 3.1b, vor dem ersten Upload über die Gäste-Webseite (3.5).
 - Erledigt (19.10.2026): Die Keep-Regeln für `KtorLocalServer` und `SpaceServerService$Companion` sind entfernt. Der Befund aus f09f220 bleibt als Hintergrund: Die Regeln hielten nur die Klassenhülle, die Routing-Pipeline (`installEmberlightModule` in `ServerPipeline.kt`) fiel im R8-Mapping weg.
 - Nachweis (19.10.2026, Mapping): Im benchmark-Build sind `ServerPipelineKt.installEmberlightModule`, die Ktor-Plugins `PartialContent` und `ConditionalHeaders` sowie 548 `io.ktor`-Klassen erhalten. Im release-Build fehlen sie; dort bleibt eine `io.ktor`-Klasse. Das ist bis Paket 3.3 erwartet. Ab 3.3 muss der Release-Einstieg existieren und die R8-Prüfung dann auch den Release-Build abdecken (Paket 3.3 in `docs/PLAN-M3.md`).
+
+## Nachtrag (20.10.2026): Neustart nach Prozess-Tod
+
+Die Entscheidung `START_NOT_STICKY` aus diesem ADR ist ersetzt. Der Dienst läuft mit `START_STICKY`. Ein Prozess-Tod beendet einen aktiven Space nicht, der Neustart entscheidet darüber (ADR 0017, Abschnitt „Neustart nach Prozess-Tod“). Die Festlegungen dieses ADR zur Datenbank und zur Server-API bleiben unverändert.

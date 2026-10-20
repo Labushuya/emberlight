@@ -1,6 +1,6 @@
 # Debug-Server für Gerätetests
 
-Stand: 19.10.2026, Paket 3.1a, Nachtrag Korrekturen (Hash-Übergabe). Grundlage: [ADR 0014](adr/0014-space-speicher-und-server-api.md), Abschnitt „Debug-Einstieg für Gerätetests“ und „Umsetzung 3.1a“.
+Stand: 19.10.2026, Paket 3.1a, Nachtrag Korrekturen (Hash-Übergabe). Nachtrag 20.10.2026 (Paket 3.3): Netzwechsel und Pausen, siehe Bekannte Grenzen. Grundlage: [ADR 0014](adr/0014-space-speicher-und-server-api.md), Abschnitt „Debug-Einstieg für Gerätetests“ und „Umsetzung 3.1a“.
 
 Der Einstieg startet den lokalen Server mit einem Test-Space, ohne Oberfläche. Er dient nur dem Gerätetest. Der Quelltext liegt im Source-Set `app/src/devtools`, das nur Debug- und Benchmark-Build einbinden. Der Release-Build enthält ihn nicht. Die Build-Prüfung `checkReleaseManifestDebugEntry` bricht ab, falls das Release-Manifest ihn enthält. Das Manifest des Benchmark-Builds enthält den Empfänger; so prüft R8 den Serverpfad im Benchmark-Build (ADR 0012, Nachtrag 19.10.2026).
 
@@ -159,6 +159,6 @@ Nicht getestet: das Verhalten gegenüber einer echten Drittapp (ohne Testapp auf
 ## Bekannte Grenzen
 
 - Der Start über den Broadcast kann auf Android 12 und neuer scheitern, wenn die App im Hintergrund ist und der Systemstart keine Ausnahme hat. In dem Fall steht der Grund im Logcat (`startForeground verweigert`). Dann die App einmal öffnen und den Befehl wiederholen.
-- Der Dienst startet nach einem Prozess-Tod nicht neu. Ein Netzwechsel stoppt den Server, das ist Absicht (ADR 0013).
+- Der Dienst startet nach einem Prozess-Tod neu (`START_STICKY`). Ein aktiver Space geht dabei wieder an den Server, wenn die Akku-Ausnahme besteht. Sonst bleibt er unterbrochen, bis er in der App fortgesetzt wird (ADR 0017). Ein Netzwechsel pausiert den Server (ADR 0013). Dasselbe Netz mit derselben IPv4-Adresse setzt ihn automatisch fort. Ein anderes Netz braucht die Bestätigung in der App (ADR 0017, Paket 3.3).
 - Die Hashes der Test-Teilnehmer bleiben im Space-Index, bis die App-Daten gelöscht werden. Klartext-Tokens gibt es auf dem Gerät nicht. Wer einen Token verliert, startet den Test mit einem neuen.
 - Die Medien im Test-Space bleiben im App-Speicher, bis die App-Daten gelöscht werden.

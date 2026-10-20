@@ -112,6 +112,25 @@ interface MediaDao {
     @Query("SELECT COALESCE(SUM(size_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'")
     suspend fun usedBytes(spaceId: String): Long
 
+    @Query("SELECT COALESCE(SUM(size_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'")
+    fun observeUsedBytes(spaceId: String): Flow<Long>
+
+    /** Erste Seite der Medienliste als Flow, für die Anzeige im laufenden Space. */
+    @Query(
+        """
+        SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
+               m.location_kept AS locationKept, p.display_name AS uploaderName
+        FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
+        WHERE m.space_id = :spaceId AND m.state = 'READY'
+        ORDER BY m.created_at DESC, m.id DESC
+        LIMIT :limit
+        """,
+    )
+    fun observeFirstPage(
+        spaceId: String,
+        limit: Int,
+    ): Flow<List<MediaRow>>
+
     @Query("SELECT * FROM media WHERE space_id = :spaceId")
     suspend fun allOf(spaceId: String): List<MediaEntity>
 
@@ -145,7 +164,45 @@ data class SpaceEntity(
     @ColumnInfo(name = "status") val status: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    /** Start in UTC-Millisekunden, gesetzt beim Übergang nach ACTIVE (Paket 3.3). */
+    @ColumnInfo(name = "started_at") val startedAt: Long? = null,
+    /** Geplantes Ende in UTC-Millisekunden (Paket 3.3). */
+    @ColumnInfo(name = "expires_at") val expiresAt: Long? = null,
+    /** Tatsächliches Ende in UTC-Millisekunden, gesetzt beim Übergang nach ENDED (Paket 3.3). */
+    @ColumnInfo(name = "ended_at") val endedAt: Long? = null,
 )
+
+/**
+ * Pause des Dienstes durch das System (Paket 3.3, ADR 0017). Beginn ist die Wand-Uhr des letzten Herzschlags vor der
+ * Lücke, die Dauer misst `elapsedRealtime`. [deepSleepMs] ist die Differenz zu `uptimeMillis` und dient nur als Zusatzinfo.
+ */
+@Entity(
+    tableName = "pause_event",
+    indices = [Index(value = ["space_id", "started_at"])],
+)
+data class PauseEventEntity(
+    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = "id") val id: Long = 0,
+    @ColumnInfo(name = "space_id") val spaceId: String,
+    @ColumnInfo(name = "started_at") val startedAt: Long,
+    @ColumnInfo(name = "duration_ms") val durationMs: Long,
+    @ColumnInfo(name = "deep_sleep_ms") val deepSleepMs: Long,
+    @ColumnInfo(name = "acknowledged", defaultValue = "0") val acknowledged: Boolean = false,
+)
+
+@Dao
+interface PauseDao {
+    @Insert
+    suspend fun insert(event: PauseEventEntity): Long
+
+    @Query("SELECT * FROM pause_event WHERE space_id = :spaceId ORDER BY started_at DESC, id DESC")
+    fun observeOf(spaceId: String): Flow<List<PauseEventEntity>>
+
+    @Query("UPDATE pause_event SET acknowledged = 1 WHERE space_id = :spaceId AND acknowledged = 0")
+    suspend fun acknowledgeAll(spaceId: String): Int
+
+    @Query("DELETE FROM pause_event WHERE space_id = :spaceId")
+    suspend fun deleteOf(spaceId: String): Int
+}
 
 @Dao
 interface SpaceDao {
@@ -162,6 +219,16 @@ interface SpaceDao {
     @Query("SELECT * FROM space WHERE id = :id")
     fun observe(id: String): Flow<SpaceEntity?>
 
+    /** Der aktive Space, höchstens einer (Paket 3.3: nur ein aktiver Space gleichzeitig). */
+    @Query("SELECT * FROM space WHERE status = 'ACTIVE' LIMIT 1")
+    suspend fun findActive(): SpaceEntity?
+
+    @Query("SELECT * FROM space WHERE status = 'ACTIVE' LIMIT 1")
+    fun observeActive(): Flow<SpaceEntity?>
+
+    @Query("SELECT * FROM space WHERE status = 'ACTIVE'")
+    suspend fun allActive(): List<SpaceEntity>
+
     @Query("SELECT * FROM space ORDER BY created_at DESC, id")
     fun observeAll(): Flow<List<SpaceEntity>>
 
@@ -177,8 +244,8 @@ interface SpaceDao {
  * unter `databases/`, damit sie aus Backups und Geräte-Übertragungen herausfällt.
  */
 @Database(
-    entities = [MediaEntity::class, ParticipantEntity::class, SpaceEntity::class],
-    version = 3,
+    entities = [MediaEntity::class, ParticipantEntity::class, SpaceEntity::class, PauseEventEntity::class],
+    version = 4,
     exportSchema = false,
 )
 abstract class SpacesDatabase : RoomDatabase() {
@@ -188,8 +255,54 @@ abstract class SpacesDatabase : RoomDatabase() {
 
     abstract fun spaces(): SpaceDao
 
+    abstract fun pauses(): PauseDao
+
     companion object {
         const val FILE_NAME = "spaces.db"
+        const val SPACES_DIRECTORY = "spaces"
+
+        /** Ordner der Space-Daten unter `noBackupFilesDir`. Der einzige Ort, den App und Server gemeinsam nutzen. */
+        fun spacesDirectory(context: Context): File = File(context.noBackupFilesDir, SPACES_DIRECTORY)
+
+        @Volatile
+        private var shared: SpacesDatabase? = null
+
+        /**
+         * Die eine Instanz für den ganzen Prozess (Paket 3.3). App und Server greifen über sie auf `spaces.db` zu. Zwei
+         * Instanzen auf derselben Datei gelten nicht als sauber (ADR 0016). Die Hilt-Bindung in `feature:space` liefert
+         * dieselbe Instanz. Sie wird nie geschlossen, sie lebt mit dem Prozess.
+         */
+        fun shared(context: Context): SpacesDatabase =
+            shared ?: synchronized(this) {
+                shared
+                    ?: open(
+                        context.applicationContext,
+                        spacesDirectory(context.applicationContext),
+                    ).also { shared = it }
+            }
+
+        /**
+         * Version 3 → 4 (Paket 3.3): Lebenszyklus-Spalten an `space` (Start, geplantes und tatsächliches Ende) und die
+         * Tabelle `pause_event`. Additiv, bestehende Daten bleiben unberührt.
+         */
+        val MIGRATION_3_4: Migration =
+            object : Migration(3, 4) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `started_at` INTEGER")
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `expires_at` INTEGER")
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `ended_at` INTEGER")
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `pause_event` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`space_id` TEXT NOT NULL, `started_at` INTEGER NOT NULL, " +
+                            "`duration_ms` INTEGER NOT NULL, `deep_sleep_ms` INTEGER NOT NULL, " +
+                            "`acknowledged` INTEGER NOT NULL DEFAULT 0)",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_pause_event_space_id_started_at` " +
+                            "ON `pause_event` (`space_id`, `started_at`)",
+                    )
+                }
+            }
 
         /**
          * Version 2 → 3 (Paket 3.2): Tabelle `space` mit den Eigenschaften des Space. Additiv, bestehende Medien bleiben
@@ -231,7 +344,7 @@ abstract class SpacesDatabase : RoomDatabase() {
             spacesDir.mkdirs()
             return Room
                 .databaseBuilder(IndexLocationContext(context, spacesDir), SpacesDatabase::class.java, FILE_NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
         }
     }

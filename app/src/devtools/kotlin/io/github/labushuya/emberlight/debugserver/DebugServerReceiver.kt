@@ -75,7 +75,7 @@ class DebugServerReceiver : BroadcastReceiver() {
                 debugLogging = true,
             )
         }
-        ContextCompat.startForegroundService(context, SpaceServerService.startIntent(context, port))
+        ContextCompat.startForegroundService(context, SpaceServerService.startIntent(context, port = port))
         Log.i(TAG, "Debug-Server gestartet, Port $port, ${participants.size} Teilnehmer. Tokens stehen nicht im Log.")
     }
 

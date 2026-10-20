@@ -108,6 +108,7 @@ class SpaceRepository(
         if (dao.find(id.value) == null) return false
         database.withTransaction {
             dao.deleteMediaOf(id.value)
+            database.pauses().deleteOf(id.value)
             dao.delete(id.value)
         }
         covers.deleteSpace(id)
@@ -194,30 +195,36 @@ class SpaceRepository(
         }
     }
 
-    private fun SpaceEntity.toRecord(): SpaceRecord =
-        SpaceRecord(
-            id = SpaceId(id),
-            settings =
-                SpaceSettings(
-                    name = name,
-                    colorIndex = colorIndex,
-                    lifetime = lifetimeFrom(lifetimePreset, lifetimeUntil),
-                    retentionDays = retentionDays,
-                    storageLimitBytes = storageLimitBytes,
-                ),
-            coverSha256 = coverSha256,
-            status = SpaceStatus.valueOf(status),
-            createdAt = createdAt,
-            updatedAt = updatedAt,
-        )
-
-    private fun lifetimeFrom(
-        preset: String?,
-        until: Long?,
-    ): Lifetime =
-        if (preset != null) {
-            Lifetime.Preset(LifetimePreset.valueOf(preset))
-        } else {
-            Lifetime.Until(checkNotNull(until) { "Laufzeit ohne Dauer und ohne Ende." })
-        }
+    private fun SpaceEntity.toRecord(): SpaceRecord = toSpaceRecord()
 }
+
+/** Zeile der Tabelle `space` als [SpaceRecord]. Gemeinsam für Entwurf (Paket 3.2) und Betrieb (Paket 3.3). */
+internal fun SpaceEntity.toSpaceRecord(): SpaceRecord =
+    SpaceRecord(
+        id = SpaceId(id),
+        settings =
+            SpaceSettings(
+                name = name,
+                colorIndex = colorIndex,
+                lifetime = lifetimeFrom(lifetimePreset, lifetimeUntil),
+                retentionDays = retentionDays,
+                storageLimitBytes = storageLimitBytes,
+            ),
+        coverSha256 = coverSha256,
+        status = SpaceStatus.valueOf(status),
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        startedAt = startedAt,
+        expiresAt = expiresAt,
+        endedAt = endedAt,
+    )
+
+private fun lifetimeFrom(
+    preset: String?,
+    until: Long?,
+): Lifetime =
+    if (preset != null) {
+        Lifetime.Preset(LifetimePreset.valueOf(preset))
+    } else {
+        Lifetime.Until(checkNotNull(until) { "Laufzeit ohne Dauer und ohne Ende." })
+    }

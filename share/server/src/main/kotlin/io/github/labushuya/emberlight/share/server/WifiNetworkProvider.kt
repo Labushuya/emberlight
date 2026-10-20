@@ -13,10 +13,14 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.net.Inet4Address
 
-/** IPv4-Adresse der WLAN-Schnittstelle mit Präfixlänge. Daraus ergibt sich das Subnetz des Servers. */
+/**
+ * IPv4-Adresse der WLAN-Schnittstelle mit Präfixlänge und Standard-Gateway. Daraus ergibt sich das Subnetz des Servers.
+ * Das Gateway gehört zur Erkennung „dasselbe Netz“ (ADR 0017, WLAN).
+ */
 data class WifiAddress(
     val ipv4: String,
     val prefixLength: Int,
+    val gateway: String? = null,
 ) {
     val subnet: Ipv4Subnet get() = Ipv4Subnet(ipv4, prefixLength)
 }
@@ -80,6 +84,15 @@ class ConnectivityWifiNetworkProvider(
             awaitClose { connectivity.unregisterNetworkCallback(callback) }
         }.distinctUntilChanged()
 
-    private fun addressOf(properties: LinkProperties): WifiAddress? =
-        pickIpv4(properties.linkAddresses.map { link: LinkAddress -> link.address to link.prefixLength })
+    private fun addressOf(properties: LinkProperties): WifiAddress? {
+        val address =
+            pickIpv4(properties.linkAddresses.map { link: LinkAddress -> link.address to link.prefixLength })
+                ?: return null
+        val gateway =
+            properties.routes
+                .firstOrNull { route -> route.isDefaultRoute && route.gateway is Inet4Address }
+                ?.gateway
+                ?.hostAddress
+        return address.copy(gateway = gateway)
+    }
 }

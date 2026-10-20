@@ -51,6 +51,9 @@ internal fun SpaceDetailScreen(
     modifier: Modifier = Modifier,
     onEdit: (String) -> Unit = {},
     onBack: () -> Unit = {},
+    onStart: (String) -> Unit = {},
+    onSetup: (String) -> Unit = {},
+    onOpenRunning: (String) -> Unit = {},
     viewModel: SpaceDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -75,6 +78,9 @@ internal fun SpaceDetailScreen(
             coverFile = viewModel::coverFile,
             onEdit = onEdit,
             onDelete = { viewModel.delete(onDone = onBack) },
+            onStart = onStart,
+            onSetup = onSetup,
+            onOpenRunning = onOpenRunning,
             modifier = Modifier.padding(padding),
         )
     }
@@ -90,6 +96,9 @@ internal fun SpaceDetailPane(
     onEdit: (String) -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    onStart: (String) -> Unit = {},
+    onSetup: (String) -> Unit = {},
+    onOpenRunning: (String) -> Unit = {},
 ) {
     val record = state.record
     when {
@@ -111,6 +120,9 @@ internal fun SpaceDetailPane(
                 coverFile = coverFile(record),
                 onEdit = { onEdit(record.id.value) },
                 onDelete = onDelete,
+                onStart = { onStart(record.id.value) },
+                onSetup = { onSetup(record.id.value) },
+                onOpenRunning = { onOpenRunning(record.id.value) },
                 modifier = modifier,
             )
         }
@@ -125,6 +137,9 @@ internal fun SpaceDetailContent(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    onStart: () -> Unit = {},
+    onSetup: () -> Unit = {},
+    onOpenRunning: () -> Unit = {},
 ) {
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     val settings = record.settings
@@ -147,7 +162,7 @@ internal fun SpaceDetailContent(
                 modifier = Modifier.semantics { heading() },
             )
             Text(
-                text = stringResource(R.string.space_status_draft),
+                text = statusLabel(record.status),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -164,10 +179,56 @@ internal fun SpaceDetailContent(
             DetailRow(stringResource(R.string.space_detail_retention), retentionText(settings.retentionDays))
             DetailRow(stringResource(R.string.space_detail_limit), limitText(settings.storageLimitBytes))
             Spacer(Modifier.height(24.dp))
-            Button(onClick = onEdit, enabled = editable, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.space_detail_edit))
+            when (record.status) {
+                SpaceStatus.DRAFT -> {
+                    Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.space_detail_start))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onSetup, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.space_detail_setup))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.space_detail_edit))
+                    }
+                }
+
+                SpaceStatus.ACTIVE -> {
+                    Button(onClick = onOpenRunning, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.space_detail_open_running))
+                    }
+                }
+
+                SpaceStatus.ENDED -> {
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.space_detail_ended_at,
+                                formatDate(record.endedAt ?: record.updatedAt),
+                            ),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.space_detail_retention_info,
+                                retentionText(settings.retentionDays),
+                            ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                SpaceStatus.DELETED -> {}
             }
             if (!editable) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onEdit, enabled = false, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.space_detail_edit))
+                }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.space_detail_not_editable),
@@ -176,12 +237,14 @@ internal fun SpaceDetailContent(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = { confirmDelete = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            ) {
-                Text(stringResource(R.string.space_detail_delete))
+            if (record.status != SpaceStatus.ACTIVE) {
+                OutlinedButton(
+                    onClick = { confirmDelete = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.space_detail_delete))
+                }
             }
         }
 

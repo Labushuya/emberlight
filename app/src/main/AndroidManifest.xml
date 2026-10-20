@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+        Akku-Ausnahme (ADR 0017). Die Anfrage zeigt die App mit eigener Begründung. Kein Play-Store-Umzug vorgesehen, die
+        Begründung steht in der Einrichtung.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application
         android:name=".EmberlightApplication"
         android:allowBackup="false"

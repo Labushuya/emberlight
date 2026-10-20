@@ -10,6 +10,8 @@ import io.github.labushuya.emberlight.feature.space.form.StorageOption
 import io.github.labushuya.emberlight.share.space.management.Lifetime
 import io.github.labushuya.emberlight.share.space.management.LifetimePreset
 import io.github.labushuya.emberlight.share.space.management.SettingsError
+import io.github.labushuya.emberlight.share.space.management.SpaceStatus
+import java.text.DateFormat
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
@@ -18,6 +20,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.Date
 import java.util.Locale
 
 private const val GIB = 1024.0 * 1024.0 * 1024.0
@@ -136,6 +139,21 @@ internal fun formatGib(gib: Double): String {
     val format = NumberFormat.getNumberInstance(Locale.getDefault()).apply { maximumFractionDigits = 1 }
     return format.format(gib)
 }
+
+/** Status als Text. Gelöschte Spaces zeigt die Oberfläche nicht, sie fallen auf „Beendet“ zurück. */
+@Composable
+internal fun statusLabel(status: SpaceStatus): String =
+    when (status) {
+        SpaceStatus.DRAFT -> stringResource(R.string.space_status_draft)
+        SpaceStatus.ACTIVE -> stringResource(R.string.space_status_active)
+        SpaceStatus.ENDED, SpaceStatus.DELETED -> stringResource(R.string.space_status_ended)
+    }
+
+/** Datum und Uhrzeit in der Sprache des Geräts (Mittel-Format), wie im Formular (ADR 0016). */
+internal fun formatDate(millis: Long): String =
+    DateFormat
+        .getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.getDefault())
+        .format(Date(millis))
 
 /** Datum in der Form der aktuellen Sprache, etwa „20.10.2026“ auf Deutsch. */
 internal fun formatLocalDate(date: LocalDate): String =

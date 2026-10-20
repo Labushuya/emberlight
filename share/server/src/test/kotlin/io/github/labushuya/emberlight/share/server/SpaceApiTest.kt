@@ -7,6 +7,7 @@ import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
+import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.ktor.client.HttpClient
 import io.ktor.client.request.delete
@@ -49,6 +50,7 @@ class SpaceApiTest {
     @get:Rule
     val folder = TemporaryFolder()
 
+    private lateinit var database: SpacesDatabase
     private lateinit var vault: SpaceVault
     private lateinit var spacesDir: File
     private val spaceId = SpaceId.generate()
@@ -72,7 +74,8 @@ class SpaceApiTest {
     fun setUp() {
         spacesDir = folder.newFolder("spaces")
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        vault = SpaceVault.open(context, spacesDir, spaceId, limits, StorageProbe { Long.MAX_VALUE / 4 })
+        database = SpacesDatabase.open(context, spacesDir)
+        vault = SpaceVault.open(database, spacesDir, spaceId, limits, StorageProbe { Long.MAX_VALUE / 4 })
         runBlocking {
             vault.registerParticipant(host.participantId, "Gastgeberin", Role.HOST, "0".repeat(64))
             vault.registerParticipant(guest.participantId, "Gast", Role.GUEST, "0".repeat(64))
@@ -82,7 +85,7 @@ class SpaceApiTest {
 
     @After
     fun tearDown() {
-        vault.close()
+        database.close()
     }
 
     private fun ApplicationTestBuilder.install() {
@@ -95,6 +98,7 @@ class SpaceApiTest {
                     senderAllowed = { true },
                     gates = gates,
                     requestLog = { logLines += it },
+                    closure = SpaceClosure.Open,
                     debugLogging = false,
                 ),
                 routes = spaceRoutes(vault, "Test-Space", gates, UploadTuning(pollMillis = 1)),

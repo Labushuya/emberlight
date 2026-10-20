@@ -7,17 +7,24 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import io.github.labushuya.emberlight.feature.space.setup.SetupStore
+import io.github.labushuya.emberlight.share.server.ConnectivityWifiNetworkProvider
+import io.github.labushuya.emberlight.share.server.WifiNetworkProvider
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
+import io.github.labushuya.emberlight.share.space.run.RunClock
+import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
+import io.github.labushuya.emberlight.share.space.run.SystemRunClock
 import java.io.File
 import javax.inject.Singleton
 import kotlin.random.Random
 
 /**
- * Verdrahtung der Spaces (Paket 3.2). Die Datenbank und der Speicher liegen unter `noBackupFilesDir/spaces`, wie beim
- * Server (ADR 0014). Eine Datenbank für die ganze App.
+ * Verdrahtung der Spaces (Paket 3.2, Paket 3.3). Die Datenbank und der Speicher liegen unter `noBackupFilesDir/spaces`,
+ * wie beim Server (ADR 0014). Die Datenbank ist prozessweit eine Instanz (ADR 0016): Die Oberfläche und der Dienst
+ * greifen über [SpacesDatabase.shared] auf dieselbe Datei zu.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -26,7 +33,7 @@ object SpacesModule {
     @Singleton
     fun provideSpacesDatabase(
         @ApplicationContext context: Context,
-    ): SpacesDatabase = SpacesDatabase.open(context, spacesDirectory(context))
+    ): SpacesDatabase = SpacesDatabase.shared(context)
 
     /**
      * Freier Speicher des Geräts, für die harte Obergrenze des Speicherlimits. Ist er nicht lesbar, bleibt es bei `0`:
@@ -55,11 +62,31 @@ object SpacesModule {
             freeSpace = storageProbe,
         )
 
+    @Provides
+    @Singleton
+    fun provideSpaceRunRepository(
+        database: SpacesDatabase,
+        clock: RunClock,
+    ): SpaceRunRepository = SpaceRunRepository(database, clock)
+
+    @Provides
+    fun provideRunClock(): RunClock = SystemRunClock
+
+    @Provides
+    @Singleton
+    fun provideWifiNetworkProvider(
+        @ApplicationContext context: Context,
+    ): WifiNetworkProvider = ConnectivityWifiNetworkProvider(context)
+
+    @Provides
+    @Singleton
+    fun provideSetupStore(
+        @ApplicationContext context: Context,
+    ): SetupStore = SetupStore(context)
+
     /** Zufallsquelle für Namensvorschläge. Tests bekommen eine feste Quelle über den Konstruktor des ViewModels. */
     @Provides
     fun provideRandom(): Random = Random.Default
 
-    private fun spacesDirectory(context: Context): File = File(context.noBackupFilesDir, SPACES_DIRECTORY)
-
-    private const val SPACES_DIRECTORY = "spaces"
+    private fun spacesDirectory(context: Context): File = SpacesDatabase.spacesDirectory(context)
 }
