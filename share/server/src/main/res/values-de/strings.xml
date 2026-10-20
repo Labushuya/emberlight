@@ -4,9 +4,18 @@
     <string name="space_server_alert_channel_name">Space-Server-Hinweise</string>
     <string name="space_server_running_title">Space-Server läuft</string>
     <string name="space_server_starting">Startet …</string>
-    <string name="space_server_port">Port %1$d</string>
-    <string name="space_server_stop">Beenden</string>
-    <string name="space_server_no_space">Der Server startet nicht: Es ist kein Space eingerichtet.</string>
+    <string name="space_server_ongoing_text">Space „%1$s“ läuft · noch %2$s</string>
+    <string name="space_server_no_end_text">Space „%1$s“ läuft</string>
+    <string name="space_server_remaining_under_minute">unter 1 Min.</string>
+    <string name="space_server_remaining_m">%1$d Min.</string>
+    <string name="space_server_remaining_hm">%1$d Std. %2$d Min.</string>
+    <string name="space_server_open">Öffnen</string>
+    <string name="space_server_end">Beenden</string>
+    <string name="space_server_not_startable">Der Space kann nicht gestartet werden.</string>
     <string name="space_server_no_wifi">Der Server startet nicht: Kein WLAN mit IPv4-Adresse verbunden.</string>
-    <string name="space_server_network_changed">WLAN-Adresse hat sich geändert oder das WLAN ist weg. Der Server ist gestoppt.</string>
+    <string name="space_server_start_failed">Der Server konnte nicht starten.</string>
+    <string name="space_server_resume_failed">Der Server konnte nicht wieder starten. Der Space bleibt pausiert.</string>
+    <string name="space_server_pause_detected">Android hat emberlight ca. %1$d Min. pausiert – Gäste konnten dich in der Zeit nicht erreichen.</string>
+    <string name="space_server_network_lost">WLAN weg. Der Space ist pausiert und läuft weiter, sobald dasselbe WLAN zurück ist.</string>
+    <string name="space_server_network_changed_prompt">Neues WLAN erkannt – Space hier fortsetzen?</string>
 </resources>

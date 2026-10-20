@@ -25,4 +25,6 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.ext.junit)
+    // Schließt die Datenbank in den Tests, die den Index selbst öffnen (Paket 3.3).
+    testImplementation(libs.androidx.room.runtime)
 }

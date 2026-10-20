@@ -39,6 +39,7 @@ class KtorLocalServer(
     private val authorizer: RequestAuthorizer = RequestAuthorizer.DenyAll,
     private val requestLog: (String) -> Unit = {},
     private val gates: ServerGates = ServerGates(),
+    private val closure: SpaceClosure = SpaceClosure.Open,
 ) : LocalServer {
     private val lock = Mutex()
     private val mutableState = MutableStateFlow<ServerState>(ServerState.Stopped)
@@ -58,6 +59,7 @@ class KtorLocalServer(
                     gates = gates,
                     requestLog = requestLog,
                     debugLogging = config.debugLogging,
+                    closure = closure,
                 )
             val server =
                 embeddedServer(

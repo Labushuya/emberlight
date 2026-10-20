@@ -48,6 +48,8 @@ internal class ServerEnvironment(
     val gates: ServerGates,
     val requestLog: (String) -> Unit,
     val debugLogging: Boolean,
+    /** Ablauf des Space (ADR 0017). Wirkt nach Host- und Netzprüfung, vor der Authentifizierung. */
+    val closure: SpaceClosure,
 )
 
 /**
@@ -90,6 +92,14 @@ internal fun Application.installEmberlightModule(
     intercept(ApplicationCallPipeline.Setup) {
         if (!env.senderAllowed(context.request.origin.remoteAddress)) {
             context.respondError(HttpStatusCode.Forbidden, "forbidden_network")
+            finish()
+        }
+    }
+    intercept(ApplicationCallPipeline.Setup) {
+        // Nach dem Ablauf antwortet jede Anfrage mit 410, auch ohne gültigen Schlüssel. Der Betrieb stoppt danach (ADR 0017).
+        if (env.closure.isClosed()) {
+            env.closure.onClosedRequest()
+            context.respondError(HttpStatusCode.Gone, "space_closed")
             finish()
         }
     }

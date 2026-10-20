@@ -1,0 +1,537 @@
+package io.github.labushuya.emberlight.share.server
+
+import io.github.labushuya.emberlight.share.space.SpaceId
+import io.github.labushuya.emberlight.share.space.run.PauseEvent
+import io.github.labushuya.emberlight.share.space.run.RunClock
+import io.github.labushuya.emberlight.share.space.run.SpaceRunPolicy
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Verarbeiter des Betriebs (ADR 0017). Die Zeit ist virtuell, es gibt keine echten Pausen. Der Server, die Sperren, das
+ * Netz und die Datenbank sind Fakes.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class SpaceRunnerTest {
+    private val clock = FakeClock()
+    private val wifi = WifiAddress("192.168.1.20", 24, gateway = "192.168.1.1")
+    private val otherWifi = WifiAddress("10.0.0.7", 24, gateway = "10.0.0.1")
+    private val spaceId = SpaceId.generate()
+    private val expires = START + HOUR
+
+    @Test
+    fun aStartBindsTheServerTakesTheLocksAndSchedulesTheEnd() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            val running = env.state.value as RunState.Running
+            assertEquals(spaceId, running.spaceId)
+            assertEquals(FAKE_PORT, running.port)
+            assertEquals(1, env.host.locksAcquired)
+            assertEquals(listOf(expires), env.host.expiries)
+            assertEquals(1, env.servers.single().starts)
+        }
+
+    @Test
+    fun aStartWithoutWifiRevertsTheSpaceToDraftAndEnds() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.wifiNow = null
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(listOf(RunEvent.NoWifi), env.host.events)
+            assertEquals(listOf(spaceId), env.host.aborted)
+            assertEquals(1, env.host.idles)
+            assertEquals(0, env.host.locksAcquired)
+        }
+
+    @Test
+    fun aServerThatFailsToStartLeavesNoLocksAndRevertsTheSpace() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.failStart = true
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(listOf(RunEvent.StartFailed), env.host.events)
+            assertEquals(listOf(spaceId), env.host.aborted)
+            assertEquals(0, env.host.locksAcquired)
+        }
+
+    @Test
+    fun aSpaceThatHasEndedBeforeTheStartIsEndedNotReverted() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup(expiresAt = START - 1)
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(listOf(RunEvent.NotStartable), env.host.events)
+            assertEquals(listOf(spaceId to START - 1), env.host.ended)
+            assertTrue(env.host.aborted.isEmpty())
+        }
+
+    @Test
+    fun aUserStopEndsTheSpaceNowAndReleasesEverything() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            clock.advance(5 * MINUTE)
+
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(listOf(spaceId to START + 5 * MINUTE), env.host.ended)
+            assertEquals(1, env.host.locksReleased)
+            assertEquals(1, env.servers.single().stops)
+            assertEquals(1, env.host.idles)
+            assertFalse(env.host.expiryCancelled.isEmpty())
+        }
+
+    @Test
+    fun theHeartbeatEndsAnExpiredSpaceAtItsPlannedEnd() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            clock.advance(HOUR + 5 * MINUTE)
+            advanceTimeBy(SpaceRunPolicy.HEARTBEAT_INTERVAL_MS)
+            runCurrent()
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS + 1)
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(listOf(spaceId to expires), env.host.ended)
+            assertEquals(1, env.servers.single().stops)
+        }
+
+    @Test
+    fun aRequestToAClosedSpaceAnswersAndThenTheRunStops() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            clock.advance(HOUR + 1)
+
+            // Die Anfrage erkennt den Ablauf sofort, bevor der Betrieb reagiert.
+            assertTrue(env.runner.isClosed())
+            env.runner.onClosedRequest()
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS - 1)
+            runCurrent()
+            assertEquals(0, env.servers.single().stops)
+
+            advanceTimeBy(2)
+            runCurrent()
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(listOf(spaceId to expires), env.host.ended)
+        }
+
+    @Test
+    fun anExpireCommandWithoutARunOnlyLetsTheServiceEnd() =
+        runTest {
+            val env = Env(this)
+            env.submit(RunCommand.Expire)
+            runCurrent()
+
+            assertEquals(1, env.host.idles)
+            assertTrue(env.host.ended.isEmpty())
+        }
+
+    @Test
+    fun aLostWifiPausesTheServerAndTheSameNetworkResumesIt() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.wifiNow = null
+            env.wifiFlow.emit(null)
+            runCurrent()
+            assertEquals(PauseCause.NETWORK_LOST, (env.state.value as RunState.Paused).cause)
+            assertEquals(1, env.servers.single().stops)
+            assertEquals(RunEvent.NetworkLost, env.host.events.last())
+
+            env.wifiNow = wifi
+            env.wifiFlow.emit(wifi)
+            runCurrent()
+
+            assertTrue(env.state.value is RunState.Running)
+            assertEquals(2, env.servers.single().starts)
+            assertEquals(0, env.host.ended.size)
+        }
+
+    @Test
+    fun aDifferentNetworkPausesAndOnlyTheConfirmationResumesOnTheNewAddress() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.wifiNow = otherWifi
+            env.wifiFlow.emit(otherWifi)
+            runCurrent()
+            val paused = env.state.value as RunState.Paused
+            assertEquals(PauseCause.NETWORK_CHANGED, paused.cause)
+            assertEquals(otherWifi, paused.pendingAddress)
+            assertEquals(RunEvent.NetworkChanged(otherWifi), env.host.events.last())
+
+            // Ohne Bestätigung bleibt der Server aus, auch wenn das neue Netz steht.
+            runCurrent()
+            assertTrue(env.state.value is RunState.Paused)
+
+            env.submit(RunCommand.ConfirmNetwork)
+            runCurrent()
+
+            val running = env.state.value as RunState.Running
+            assertEquals(otherWifi, running.address)
+            assertEquals(2, env.servers.single().starts)
+        }
+
+    @Test
+    fun confirmingWithoutAPendingNetworkChangesNothing() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.submit(RunCommand.ConfirmNetwork)
+            runCurrent()
+
+            assertTrue(env.state.value is RunState.Running)
+            assertEquals(1, env.servers.single().starts)
+        }
+
+    @Test
+    fun aResumeThatCannotBindKeepsTheSpacePausedAndReportsIt() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            env.wifiNow = null
+            env.wifiFlow.emit(null)
+            runCurrent()
+            env.servers.single().refuseStarts = true
+
+            env.wifiNow = wifi
+            env.wifiFlow.emit(wifi)
+            runCurrent()
+
+            assertTrue(env.state.value is RunState.Paused)
+            assertEquals(RunEvent.ResumeFailed, env.host.events.last())
+        }
+
+    @Test
+    fun aPauseOfTheSystemIsRecordedWithItsStartAndDuration() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            env.submit(RunCommand.Heartbeat)
+            runCurrent()
+
+            // Der Dienst bekommt zehn Minuten lang keinen Herzschlag. Die Uhr läuft in dieser Zeit weiter.
+            clock.skip(10 * MINUTE)
+            env.submit(RunCommand.Heartbeat)
+            runCurrent()
+
+            val (pausedSpace, event) = env.host.pauses.single()
+            assertEquals(spaceId, pausedSpace)
+            assertEquals(10 * MINUTE, event.durationMillis)
+            assertEquals(0L, event.deepSleepMillis)
+            assertEquals(START, event.startedAtMillis)
+            assertEquals(RunEvent.PauseDetected(event), env.host.events.last())
+        }
+
+    @Test
+    fun quickSequencesOfStartAndStopLeaveNoLockAndNoLostStart() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            env.submit(RunCommand.Stop(StopReason.USER))
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            env.submit(RunCommand.Stop(StopReason.USER))
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertTrue("zuletzt gestartet", env.state.value is RunState.Running)
+            assertEquals(3, env.host.locksAcquired)
+            assertEquals(2, env.host.locksReleased)
+            assertEquals(1, env.host.locksHeldNow)
+            assertEquals(3, env.servers.size)
+            assertEquals(1, env.servers.last().starts)
+            assertEquals(2, env.host.ended.size)
+        }
+
+    @Test
+    fun aStartAfterAStopIsNotDroppedBecauseItCamesTooSoon() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertTrue(env.state.value is RunState.Running)
+            assertEquals(1, env.host.locksHeldNow)
+            assertEquals(2, env.servers.size)
+        }
+
+    @Test
+    fun shutdownReleasesLocksAndStopsTheServerButKeepsTheSpaceActive() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.runner.shutdown()
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(1, env.servers.single().stops)
+            assertEquals(1, env.host.locksReleased)
+            assertTrue(
+                "Der Space bleibt aktiv, bis er beim nächsten Start abgeschlossen wird.",
+                env.host.ended.isEmpty(),
+            )
+        }
+
+    @Test
+    fun aSetupWithoutPersistenceNeverWritesToTheDatabase() =
+        runTest {
+            val env = Env(this)
+            env.setup = ServerSetup(spaceId = spaceId, spaceName = "Debug", expiresAtMillis = null, persisted = false)
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            assertTrue(env.host.ended.isEmpty())
+            assertTrue(env.host.aborted.isEmpty())
+            assertTrue(env.host.pauses.isEmpty())
+        }
+
+    private fun persistedSetup(expiresAt: Long = expires) =
+        ServerSetup(
+            spaceId = spaceId,
+            spaceName = "Test",
+            startedAtMillis = START,
+            expiresAtMillis = expiresAt,
+            persisted = true,
+        )
+
+    /** Umgebung eines Tests: Verarbeiter, Fakes und ein kleiner Zustandsspiegel. */
+    private inner class Env(
+        testScope: TestScope,
+    ) {
+        val host = FakeHost()
+        val servers = mutableListOf<FakeServer>()
+        val wifiFlow = FakeWifi()
+        var wifiNow: WifiAddress? = WIFI
+        var setup: ServerSetup? = null
+        var failStart = false
+        private val stateFlow = MutableStateFlow<RunState>(RunState.Idle)
+        val state: StateFlow<RunState> get() = stateFlow.asStateFlow()
+        val runner: SpaceRunner
+
+        init {
+            host.env = this
+            runner =
+                SpaceRunner(
+                    scope = testScope.backgroundScope,
+                    clock = clock,
+                    host = host,
+                    state = stateFlow,
+                    heartbeatMillis = SpaceRunPolicy.HEARTBEAT_INTERVAL_MS,
+                    closeGraceMillis = SpaceRunner.CLOSE_GRACE_MILLIS,
+                )
+            runner.run()
+        }
+
+        fun submit(command: RunCommand) = runner.submit(command)
+
+        fun newServer(): FakeServer = FakeServer(this).also { servers += it }
+    }
+
+    /** Wifi-Fake: der Verlauf der Netzsignale. */
+    private class FakeWifi {
+        private val flow = MutableSharedFlow<WifiAddress?>(replay = 0, extraBufferCapacity = 16)
+
+        fun flow(): Flow<WifiAddress?> = flow.asSharedFlow()
+
+        suspend fun emit(address: WifiAddress?) {
+            flow.emit(address)
+        }
+    }
+
+    private inner class FakeHost : RunHost {
+        lateinit var env: Env
+        var locksAcquired = 0
+        var locksReleased = 0
+        var locksHeldNow = 0
+        var idles = 0
+        val expiries = mutableListOf<Long>()
+        val expiryCancelled = mutableListOf<Unit>()
+        val ended = mutableListOf<Pair<SpaceId, Long>>()
+        val aborted = mutableListOf<SpaceId>()
+        val pauses = mutableListOf<Pair<SpaceId, PauseEvent>>()
+        val events = mutableListOf<RunEvent>()
+
+        override suspend fun setupFor(spaceId: SpaceId): ServerSetup? = env.setup?.takeIf { it.spaceId == spaceId }
+
+        override suspend fun openServer(
+            setup: ServerSetup,
+            closure: SpaceClosure,
+        ): OpenedServer = OpenedServer(env.newServer(), release = {})
+
+        override fun currentWifi(): WifiAddress? = env.wifiNow
+
+        override fun wifiChanges(): Flow<WifiAddress?> = env.wifiFlow.flow()
+
+        override fun acquireLocks() {
+            locksAcquired++
+            locksHeldNow++
+        }
+
+        override fun releaseLocks() {
+            locksReleased++
+            locksHeldNow = 0
+        }
+
+        override fun scheduleExpiry(atMillis: Long) {
+            expiries += atMillis
+        }
+
+        override fun cancelExpiry() {
+            expiryCancelled += Unit
+        }
+
+        override suspend fun endSpace(
+            spaceId: SpaceId,
+            endedAtMillis: Long,
+        ) {
+            ended += spaceId to endedAtMillis
+        }
+
+        override suspend fun abortStart(spaceId: SpaceId) {
+            aborted += spaceId
+        }
+
+        override suspend fun recordPause(
+            spaceId: SpaceId,
+            event: PauseEvent,
+        ) {
+            pauses += spaceId to event
+        }
+
+        override fun onEvent(event: RunEvent) {
+            events += event
+        }
+
+        override fun onRunningTick(state: RunState.Running) = Unit
+
+        override fun onIdle() {
+            idles++
+        }
+    }
+
+    /** Server-Fake mit Zählern. [refuseStarts] lässt jeden weiteren Start scheitern. */
+    private inner class FakeServer(
+        private val env: Env,
+    ) : LocalServer {
+        private val running = MutableStateFlow<ServerState>(ServerState.Stopped)
+        private val startCount = AtomicInteger()
+        private val stopCount = AtomicInteger()
+        var refuseStarts = false
+        val starts: Int get() = startCount.get()
+        val stops: Int get() = stopCount.get()
+
+        override val state: StateFlow<ServerState> = running.asStateFlow()
+
+        override suspend fun start(config: ServerConfig): Int {
+            startCount.incrementAndGet()
+            if (env.failStart || refuseStarts) throw IllegalStateException("Bindung verweigert")
+            running.value = ServerState.Running(FAKE_PORT)
+            return FAKE_PORT
+        }
+
+        override suspend fun stop() {
+            stopCount.incrementAndGet()
+            running.value = ServerState.Stopped
+        }
+    }
+
+    /** Uhr des Tests. [skip] lässt die Zeit springen, ohne dass der Verarbeiter Herzschläge sieht. */
+    private inner class FakeClock : RunClock {
+        private var wall = START
+        private var elapsed = 1_000_000L
+        private var uptime = 1_000_000L
+
+        override fun wallMillis(): Long = wall
+
+        override fun elapsedMillis(): Long = elapsed
+
+        override fun uptimeMillis(): Long = uptime
+
+        fun advance(millis: Long) {
+            wall += millis
+            elapsed += millis
+            uptime += millis
+        }
+
+        /** Der Dienst pausiert: Die Wand-Uhr und die Laufzeit gehen weiter, der Herzschlag fehlt. */
+        fun skip(millis: Long) = advance(millis)
+    }
+
+    private companion object {
+        const val START = 1_800_000_000_000L
+        const val MINUTE = 60_000L
+        const val HOUR = 60 * MINUTE
+        const val FAKE_PORT = 8787
+        val WIFI = WifiAddress("192.168.1.20", 24, gateway = "192.168.1.1")
+    }
+}

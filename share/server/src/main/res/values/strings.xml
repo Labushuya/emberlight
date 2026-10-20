@@ -4,9 +4,18 @@
     <string name="space_server_alert_channel_name">Space server alerts</string>
     <string name="space_server_running_title">Space server running</string>
     <string name="space_server_starting">Starting…</string>
-    <string name="space_server_port">Port %1$d</string>
-    <string name="space_server_stop">Stop</string>
-    <string name="space_server_no_space">The server did not start: no space is set up.</string>
+    <string name="space_server_ongoing_text">Space ‘%1$s’ running · %2$s left</string>
+    <string name="space_server_no_end_text">Space ‘%1$s’ running</string>
+    <string name="space_server_remaining_under_minute">under 1 min</string>
+    <string name="space_server_remaining_m">%1$d min</string>
+    <string name="space_server_remaining_hm">%1$d h %2$d min</string>
+    <string name="space_server_open">Open</string>
+    <string name="space_server_end">End</string>
+    <string name="space_server_not_startable">The space cannot be started.</string>
     <string name="space_server_no_wifi">The server did not start: no Wi-Fi connection with an IPv4 address.</string>
-    <string name="space_server_network_changed">Wi-Fi address changed or Wi-Fi was lost. The server has stopped.</string>
+    <string name="space_server_start_failed">The server could not start.</string>
+    <string name="space_server_resume_failed">The server could not start again. The space stays paused.</string>
+    <string name="space_server_pause_detected">Android paused emberlight for about %1$d min. Guests could not reach you in that time.</string>
+    <string name="space_server_network_lost">Wi-Fi is gone. The space is paused and continues as soon as the same Wi-Fi is back.</string>
+    <string name="space_server_network_changed_prompt">New Wi-Fi detected. Continue the space here?</string>
 </resources>

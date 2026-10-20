@@ -44,6 +44,7 @@ class ServerPipelineTest {
         gates = gates,
         requestLog = { log += it },
         debugLogging = false,
+        closure = SpaceClosure.Open,
     )
 
     private fun HttpRequestBuilder.withHost() {

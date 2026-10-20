@@ -7,6 +7,7 @@ import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
+import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -34,6 +35,7 @@ class UploadSocketTest {
     private val token = "upload-token-0123456789"
     private val guest = Principal(ParticipantId.generate(), Role.GUEST)
     private val spaceId = SpaceId.generate()
+    private lateinit var database: SpacesDatabase
     private lateinit var vault: SpaceVault
     private lateinit var spacesDir: File
     private lateinit var server: KtorLocalServer
@@ -51,9 +53,10 @@ class UploadSocketTest {
     @Before
     fun start() {
         spacesDir = folder.newFolder("spaces")
+        database = SpacesDatabase.open(ApplicationProvider.getApplicationContext(), spacesDir)
         vault =
             SpaceVault.open(
-                ApplicationProvider.getApplicationContext(),
+                database,
                 spacesDir,
                 spaceId,
                 limits,
@@ -67,7 +70,7 @@ class UploadSocketTest {
     @After
     fun stop() {
         runBlocking { server.stop() }
-        vault.close()
+        database.close()
     }
 
     private fun newServer(authorizer: RequestAuthorizer): KtorLocalServer {

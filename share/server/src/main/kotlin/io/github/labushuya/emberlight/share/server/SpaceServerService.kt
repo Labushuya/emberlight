@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.share.server
 
 import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationChannel
@@ -15,55 +16,61 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import io.github.labushuya.emberlight.share.space.SpaceId
+import io.github.labushuya.emberlight.share.space.SpaceLimits
+import io.github.labushuya.emberlight.share.space.SpacesDatabase
+import io.github.labushuya.emberlight.share.space.management.SpaceRecord
+import io.github.labushuya.emberlight.share.space.run.PauseEvent
+import io.github.labushuya.emberlight.share.space.run.RunClock
+import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
+import io.github.labushuya.emberlight.share.space.run.SystemRunClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Foreground-Service, der den lokalen Server am Leben hält (ADR 0012, ADR 0013). Typ `connectedDevice`, weil `dataSync`
- * ein Zeitlimit hat. Der Typ `connectedDevice` hat kein Zeitlimit.
+ * Foreground-Service für den lokalen Server (ADR 0012, ADR 0013, ADR 0017). Typ `connectedDevice`, weil `dataSync` ein
+ * Zeitlimit hat. Der Dienst selbst ist dünn: Er übersetzt Intents in Befehle für den [SpaceRunner], der Start, Stopp,
+ * Pausen und Fortsetzen seriell abarbeitet. Er stellt die Umgebung bereit: Sperren, Wecker, Netz, Benachrichtigungen.
  *
- * Ablauf eines Starts (unter [lifecycle]):
- * 1. Einrichtung holen ([serverSetupProvider]). Ohne Einrichtung startet der Dienst nicht.
- * 2. WLAN-Adresse holen ([networkFactory]). Ohne WLAN mit Adresse startet der Dienst nicht.
- * 3. Index und Speicher öffnen, Server an die WLAN-Adresse binden, Sperren erwerben.
- * 4. Netzwechsel beobachten. Jede Änderung der Adresse oder der Verlust des WLAN stoppt den Server (ADR 0013, Netz).
- *    Der Dienst startet nicht selbst neu.
- *
- * Solange der Server läuft, halten CPU-Wakelock und WLAN-Lock den Betrieb wach. Stopp (per Intent oder Benachrichtigung),
- * Netzwechsel und `onDestroy` geben beide Sperren frei. Ein Neustart nach Prozess-Tod erfolgt nicht (`START_NOT_STICKY`).
+ * Solange der Server läuft, halten CPU-Wakelock und WLAN-Lock den Betrieb wach. Der Dienst startet nach einem
+ * Prozess-Tod nicht neu (`START_NOT_STICKY`). Ein aktiver Space, der keinen Dienst mehr hat, wird beim nächsten
+ * Start der App abgeschlossen (siehe [closeOrphanedSpaces]).
  */
 class SpaceServerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val host = ServiceHost()
+    private val runner = SpaceRunner(scope, SystemRunClock, host, runStateFlow)
+    private lateinit var runnerJob: Job
 
-    /** Serialisiert Start, Stopp und Aufräumen. Verhindert, dass ein Stopp und ein laufender Start einander überholen. */
-    private val lifecycle = Mutex()
-
-    /** Gesetzt, sobald ein Stopp angefordert wurde. Start und Erwerb der Sperren prüfen das unter dem Mutex. */
-    private val stopRequested = AtomicBoolean(false)
-
-    /** Verhindert einen zweiten Startversuch, solange ein Start läuft oder der Server aktiv ist. */
-    private val startRequested = AtomicBoolean(false)
+    /** Kennung des letzten Intents. `stopSelf` mit ihr beendet den Dienst nur, wenn kein neuerer Auftrag wartet. */
+    @Volatile
+    private var lastStartId = 0
 
     /** CPU- und WLAN-Sperre. Entsteht beim ersten erfolgreichen Start. */
     @Volatile
     private var locks: ServerLocks? = null
 
-    private var activeServer: LocalServer? = null
-    private var activeRuntime: SpaceRuntime? = null
-    private var watchJob: Job? = null
+    private val networkProvider: WifiNetworkProvider by lazy { networkFactory(this) }
+
+    override fun onCreate() {
+        super.onCreate()
+        runnerJob = runner.run()
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -72,132 +79,182 @@ class SpaceServerService : Service() {
         flags: Int,
         startId: Int,
     ): Int {
-        if (intent?.action == ACTION_STOP) {
-            requestStop(alertText = null)
-            return START_NOT_STICKY
+        lastStartId = startId
+        when (intent?.action) {
+            ACTION_STOP -> {
+                runner.submit(RunCommand.Stop(StopReason.USER))
+                return START_NOT_STICKY
+            }
+
+            ACTION_EXPIRE -> {
+                runner.submit(RunCommand.Expire)
+                return START_NOT_STICKY
+            }
+
+            ACTION_CONFIRM_NETWORK -> {
+                runner.submit(RunCommand.ConfirmNetwork)
+                return START_NOT_STICKY
+            }
         }
         // Vordergrund zuerst: Android verlangt den Aufruf kurz nach startForegroundService. Auch unbekannte Aufrufe
         // erfüllen diese Pflicht, bevor der Dienst wieder endet.
         if (!ensureForeground()) {
-            requestStop(alertText = null)
+            Log.e(TAG, "Vordergrund-Start verweigert, der Dienst endet.")
+            stopSelf(startId)
             return START_NOT_STICKY
         }
-        if (intent == null || intent.action != ACTION_START) {
-            requestStop(alertText = null)
+        if (intent?.action != ACTION_START) {
+            // Unbekannter Aufruf ohne Auftrag: Der Dienst endet, wenn kein Space läuft.
+            if (runState.value is RunState.Idle) stopSelf(startId)
             return START_NOT_STICKY
         }
-        if (!startRequested.compareAndSet(false, true)) return START_NOT_STICKY
-        if (!localNetworkAllowed()) {
-            Log.w(TAG, "ACCESS_LOCAL_NETWORK fehlt auf API ${Build.VERSION.SDK_INT}, Start abgelehnt.")
-            requestStop(alertText = null)
-            return START_NOT_STICKY
-        }
-
-        stopRequested.set(false)
+        val spaceId = intent.getStringExtra(EXTRA_SPACE_ID)?.let(::SpaceId) ?: SpaceId.generate()
         val port = intent.getIntExtra(EXTRA_PORT, 0)
-        scope.launch {
-            lifecycle.withLock { startLocked(port) }
-        }
+        runner.submit(RunCommand.Start(spaceId, port))
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
-        // Sperren sofort lösen, auch wenn ein Start noch wartet. Ein wartender Start prüft [stopRequested] und erwirbt
-        // dann nichts mehr.
-        stopRequested.set(true)
+        // Sperren sofort lösen. Der Verarbeiter beendet danach einen laufenden Server und schließt den Kanal.
         locks?.release()
-        // Server und Sperren danach unter dem Mutex abschließen, dann den Scope beenden.
-        scope
-            .launch { lifecycle.withLock { shutDownLocked(stopSelfAfter = false, alertText = null) } }
-            .invokeOnCompletion { scope.cancel() }
+        runner.shutdown()
+        runnerJob.invokeOnCompletion { scope.cancel() }
         super.onDestroy()
     }
 
-    /** Fordert den Stopp an. Der eigentliche Abbau läuft unter dem Mutex, nach einem eventuell laufenden Start. */
-    private fun requestStop(alertText: Int?) {
-        stopRequested.set(true)
-        scope.launch { lifecycle.withLock { shutDownLocked(stopSelfAfter = true, alertText = alertText) } }
-    }
+    /** Umgebung des Verarbeiters. Alles, was Android braucht, läuft hier. */
+    private inner class ServiceHost : RunHost {
+        private val runs: SpaceRunRepository by lazy {
+            SpaceRunRepository(SpacesDatabase.shared(applicationContext), SystemRunClock)
+        }
 
-    /** Läuft unter [lifecycle]. Richtet den Server ein, bindet ihn an das WLAN und erwirbt die Sperren. */
-    private suspend fun startLocked(port: Int) {
-        if (stopRequested.get()) return
-        val setup = serverSetupProvider()
-        if (setup == null) {
-            Log.w(TAG, "Kein Space eingerichtet, der Server startet nicht.")
-            shutDownLocked(stopSelfAfter = true, alertText = R.string.space_server_no_space)
-            return
-        }
-        val provider = networkFactory(this)
-        val wifi = provider.currentAddress()
-        if (wifi == null) {
-            Log.w(TAG, "Kein WLAN mit IPv4-Adresse, der Server startet nicht.")
-            shutDownLocked(stopSelfAfter = true, alertText = R.string.space_server_no_wifi)
-            return
-        }
-        try {
-            val runtime = SpaceRuntime.open(applicationContext, setup)
-            activeRuntime = runtime
-            val server = serverFactory(runtime, setup)
-            activeServer = server
-            val bound = server.start(ServerConfig(port = port, subnet = wifi.subnet, debugLogging = setup.debugLogging))
-            // Stopp kam während des Starts: Der wartende Stopp räumt auf, hier nichts mehr erwerben.
-            if (stopRequested.get()) return
-            acquireLocks()
-            watchNetwork(provider, wifi)
-            Log.i(TAG, "Server läuft auf Port $bound")
-            if (setup.debugLogging) Log.i(TAG, "Debug: gebunden an ${wifi.ipv4}:$bound")
-            updateNotification(bound)
-        } catch (failure: Exception) {
-            Log.e(TAG, "Start fehlgeschlagen: ${failure.javaClass.simpleName}")
-            shutDownLocked(stopSelfAfter = true, alertText = null)
-        }
-    }
-
-    /** Stoppt den Server, sobald sich die WLAN-Adresse ändert oder das WLAN verschwindet (ADR 0013, Netz). */
-    private fun watchNetwork(
-        provider: WifiNetworkProvider,
-        bound: WifiAddress,
-    ) {
-        watchJob =
-            scope.launch {
-                provider
-                    .changes()
-                    .filter { it != bound }
-                    .collect {
-                        Log.w(TAG, "WLAN-Adresse hat sich geändert, der Server stoppt.")
-                        requestStop(alertText = R.string.space_server_network_changed)
-                    }
+        override suspend fun setupFor(spaceId: SpaceId): ServerSetup? {
+            if (!localNetworkAllowed()) {
+                Log.w(TAG, "ACCESS_LOCAL_NETWORK fehlt auf API ${Build.VERSION.SDK_INT}, der Start ist abgelehnt.")
+                // Der Space ist schon aktiv, weil die Oberfläche ihn vorher gestartet hat. Er geht zurück auf Entwurf.
+                runs.abortStart(spaceId)
+                return null
             }
+            serverSetupProvider()?.let { return it }
+            val record = runs.findActive()?.takeIf { it.id == spaceId } ?: return null
+            return record.toServerSetup()
+        }
+
+        override suspend fun openServer(
+            setup: ServerSetup,
+            closure: SpaceClosure,
+        ): OpenedServer {
+            val runtime = SpaceRuntime.open(applicationContext, setup)
+            return OpenedServer(serverFactory(runtime, setup, closure), release = {})
+        }
+
+        override fun currentWifi(): WifiAddress? = networkProvider.currentAddress()
+
+        override fun wifiChanges(): Flow<WifiAddress?> = networkProvider.changes()
+
+        override fun acquireLocks() {
+            val current = locks ?: locksFactory(this@SpaceServerService).also { locks = it }
+            current.acquire()
+        }
+
+        override fun releaseLocks() {
+            locks?.release()
+        }
+
+        override fun scheduleExpiry(atMillis: Long) {
+            alarmManager().setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, expiryIntentPending())
+        }
+
+        override fun cancelExpiry() {
+            alarmManager().cancel(expiryIntentPending())
+        }
+
+        override suspend fun endSpace(
+            spaceId: SpaceId,
+            endedAtMillis: Long,
+        ) {
+            runs.end(spaceId, endedAtMillis)
+        }
+
+        override suspend fun abortStart(spaceId: SpaceId) {
+            runs.abortStart(spaceId)
+        }
+
+        override suspend fun recordPause(
+            spaceId: SpaceId,
+            event: PauseEvent,
+        ) {
+            runs.recordPause(spaceId, event)
+        }
+
+        override fun onEvent(event: RunEvent) {
+            when (event) {
+                RunEvent.NotStartable -> {
+                    postAlert(getString(R.string.space_server_not_startable))
+                }
+
+                RunEvent.NoWifi -> {
+                    postAlert(getString(R.string.space_server_no_wifi))
+                }
+
+                RunEvent.StartFailed -> {
+                    postAlert(getString(R.string.space_server_start_failed))
+                }
+
+                RunEvent.ResumeFailed -> {
+                    postAlert(getString(R.string.space_server_resume_failed))
+                }
+
+                is RunEvent.PauseDetected -> {
+                    postAlert(
+                        getString(R.string.space_server_pause_detected, minutesOf(event.event)),
+                        route = null,
+                    )
+                }
+
+                RunEvent.NetworkLost -> {
+                    postAlert(getString(R.string.space_server_network_lost))
+                }
+
+                is RunEvent.NetworkChanged -> {
+                    postAlert(
+                        getString(R.string.space_server_network_changed_prompt),
+                        route = ROUTE_CONFIRM_NETWORK,
+                    )
+                }
+            }
+        }
+
+        override fun onRunningTick(state: RunState.Running) {
+            updateOngoing(ongoingText(state.spaceName, state.expiresAtMillis))
+        }
+
+        override fun onIdle() {
+            // Nur die Dauermeldung entfernen und den Dienst beenden. Ein neuerer Auftrag verhindert das Beenden.
+            ServiceCompat.stopForeground(this@SpaceServerService, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf(lastStartId)
+        }
     }
 
-    /** Läuft unter [lifecycle]. Gibt Sperren frei, stoppt den Server und beendet den Dienst. */
-    private suspend fun shutDownLocked(
-        stopSelfAfter: Boolean,
-        alertText: Int?,
-    ) {
-        watchJob?.cancel()
-        watchJob = null
-        locks?.release()
-        try {
-            activeServer?.stop()
-        } catch (failure: Exception) {
-            Log.e(TAG, "Stopp fehlgeschlagen: ${failure.javaClass.simpleName}")
-        }
-        activeServer = null
-        activeRuntime?.close()
-        activeRuntime = null
-        startRequested.set(false)
-        alertText?.let { postAlert(it) }
-        if (stopSelfAfter) {
-            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-            stopSelf()
-        }
-    }
+    /** Einrichtung eines gespeicherten, aktiven Space für den Server. */
+    private fun SpaceRecord.toServerSetup(): ServerSetup =
+        ServerSetup(
+            spaceId = id,
+            spaceName = settings.name,
+            limits = SpaceLimits(storageLimitBytes = settings.storageLimitBytes),
+            startedAtMillis = startedAt,
+            expiresAtMillis = expiresAt,
+            persisted = true,
+        )
 
-    private fun acquireLocks() {
-        val current = locks ?: locksFactory(this).also { locks = it }
-        current.acquire()
+    /**
+     * Prüft die Berechtigung `ACCESS_LOCAL_NETWORK`. Sie gilt nur, wenn das System API 37 oder neuer ist UND die App auf
+     * targetSdk 37 oder neuer zielt. Andernfalls gilt die Prüfung als erfüllt (ADR 0012, Paket 3.3).
+     */
+    private fun localNetworkAllowed(): Boolean {
+        if (Build.VERSION.SDK_INT < ANDROID_17_SDK) return true
+        if (applicationInfo.targetSdkVersion < ANDROID_17_SDK) return true
+        return ContextCompat.checkSelfPermission(this, LOCAL_NETWORK_PERMISSION) == PackageManager.PERMISSION_GRANTED
     }
 
     @Suppress("DEPRECATION")
@@ -218,12 +275,12 @@ class SpaceServerService : Service() {
 
     /**
      * Startet den Vordergrund-Betrieb. Liefert `false`, wenn Android den Start verweigert. Dann ist der Dienst nicht im
-     * Vordergrund und der Aufrufer stoppt ihn.
+     * Vordergrund und der Aufrufer beendet ihn.
      */
     private fun ensureForeground(): Boolean {
         createChannels()
         try {
-            foregroundStarter.start(this, buildNotification(port = null), foregroundType())
+            foregroundStarter.start(this, buildOngoing(getString(R.string.space_server_starting)), foregroundType())
         } catch (failure: SecurityException) {
             Log.e(TAG, "startForeground verweigert: SecurityException")
             return false
@@ -245,33 +302,113 @@ class SpaceServerService : Service() {
         return failure is ForegroundServiceStartNotAllowedException
     }
 
-    private fun updateNotification(port: Int) {
-        // Ab API 33 braucht die Benachrichtigung die Laufzeit-Erlaubnis. Ohne sie bleibt die Meldung aus.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(POST_NOTIFICATIONS_PERMISSION) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, buildNotification(port))
+    private fun updateOngoing(text: String) {
+        if (!canPostNotifications()) return
+        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, buildOngoing(text))
     }
 
-    /** Hinweis an den Gastgeber, etwa bei Netzwechsel oder fehlendem WLAN. Eigener Kanal, nicht die Dauermeldung. */
-    private fun postAlert(text: Int) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(POST_NOTIFICATIONS_PERMISSION) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
+    /** Text der Dauermeldung: „Space ‚Name‘ läuft · noch X“. Ohne Ende nur der Name. */
+    private fun ongoingText(
+        spaceName: String,
+        expiresAtMillis: Long?,
+    ): String =
+        if (expiresAtMillis == null) {
+            getString(R.string.space_server_no_end_text, spaceName)
+        } else {
+            val remaining = expiresAtMillis - SystemRunClock.wallMillis()
+            getString(R.string.space_server_ongoing_text, spaceName, remainingText(remaining))
         }
-        val notification =
+
+    private fun remainingText(millis: Long): String {
+        val minutes = millis / MILLIS_PER_MINUTE
+        return when {
+            millis < MILLIS_PER_MINUTE -> {
+                getString(R.string.space_server_remaining_under_minute)
+            }
+
+            minutes < MINUTES_PER_HOUR -> {
+                getString(R.string.space_server_remaining_m, minutes)
+            }
+
+            else -> {
+                getString(
+                    R.string.space_server_remaining_hm,
+                    minutes / MINUTES_PER_HOUR,
+                    minutes % MINUTES_PER_HOUR,
+                )
+            }
+        }
+    }
+
+    /**
+     * Hinweis an den Gastgeber: Fehler, Pause, Netzwechsel. Mit [route] öffnet ein Tippen die passende Stelle der App.
+     * Eigener Kanal, nicht die Dauermeldung.
+     */
+    private fun postAlert(
+        text: String,
+        route: String? = null,
+    ) {
+        if (!canPostNotifications()) return
+        val builder =
             NotificationCompat
                 .Builder(this, ALERT_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_warning)
                 .setContentTitle(getString(R.string.space_server_running_title))
-                .setContentText(getString(text))
+                .setContentText(text)
                 .setAutoCancel(true)
-                .build()
-        NotificationManagerCompat.from(this).notify(ALERT_NOTIFICATION_ID, notification)
+        launchPendingIntent(route ?: ROUTE_OPEN_SPACE, REQUEST_OPEN_SPACE)?.let(builder::setContentIntent)
+        NotificationManagerCompat.from(this).notify(ALERT_NOTIFICATION_ID, builder.build())
     }
+
+    /** Dauermeldung des Dienstes. Tippen öffnet den Space. „Beenden“ öffnet die App mit Bestätigung, nie direkt. */
+    private fun buildOngoing(text: String): Notification {
+        val builder =
+            NotificationCompat
+                .Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_upload)
+                .setContentTitle(getString(R.string.space_server_running_title))
+                .setContentText(text)
+                .setOngoing(true)
+                .setSilent(true)
+        launchPendingIntent(ROUTE_OPEN_SPACE, REQUEST_OPEN_SPACE)?.let { pending ->
+            builder.setContentIntent(pending)
+            builder.addAction(0, getString(R.string.space_server_open), pending)
+        }
+        launchPendingIntent(ROUTE_CONFIRM_END, REQUEST_CONFIRM_END)?.let { pending ->
+            builder.addAction(0, getString(R.string.space_server_end), pending)
+        }
+        return builder.build()
+    }
+
+    /** Öffnet die App über ihren Starteintrag mit einem Ziel. Liefert `null`, wenn es keinen Starteintrag gibt. */
+    private fun launchPendingIntent(
+        route: String,
+        requestCode: Int,
+    ): PendingIntent? {
+        val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return null
+        launch.putExtra(EXTRA_ROUTE, route)
+        launch.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        return PendingIntent.getActivity(
+            this,
+            requestCode,
+            launch,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
+    private fun expiryIntentPending(): PendingIntent =
+        PendingIntent.getService(
+            this,
+            REQUEST_EXPIRY,
+            expireIntent(this),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    private fun alarmManager(): AlarmManager = getSystemService(AlarmManager::class.java)
+
+    private fun canPostNotifications(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(POST_NOTIFICATIONS_PERMISSION) == PackageManager.PERMISSION_GRANTED
 
     /** Typ connectedDevice gibt es erst ab API 29. Darunter bleibt der Typ ungesetzt (0). */
     private fun foregroundType(): Int =
@@ -295,42 +432,6 @@ class SpaceServerService : Service() {
         )
     }
 
-    private fun buildNotification(port: Int?): Notification {
-        val stopPending =
-            PendingIntent.getService(
-                this,
-                0,
-                stopIntent(this),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-        val text =
-            if (port == null) {
-                getString(R.string.space_server_starting)
-            } else {
-                getString(R.string.space_server_port, port)
-            }
-        return NotificationCompat
-            .Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle(getString(R.string.space_server_running_title))
-            .setContentText(text)
-            .setOngoing(true)
-            .setSilent(true)
-            .addAction(0, getString(R.string.space_server_stop), stopPending)
-            .build()
-    }
-
-    /**
-     * Prüft die Berechtigung `ACCESS_LOCAL_NETWORK`. Sie gilt nur, wenn das System API 37 oder neuer ist UND die App auf
-     * targetSdk 37 oder neuer zielt. Andernfalls gilt die Prüfung als erfüllt. Die Anfrage selbst gehört in die
-     * Oberfläche (ADR 0012, Paket 3.3).
-     */
-    private fun localNetworkAllowed(): Boolean {
-        if (Build.VERSION.SDK_INT < ANDROID_17_SDK) return true
-        if (applicationInfo.targetSdkVersion < ANDROID_17_SDK) return true
-        return ContextCompat.checkSelfPermission(this, LOCAL_NETWORK_PERMISSION) == PackageManager.PERMISSION_GRANTED
-    }
-
     /** Ein Aufruf von `startForeground`. Eigener Typ, damit Tests den Fehlerpfad auslösen können. */
     internal fun interface ForegroundStarter {
         fun start(
@@ -343,7 +444,16 @@ class SpaceServerService : Service() {
     companion object {
         const val ACTION_START = "io.github.labushuya.emberlight.share.server.START"
         const val ACTION_STOP = "io.github.labushuya.emberlight.share.server.STOP"
+        const val ACTION_EXPIRE = "io.github.labushuya.emberlight.share.server.EXPIRE"
+        const val ACTION_CONFIRM_NETWORK = "io.github.labushuya.emberlight.share.server.CONFIRM_NETWORK"
         const val EXTRA_PORT = "io.github.labushuya.emberlight.share.server.PORT"
+        const val EXTRA_SPACE_ID = "io.github.labushuya.emberlight.share.server.SPACE_ID"
+
+        /** Ziel, das die App beim Öffnen per Benachrichtigung bekommt. Die App wertet es aus. */
+        const val EXTRA_ROUTE = "io.github.labushuya.emberlight.share.server.ROUTE"
+        const val ROUTE_OPEN_SPACE = "open_space"
+        const val ROUTE_CONFIRM_END = "confirm_end"
+        const val ROUTE_CONFIRM_NETWORK = "confirm_network"
 
         private const val TAG = "EmberlightServer"
         private const val WAKE_LOCK_TAG = "emberlight:space-server"
@@ -352,27 +462,38 @@ class SpaceServerService : Service() {
         private const val ALERT_CHANNEL_ID = "space_server_alerts"
         private const val NOTIFICATION_ID = 4711
         private const val ALERT_NOTIFICATION_ID = 4712
+        private const val REQUEST_OPEN_SPACE = 1
+        private const val REQUEST_CONFIRM_END = 2
+        private const val REQUEST_EXPIRY = 3
         private const val ANDROID_17_SDK = 37
         private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
         private const val POST_NOTIFICATIONS_PERMISSION = "android.permission.POST_NOTIFICATIONS"
 
+        /** Zustand des Betriebs für die Oberfläche. Prozessweit, weil der Dienst nur einmal läuft. */
+        private val runStateFlow = MutableStateFlow<RunState>(RunState.Idle)
+
+        /** Zustand des Betriebs. Die Oberfläche beobachtet ihn für die Anzeige und den Netzwechsel-Hinweis. */
+        val runState: StateFlow<RunState> = runStateFlow.asStateFlow()
+
         /**
-         * Einrichtung des Serverlaufs. Produktion: keine (`null`), der Dienst startet nicht. Der Debug-Einstieg setzt sie
-         * nur in Debug- und Benchmark-Build (ADR 0014, Debug-Einstieg).
+         * Einrichtung des Serverlaufs ohne gespeicherten Space. Nur der Debug-Einstieg setzt sie (ADR 0014). Ist sie
+         * gesetzt, nimmt der Dienst sie vor dem gespeicherten Space.
          */
         @Volatile
         var serverSetupProvider: () -> ServerSetup? = { null }
 
         /** Test-Nähte. Produktion nutzt die Standardwerte. */
-        internal var serverFactory: (SpaceRuntime, ServerSetup) -> LocalServer = { runtime, setup ->
-            val gates = ServerGates()
-            KtorLocalServer(
-                routes = spaceRoutes(runtime.spaceVault, setup.spaceName, gates),
-                authorizer = runtime.authorizer,
-                requestLog = { line -> if (setup.debugLogging) Log.i(TAG, line) },
-                gates = gates,
-            )
-        }
+        internal var serverFactory: (SpaceRuntime, ServerSetup, SpaceClosure) -> LocalServer =
+            { runtime, setup, closure ->
+                val gates = ServerGates()
+                KtorLocalServer(
+                    routes = spaceRoutes(runtime.spaceVault, setup.spaceName, gates),
+                    authorizer = runtime.authorizer,
+                    requestLog = { line -> if (setup.debugLogging) Log.i(TAG, line) },
+                    gates = gates,
+                    closure = closure,
+                )
+            }
         internal var networkFactory: (Context) -> WifiNetworkProvider = { context ->
             ConnectivityWifiNetworkProvider(context)
         }
@@ -382,23 +503,51 @@ class SpaceServerService : Service() {
                 ServiceCompat.startForeground(service, NOTIFICATION_ID, notification, type)
             }
 
-        /** Startintent. [port] 0 wählt einen freien Port. */
+        /** Startintent für einen aktiven Space. Ohne Kennung nimmt der Debug-Einstieg den Weg über [serverSetupProvider]. */
         fun startIntent(
             context: Context,
+            spaceId: SpaceId? = null,
             port: Int = 0,
         ): Intent =
             Intent(context, SpaceServerService::class.java)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_PORT, port)
+                .apply { spaceId?.let { putExtra(EXTRA_SPACE_ID, it.value) } }
 
-        /** Stoppintent. Gibt die Sperren frei und beendet den Dienst. */
+        /** Stoppintent. Beendet den Space durch den Gastgeber und gibt die Sperren frei. */
         fun stopIntent(context: Context): Intent =
             Intent(context, SpaceServerService::class.java).setAction(ACTION_STOP)
+
+        /** Intent für den Wecker am geplanten Ende (ADR 0017). */
+        fun expireIntent(context: Context): Intent =
+            Intent(context, SpaceServerService::class.java).setAction(ACTION_EXPIRE)
+
+        /** Bestätigt den Wechsel in ein neues WLAN, wenn der Dienst darauf wartet. */
+        fun confirmNetworkIntent(context: Context): Intent =
+            Intent(context, SpaceServerService::class.java).setAction(ACTION_CONFIRM_NETWORK)
+
+        /**
+         * Schließt aktive Spaces ab, wenn kein Dienst mehr läuft. Der Aufrufer ist die App beim Start, vor jedem Start
+         * eines Space. Liefert die geschlossenen Spaces.
+         */
+        suspend fun closeOrphanedSpaces(
+            context: Context,
+            clock: RunClock = SystemRunClock,
+        ): List<SpaceRecord> {
+            if (runStateFlow.value !is RunState.Idle) return emptyList()
+            return SpaceRunRepository(SpacesDatabase.shared(context), clock).closeWithoutService()
+        }
+
+        private fun minutesOf(event: PauseEvent): Long =
+            (event.durationMillis + MILLIS_PER_MINUTE / 2) / MILLIS_PER_MINUTE
+
+        private const val MILLIS_PER_MINUTE = 60_000L
+        private const val MINUTES_PER_HOUR = 60L
     }
 }
 
 // Ohne Timeout mit Absicht: Der Typ connectedDevice hat kein Zeitlimit. Die Sperre gilt, bis sie in Stopp oder onDestroy
-// ausdrücklich freigegeben wird (siehe SpaceServerService.shutDownLocked und onDestroy).
+// ausdrücklich freigegeben wird (siehe SpaceRunner.stop und SpaceServerService.onDestroy).
 @SuppressLint("WakelockTimeout")
 private fun PowerManager.WakeLock.asServerLock(): ServerLock =
     object : ServerLock {

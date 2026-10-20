@@ -5,6 +5,9 @@ plugins {
 dependencies {
     // Spaces (Paket 3.2): Domäne, Persistenz und Titelbild-Pipeline liegen in share:space. Keine Galerie-Module.
     implementation(project(":share:space"))
+    // Betrieb (Paket 3.3): Dienst, Zustand des Betriebs und WLAN-Prüfung. Der Server ruft die Oberfläche nie auf,
+    // die Richtung Oberfläche → Server ist erlaubt (checkServerIsolation).
+    implementation(project(":share:server"))
     // Der Hilt-Einstieg in di/ nennt die Datenbankklasse von Room, daher braucht das Modul die Laufzeit selbst.
     implementation(libs.androidx.room.runtime)
     implementation(libs.kotlinx.coroutines.core)

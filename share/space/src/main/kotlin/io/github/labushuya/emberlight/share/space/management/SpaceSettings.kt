@@ -149,7 +149,10 @@ enum class SpaceStatus {
     DELETED,
 }
 
-/** Gespeicherter Space mit Kennung, Eigenschaften, Titelbild-Verweis und Status. */
+/**
+ * Gespeicherter Space mit Kennung, Eigenschaften, Titelbild-Verweis und Status. Start, geplantes und tatsächliches Ende
+ * sind nur gesetzt, wenn der Space gestartet wurde (Paket 3.3).
+ */
 data class SpaceRecord(
     val id: SpaceId,
     val settings: SpaceSettings,
@@ -157,4 +160,7 @@ data class SpaceRecord(
     val status: SpaceStatus,
     val createdAt: Long,
     val updatedAt: Long,
+    val startedAt: Long? = null,
+    val expiresAt: Long? = null,
+    val endedAt: Long? = null,
 )

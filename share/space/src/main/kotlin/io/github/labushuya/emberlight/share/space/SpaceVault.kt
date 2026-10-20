@@ -150,15 +150,10 @@ class SpaceVault internal constructor(
     private val limits: SpaceLimits,
     private val probe: StorageProbe,
     private val nowMillis: () -> Long = System::currentTimeMillis,
-) : AutoCloseable {
+) {
     private val media = database.media()
     private val participants = database.participants()
     private val commitLock = Mutex()
-
-    /** Schließt den Index. Danach ist die Instanz nicht mehr verwendbar. */
-    override fun close() {
-        database.close()
-    }
 
     /**
      * Nimmt einen Upload entgegen. Die Reihenfolge entspricht ADR 0013 und ADR 0015: Kopf lesen und erkennen, Größe und
@@ -505,24 +500,17 @@ class SpaceVault internal constructor(
 
     companion object {
         /**
-         * Öffnet den Space unter [spacesDir]: Index (`spaces.db`) und Speicher `<spacesDir>/<spaceId>/`. Der Aufrufer
-         * gibt den Ordner vor, meist `noBackupFilesDir/spaces` (ADR 0014). Der Kontext dient nur dem Room-Builder.
+         * Öffnet den Speicher des Space unter [spacesDir]: `<spacesDir>/<spaceId>/`. Den Index [database] gibt der Aufrufer
+         * vor. Er ist prozessweit geteilt (siehe [SpacesDatabase.shared]) und gehört dem Aufrufer, die Vault schließt
+         * ihn nicht (Paket 3.3).
          */
         fun open(
-            context: Context,
+            database: SpacesDatabase,
             spacesDir: File,
             spaceId: SpaceId,
             limits: SpaceLimits,
             probe: StorageProbe,
-        ): SpaceVault {
-            val database = SpacesDatabase.open(context, spacesDir)
-            return try {
-                SpaceVault(database, SpaceStorage(spacesDir, spaceId), limits, probe)
-            } catch (failure: Throwable) {
-                database.close()
-                throw failure
-            }
-        }
+        ): SpaceVault = SpaceVault(database, SpaceStorage(spacesDir, spaceId), limits, probe)
 
         const val MAX_PAGE = 100
         const val DEFAULT_PAGE = 50
