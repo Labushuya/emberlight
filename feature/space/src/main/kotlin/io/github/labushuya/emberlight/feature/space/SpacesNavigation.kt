@@ -58,7 +58,7 @@ fun NavGraphBuilder.spacesScreens(
     onStart: (String) -> Unit = {},
     onSetup: (String) -> Unit = {},
     onOpenRunning: (String) -> Unit = {},
-    onStarted: (String) -> Unit = {},
+    onRunning: (String) -> Unit = {},
     onBack: () -> Unit = {},
 ) {
     composable<SpacesRoute> {
@@ -77,7 +77,7 @@ fun NavGraphBuilder.spacesScreens(
         SpaceEditScreen(onDone = onBack)
     }
     composable<SpaceSetupRoute> {
-        SpaceSetupScreen(onBack = onBack, onStarted = onStarted, onEdit = onEdit)
+        SpaceSetupScreen(onBack = onBack, onRunning = onRunning, onEdit = onEdit)
     }
     composable<SpaceRunningRoute> { entry ->
         val route = entry.toRoute<SpaceRunningRoute>()

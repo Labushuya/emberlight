@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        Sichtbarkeit der Hersteller-Einstellungen für resolveActivity (ADR 0017, Paket-Sichtbarkeit ab API 30). Die Liste ist
+        fest und steht in OemFamily.PACKAGES. Die Einträge gelten im gemergten Manifest der App.
+    -->
+    <queries>
+        <package android:name="com.hihonor.systemmanager" />
+        <package android:name="com.huawei.systemmanager" />
+        <package android:name="com.miui.securitycenter" />
+        <package android:name="com.samsung.android.lool" />
+        <package android:name="com.oneplus.security" />
+        <package android:name="com.coloros.safecenter" />
+        <package android:name="com.oppo.safe" />
+        <package android:name="com.vivo.permissionmanager" />
+        <package android:name="com.iqoo.secure" />
+        <package android:name="com.asus.mobilemanager" />
+        <package android:name="com.evenwell.powersaving.g3" />
+    </queries>
+</manifest>

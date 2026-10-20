@@ -33,12 +33,13 @@ enum class TopLevelDestination(
         unselectedIcon = DesignR.drawable.ic_groups_outlined,
         labelRes = R.string.app_nav_spaces,
         // Detail, Formular, Einrichtung und laufender Space gehören zum Ziel Spaces: Die Leiste bleibt dort markiert.
-        routes = listOf(
-            SpacesRoute::class,
-            SpaceDetailRoute::class,
-            SpaceEditRoute::class,
-            SpaceSetupRoute::class,
-            SpaceRunningRoute::class,
-        ),
+        routes =
+            listOf(
+                SpacesRoute::class,
+                SpaceDetailRoute::class,
+                SpaceEditRoute::class,
+                SpaceSetupRoute::class,
+                SpaceRunningRoute::class,
+            ),
     ),
 }

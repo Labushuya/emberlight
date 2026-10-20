@@ -192,7 +192,6 @@ class SpacesScreenshotTest {
         composeRule.waitForIdle()
     }
 
-
     private fun capture(
         content: @Composable () -> Unit,
         path: String,

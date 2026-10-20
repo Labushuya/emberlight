@@ -302,6 +302,8 @@ class SpaceServerService : Service() {
         return failure is ForegroundServiceStartNotAllowedException
     }
 
+    // Die Berechtigung prüft canPostNotifications() vor dem Aufruf. Lint erkennt die Prüfung über die Methode nicht.
+    @SuppressLint("MissingPermission")
     private fun updateOngoing(text: String) {
         if (!canPostNotifications()) return
         NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, buildOngoing(text))
@@ -342,8 +344,10 @@ class SpaceServerService : Service() {
 
     /**
      * Hinweis an den Gastgeber: Fehler, Pause, Netzwechsel. Mit [route] öffnet ein Tippen die passende Stelle der App.
-     * Eigener Kanal, nicht die Dauermeldung.
+     * Eigener Kanal, nicht die Dauermeldung. Die Berechtigung prüft [canPostNotifications] vor dem Aufruf. Lint erkennt
+     * die Prüfung über die Methode nicht, deshalb die Unterdrückung.
      */
+    @SuppressLint("MissingPermission")
     private fun postAlert(
         text: String,
         route: String? = null,

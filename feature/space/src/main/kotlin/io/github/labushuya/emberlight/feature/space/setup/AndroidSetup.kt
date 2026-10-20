@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 
 /**
  * Speicher der Einrichtung: Selbstbestätigung der Hersteller-Freigabe und die Frage, ob eine Berechtigung schon einmal
@@ -22,13 +23,13 @@ class SetupStore(
     fun oemConfirmed(): Boolean = prefs.getBoolean(KEY_OEM_CONFIRMED, false)
 
     fun setOemConfirmed(confirmed: Boolean) {
-        prefs.edit().putBoolean(KEY_OEM_CONFIRMED, confirmed).apply()
+        prefs.edit { putBoolean(KEY_OEM_CONFIRMED, confirmed) }
     }
 
     fun wasAsked(permission: String): Boolean = prefs.getBoolean(askedKey(permission), false)
 
     fun markAsked(permission: String) {
-        prefs.edit().putBoolean(askedKey(permission), true).apply()
+        prefs.edit { putBoolean(askedKey(permission), true) }
     }
 
     private fun askedKey(permission: String): String = "asked:$permission"
@@ -63,12 +64,17 @@ class AndroidSetupEnvironment(
     override val batteryIgnored: Boolean
         get() = context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
 
+    // Ab API 28. Darunter ist die Frage nicht beantwortbar, der Punkt bleibt aus (ADR 0017, Restrisiken).
     override val backgroundRestricted: Boolean
-        get() = context.getSystemService(ActivityManager::class.java).isBackgroundRestricted
+        get() =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                context.getSystemService(ActivityManager::class.java).isBackgroundRestricted
 
     /** Standby-Stufe der App. Eingeschränkt heißt: Android drosselt sie stark (API 28 und neuer). */
     override val standbyRestricted: Boolean
         get() {
+            // Die Konstante RESTRICTED gibt es erst ab API 30. Darunter erkennt die Prüfung die Stufe nicht (ADR 0017, Restrisiken).
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
             val manager = context.getSystemService(UsageStatsManager::class.java) ?: return false
             return manager.appStandbyBucket >= UsageStatsManager.STANDBY_BUCKET_RESTRICTED
         }

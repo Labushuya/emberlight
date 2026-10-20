@@ -18,11 +18,11 @@ import io.github.labushuya.emberlight.feature.space.run.StartOutcome
 import io.github.labushuya.emberlight.feature.space.setup.CheckStatus
 import io.github.labushuya.emberlight.feature.space.setup.OemFamily
 import io.github.labushuya.emberlight.feature.space.setup.SetupChecks
-import io.github.labushuya.emberlight.feature.space.setup.StartGate
 import io.github.labushuya.emberlight.feature.space.setup.SetupEnvironment
-import io.github.labushuya.emberlight.feature.space.setup.SetupPermissions
 import io.github.labushuya.emberlight.feature.space.setup.SetupItem
+import io.github.labushuya.emberlight.feature.space.setup.SetupPermissions
 import io.github.labushuya.emberlight.feature.space.setup.SpaceSetupContent
+import io.github.labushuya.emberlight.feature.space.setup.StartGate
 import io.github.labushuya.emberlight.feature.space.setup.StartOutcomeDialog
 import io.github.labushuya.emberlight.share.server.PauseCause
 import io.github.labushuya.emberlight.share.server.RunState
@@ -47,6 +47,7 @@ import java.util.TimeZone
 private const val MIB = 1024L * 1024L
 private const val GIB = 1024L * MIB
 private const val HOUR = 60L * 60L * 1000L
+private const val DIALOG_TIMEOUT_MILLIS = 5_000L
 
 /**
  * Goldens für Einrichtung, laufenden Space, beendeten Space und den Startfehler (Paket 3.3, ADR 0006). Telefon in Deutsch
@@ -77,7 +78,9 @@ class SpaceRunScreenshotTest {
     @Test
     @Config(qualifiers = "de-w412dp-h915dp")
     fun setupChecklistPhoneGerman() {
-        capture({ SetupContent(setupItems(localNetworkOpen = true), blocked = true) }, "src/test/screenshots/SpaceSetup_phone_de.png")
+        capture({
+            SetupContent(setupItems(localNetworkOpen = true), blocked = true)
+        }, "src/test/screenshots/SpaceSetup_phone_de.png")
     }
 
     @Test
@@ -125,7 +128,10 @@ class SpaceRunScreenshotTest {
     @Test
     @Config(qualifiers = "de-w412dp-h915dp")
     fun runningStorageWarningPhoneGerman() {
-        capture({ Running(state(usedBytes = (3.5 * GIB).toLong())) }, "src/test/screenshots/SpaceRunning_warning_phone_de.png")
+        capture(
+            { Running(state(usedBytes = (3.5 * GIB).toLong())) },
+            "src/test/screenshots/SpaceRunning_warning_phone_de.png",
+        )
     }
 
     @Test
@@ -136,7 +142,12 @@ class SpaceRunScreenshotTest {
                 Running(
                     state(
                         usedBytes = 1 * GIB,
-                        pause = PauseEvent(startedAtMillis = SpaceFixtures.NOW - HOUR / 2, durationMillis = 7 * 60_000L, deepSleepMillis = 0L),
+                        pause =
+                            PauseEvent(
+                                startedAtMillis = SpaceFixtures.NOW - HOUR / 2,
+                                durationMillis = 7 * 60_000L,
+                                deepSleepMillis = 0L,
+                            ),
                     ),
                 )
             },
@@ -212,7 +223,16 @@ class SpaceRunScreenshotTest {
     ) {
         SpaceSetupContent(
             items = items,
-            gate = StartGate(blocked = blocked, recommendedOpen = items.filter { !it.required && it.status == CheckStatus.OPEN }.map { it.kind }),
+            gate =
+                StartGate(
+                    blocked = blocked,
+                    recommendedOpen =
+                        items
+                            .filter {
+                                !it.required &&
+                                    it.status == CheckStatus.OPEN
+                            }.map { it.kind },
+                ),
             startMode = true,
             starting = false,
             family = OemFamily.HONOR,
@@ -258,14 +278,15 @@ class SpaceRunScreenshotTest {
 
     private fun state(
         usedBytes: Long,
-        runState: RunState = RunState.Running(
-            spaceId = SPACE_ID,
-            spaceName = SPACE_NAME,
-            port = 8787,
-            address = WifiAddress("192.168.1.20", 24, "192.168.1.1"),
-            startedAtMillis = SpaceFixtures.NOW - HOUR,
-            expiresAtMillis = SpaceFixtures.NOW + 2 * HOUR,
-        ),
+        runState: RunState =
+            RunState.Running(
+                spaceId = SPACE_ID,
+                spaceName = SPACE_NAME,
+                port = 8787,
+                address = WifiAddress("192.168.1.20", 24, "192.168.1.1"),
+                startedAtMillis = SpaceFixtures.NOW - HOUR,
+                expiresAtMillis = SpaceFixtures.NOW + 2 * HOUR,
+            ),
         pause: PauseEvent? = null,
     ): SpaceRunningUiState =
         SpaceRunningUiState(
@@ -279,15 +300,16 @@ class SpaceRunScreenshotTest {
         )
 
     private fun active(): SpaceRecord =
-        SpaceFixtures.draft(
-            SPACE_ID.value,
-            SPACE_NAME,
-            storageBytes = 4 * GIB,
-            status = SpaceStatus.ACTIVE,
-        ).copy(
-            startedAt = SpaceFixtures.NOW - HOUR,
-            expiresAt = SpaceFixtures.NOW + 2 * HOUR,
-        )
+        SpaceFixtures
+            .draft(
+                SPACE_ID.value,
+                SPACE_NAME,
+                storageBytes = 4 * GIB,
+                status = SpaceStatus.ACTIVE,
+            ).copy(
+                startedAt = SpaceFixtures.NOW - HOUR,
+                expiresAt = SpaceFixtures.NOW + 2 * HOUR,
+            )
 
     private fun ended(): SpaceRecord =
         SpaceFixtures.draft(SpaceFixtures.ID_HOCHZEIT, SPACE_NAME, status = SpaceStatus.ENDED).copy(
@@ -315,6 +337,11 @@ class SpaceRunScreenshotTest {
             }
         }
         composeRule.waitForIdle()
+        // Der Dialog ist ein eigenes Fenster. Erst wenn es im Baum steht, ist die Abdunkelung gesetzt. Sonst wechselt das
+        // Bild zwischen den Läufen.
+        composeRule.waitUntil(timeoutMillis = DIALOG_TIMEOUT_MILLIS) {
+            composeRule.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty()
+        }
         settle()
         composeRule.onNode(isDialog()).captureRoboImage(path)
     }
@@ -328,7 +355,6 @@ class SpaceRunScreenshotTest {
         Shadows.shadowOf(Looper.getMainLooper()).idle()
         composeRule.waitForIdle()
     }
-
 
     private fun capture(
         content: @Composable () -> Unit,

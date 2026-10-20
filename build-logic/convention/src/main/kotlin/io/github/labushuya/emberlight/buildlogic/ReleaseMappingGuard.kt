@@ -51,7 +51,9 @@ abstract class CheckReleaseMappingTask : DefaultTask() {
         if (missing.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("Die R8-Prüfung findet Klassen der Server-Pipeline nicht im Release (R8 hat sie entfernt):")
+                    appendLine(
+                        "Die R8-Prüfung findet Klassen der Server-Pipeline nicht im Release (R8 hat sie entfernt):",
+                    )
                     missing.forEach { appendLine("  - $it") }
                     append("Siehe docs/adr/0017-einrichtung-und-betrieb.md, Abschnitt Release-Einstieg.")
                 },

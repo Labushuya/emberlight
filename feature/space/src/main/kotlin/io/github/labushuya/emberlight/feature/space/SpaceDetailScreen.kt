@@ -95,10 +95,10 @@ internal fun SpaceDetailPane(
     coverFile: (SpaceRecord?) -> File?,
     onEdit: (String) -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
     onStart: (String) -> Unit = {},
     onSetup: (String) -> Unit = {},
     onOpenRunning: (String) -> Unit = {},
-    modifier: Modifier = Modifier,
 ) {
     val record = state.record
     when {
@@ -136,10 +136,10 @@ internal fun SpaceDetailContent(
     coverFile: File?,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
     onStart: () -> Unit = {},
     onSetup: () -> Unit = {},
     onOpenRunning: () -> Unit = {},
-    modifier: Modifier = Modifier,
 ) {
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     val settings = record.settings
@@ -193,14 +193,20 @@ internal fun SpaceDetailContent(
                         Text(stringResource(R.string.space_detail_edit))
                     }
                 }
+
                 SpaceStatus.ACTIVE -> {
                     Button(onClick = onOpenRunning, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.space_detail_open_running))
                     }
                 }
+
                 SpaceStatus.ENDED -> {
                     Text(
-                        text = stringResource(R.string.space_detail_ended_at, formatDate(record.endedAt ?: record.updatedAt)),
+                        text =
+                            stringResource(
+                                R.string.space_detail_ended_at,
+                                formatDate(record.endedAt ?: record.updatedAt),
+                            ),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -215,7 +221,8 @@ internal fun SpaceDetailContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                SpaceStatus.DELETED -> Unit
+
+                SpaceStatus.DELETED -> {}
             }
             if (!editable) {
                 Spacer(Modifier.height(8.dp))
@@ -230,12 +237,14 @@ internal fun SpaceDetailContent(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            if (record.status != SpaceStatus.ACTIVE) OutlinedButton(
-                onClick = { confirmDelete = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            ) {
-                Text(stringResource(R.string.space_detail_delete))
+            if (record.status != SpaceStatus.ACTIVE) {
+                OutlinedButton(
+                    onClick = { confirmDelete = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.space_detail_delete))
+                }
             }
         }
 

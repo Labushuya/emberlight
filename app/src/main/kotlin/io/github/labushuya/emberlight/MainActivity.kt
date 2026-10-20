@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
                     overlays = appOverlays.toList(),
                     viewerImageSources = viewerImageSources.toList(),
                     launchRoute = launchRoute.value,
-                    onLaunchRouteHandled = { launchRoute.value = null },
+                    onLaunchRouteConsume = { launchRoute.value = null },
                 )
             }
         }

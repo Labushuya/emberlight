@@ -90,14 +90,19 @@ class SetupChecksTest {
 
     @Test
     fun notificationsAreNotRequiredBeforeApi33() {
-        val items = SetupChecks.items(env(sdkInt = 32, targetSdk = 33, notificationsGranted = false, localNetworkGranted = true))
+        val items =
+            SetupChecks.items(
+                env(sdkInt = 32, targetSdk = 33, notificationsGranted = false, localNetworkGranted = true),
+            )
         assertEquals(CheckStatus.MET, items.item(CheckKind.NOTIFICATIONS)?.status)
     }
 
     @Test
     fun missingNotificationsAreRecommendedButDoNotBlock() {
         val items =
-            SetupChecks.items(env(notificationsGranted = false, asked = setOf(notifications), askAgain = setOf(notifications)))
+            SetupChecks.items(
+                env(notificationsGranted = false, asked = setOf(notifications), askAgain = setOf(notifications)),
+            )
         assertEquals(CheckStatus.DENIED, items.item(CheckKind.NOTIFICATIONS)?.status)
         val gate = SetupChecks.gate(items)
         assertFalse(gate.blocked)
@@ -109,13 +114,22 @@ class SetupChecksTest {
         val items = SetupChecks.items(env(batteryIgnored = false, oemConfirmed = false))
         val gate = SetupChecks.gate(items)
         assertFalse(gate.blocked)
-        assertEquals(listOf(CheckKind.BATTERY, CheckKind.OEM_BACKGROUND), gate.recommendedOpen.filter { it in OPTIONAL })
+        assertEquals(
+            listOf(CheckKind.BATTERY, CheckKind.OEM_BACKGROUND),
+            gate.recommendedOpen.filter { it in OPTIONAL },
+        )
     }
 
     @Test
     fun theManufacturerStepIsSelfConfirmed() {
-        assertEquals(CheckStatus.CONFIRMED, SetupChecks.items(env(oemConfirmed = true)).item(CheckKind.OEM_BACKGROUND)?.status)
-        assertEquals(CheckStatus.OPEN, SetupChecks.items(env(oemConfirmed = false)).item(CheckKind.OEM_BACKGROUND)?.status)
+        assertEquals(
+            CheckStatus.CONFIRMED,
+            SetupChecks.items(env(oemConfirmed = true)).item(CheckKind.OEM_BACKGROUND)?.status,
+        )
+        assertEquals(
+            CheckStatus.OPEN,
+            SetupChecks.items(env(oemConfirmed = false)).item(CheckKind.OEM_BACKGROUND)?.status,
+        )
     }
 
     @Test

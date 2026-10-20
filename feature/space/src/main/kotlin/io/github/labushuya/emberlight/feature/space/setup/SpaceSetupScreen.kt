@@ -1,5 +1,6 @@
 package io.github.labushuya.emberlight.feature.space.setup
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -52,8 +53,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.labushuya.emberlight.feature.space.R
 import io.github.labushuya.emberlight.feature.space.run.StartOutcome
@@ -67,7 +68,7 @@ import io.github.labushuya.emberlight.share.space.run.StartProblem
 @Composable
 internal fun SpaceSetupScreen(
     onBack: () -> Unit,
-    onStarted: (String) -> Unit,
+    onRunning: (String) -> Unit,
     onEdit: (String) -> Unit,
     viewModel: SpaceSetupViewModel = hiltViewModel(),
 ) {
@@ -113,6 +114,7 @@ internal fun SpaceSetupScreen(
                     requestPermission(SetupPermissions.NOTIFICATIONS, notificationLauncher)
                 }
             }
+
             CheckKind.LOCAL_NETWORK -> {
                 val item = state.items.firstOrNull { it.kind == kind }
                 when (item?.status) {
@@ -121,9 +123,16 @@ internal fun SpaceSetupScreen(
                     else -> rationaleFor = SetupPermissions.LOCAL_NETWORK
                 }
             }
-            CheckKind.BATTERY -> requestBatteryExemption(context, batteryLauncher)
-            CheckKind.BACKGROUND_RESTRICTED -> openAppSettings(context)
-            CheckKind.OEM_BACKGROUND, CheckKind.CHARGER -> Unit
+
+            CheckKind.BATTERY -> {
+                requestBatteryExemption(context, batteryLauncher)
+            }
+
+            CheckKind.BACKGROUND_RESTRICTED -> {
+                openAppSettings(context)
+            }
+
+            CheckKind.OEM_BACKGROUND, CheckKind.CHARGER -> {}
         }
     }
 
@@ -162,7 +171,7 @@ internal fun SpaceSetupScreen(
             },
             onStart = {
                 if (state.gate.recommendedOpen.isEmpty()) {
-                    viewModel.start(onStarted = { viewModel.spaceId?.let { onStarted(it.value) } })
+                    viewModel.start(onStarted = { viewModel.spaceId?.let { onRunning(it.value) } })
                 } else {
                     askAnyway = true
                 }
@@ -199,7 +208,7 @@ internal fun SpaceSetupScreen(
                 TextButton(
                     onClick = {
                         askAnyway = false
-                        viewModel.start(onStarted = { viewModel.spaceId?.let { onStarted(it.value) } })
+                        viewModel.start(onStarted = { viewModel.spaceId?.let { onRunning(it.value) } })
                     },
                 ) { Text(stringResource(R.string.space_setup_start_anyway_confirm)) }
             },
@@ -237,13 +246,14 @@ internal fun StartOutcomeDialog(
                 Text(stringResource(R.string.space_setup_error_ok))
             }
         },
-        dismissButton = if (outcomeNeedsEdit(outcome)) {
-            {
-                TextButton(onClick = onEdit) { Text(stringResource(R.string.space_setup_error_edit)) }
-            }
-        } else {
-            null
-        },
+        dismissButton =
+            if (outcomeNeedsEdit(outcome)) {
+                {
+                    TextButton(onClick = onEdit) { Text(stringResource(R.string.space_setup_error_edit)) }
+                }
+            } else {
+                null
+            },
     )
 }
 
@@ -337,7 +347,10 @@ private fun SetupRow(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = stringResource(if (item.required) R.string.space_setup_required else R.string.space_setup_recommended),
+                text =
+                    stringResource(
+                        if (item.required) R.string.space_setup_required else R.string.space_setup_recommended,
+                    ),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -379,9 +392,12 @@ private fun SetupRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            else -> actionLabel(item.kind, item.status)?.let { label ->
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onAction) { Text(stringResource(label)) }
+
+            else -> {
+                actionLabel(item.kind, item.status)?.let { label ->
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onAction) { Text(stringResource(label)) }
+                }
             }
         }
     }
@@ -456,25 +472,50 @@ private fun actionLabel(
     status: CheckStatus,
 ): Int? =
     when (kind) {
-        CheckKind.NOTIFICATIONS, CheckKind.LOCAL_NETWORK ->
+        CheckKind.NOTIFICATIONS, CheckKind.LOCAL_NETWORK -> {
             when (status) {
                 CheckStatus.OPEN, CheckStatus.DENIED -> R.string.space_setup_action_allow
                 CheckStatus.PERMANENTLY_DENIED -> R.string.space_setup_action_app_settings
                 else -> null
             }
-        CheckKind.BATTERY -> if (status == CheckStatus.OPEN) R.string.space_setup_action_battery else null
-        CheckKind.BACKGROUND_RESTRICTED -> if (status == CheckStatus.OPEN) R.string.space_setup_action_app_info else null
-        CheckKind.OEM_BACKGROUND, CheckKind.CHARGER -> null
+        }
+
+        CheckKind.BATTERY -> {
+            if (status == CheckStatus.OPEN) R.string.space_setup_action_battery else null
+        }
+
+        CheckKind.BACKGROUND_RESTRICTED -> {
+            if (status ==
+                CheckStatus.OPEN
+            ) {
+                R.string.space_setup_action_app_info
+            } else {
+                null
+            }
+        }
+
+        CheckKind.OEM_BACKGROUND, CheckKind.CHARGER -> {
+            null
+        }
     }
 
 @Composable
 private fun outcomeText(outcome: StartOutcome): String =
     stringResource(
         when (outcome) {
-            StartOutcome.Started -> R.string.space_setup_error_ok
-            StartOutcome.NoWifi -> R.string.space_setup_error_no_wifi
-            StartOutcome.ServiceRefused -> R.string.space_setup_error_service
-            is StartOutcome.Refused ->
+            StartOutcome.Started -> {
+                R.string.space_setup_error_ok
+            }
+
+            StartOutcome.NoWifi -> {
+                R.string.space_setup_error_no_wifi
+            }
+
+            StartOutcome.ServiceRefused -> {
+                R.string.space_setup_error_service
+            }
+
+            is StartOutcome.Refused -> {
                 when (outcome.problem) {
                     StartProblem.ANOTHER_ACTIVE -> R.string.space_setup_error_another_active
                     StartProblem.STORAGE_ABOVE_FREE -> R.string.space_setup_error_storage
@@ -482,17 +523,24 @@ private fun outcomeText(outcome: StartOutcome): String =
                     StartProblem.NOT_A_DRAFT -> R.string.space_setup_error_not_draft
                     StartProblem.NOT_FOUND -> R.string.space_setup_error_not_found
                 }
+            }
         },
     )
 
 private fun outcomeNeedsEdit(outcome: StartOutcome): Boolean =
     outcome is StartOutcome.Refused && outcome.problem == StartProblem.STORAGE_ABOVE_FREE
 
+// Die Akku-Anfrage ist bewusst gewählt (Sideloading, kein Play-Store, ADR 0017). Die Begründung steht in der Einrichtung.
+@SuppressLint("BatteryLife")
 private fun requestBatteryExemption(
     context: Context,
     launcher: ActivityResultLauncher<Intent>,
 ) {
-    val request = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
+    val request =
+        Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.fromParts("package", context.packageName, null),
+        )
     try {
         launcher.launch(request)
     } catch (failure: ActivityNotFoundException) {
@@ -503,7 +551,10 @@ private fun requestBatteryExemption(
 }
 
 private fun openAppSettings(context: Context) {
-    launchOrIgnore(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
+    launchOrIgnore(
+        context,
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+    )
 }
 
 /** Öffnet eine Systemseite. Fehlt sie, bleibt der Nutzer hier, und der Hinweis am Punkt bleibt stehen. */

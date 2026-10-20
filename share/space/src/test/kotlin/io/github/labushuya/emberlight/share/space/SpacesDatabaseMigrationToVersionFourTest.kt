@@ -70,7 +70,11 @@ class SpacesDatabaseMigrationToVersionFourTest {
             assertTrue(tableExists(opened, "pause_event"))
         }
 
-    private fun open(spacesDir: File): SpacesDatabase = SpacesDatabase.open(ApplicationProvider.getApplicationContext<Context>(), spacesDir).also { database = it }
+    private fun open(spacesDir: File): SpacesDatabase =
+        SpacesDatabase.open(ApplicationProvider.getApplicationContext<Context>(), spacesDir).also {
+            database =
+                it
+        }
 
     private fun tableExists(
         db: SpacesDatabase,

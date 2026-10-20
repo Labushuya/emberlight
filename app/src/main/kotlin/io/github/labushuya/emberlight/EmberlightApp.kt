@@ -27,6 +27,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
@@ -78,13 +79,14 @@ fun EmberlightApp(
     overlays: List<AppOverlay> = emptyList(),
     viewerImageSources: List<ViewerImageSourceContribution> = emptyList(),
     launchRoute: String? = null,
-    onLaunchRouteHandled: () -> Unit = {},
+    onLaunchRouteConsume: () -> Unit = {},
 ) {
     // Ziel aus einer Benachrichtigung des Dienstes (Paket 3.3). Es wird einmal geöffnet, danach ist es verbraucht.
+    val routeHandled = rememberUpdatedState(onLaunchRouteConsume)
     LaunchedEffect(launchRoute) {
         val route = launchRoute ?: return@LaunchedEffect
         navController.openLaunchRoute(route)
-        onLaunchRouteHandled()
+        routeHandled.value()
     }
     Box(modifier = modifier.fillMaxSize()) {
         // Zusätzliche Bildquellen des Viewers (ADR 0011). Ohne Beiträge gilt die Standardquelle.
@@ -202,7 +204,7 @@ private fun AppNavHost(navController: NavHostController) {
             onStart = { id -> navController.navigateToSpaceSetup(id, startMode = true) },
             onSetup = { id -> navController.navigateToSpaceSetup(id) },
             onOpenRunning = { id -> navController.navigateToSpaceRunning(id) },
-            onStarted = { id -> navController.navigateToSpaceRunning(id, afterStart = true) },
+            onRunning = { id -> navController.navigateToSpaceRunning(id, afterStart = true) },
             onBack = { navController.popBackStack() },
         )
     }

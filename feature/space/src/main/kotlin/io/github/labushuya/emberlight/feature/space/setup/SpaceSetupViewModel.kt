@@ -67,7 +67,12 @@ class SpaceSetupViewModel
             viewModelScope.launch {
                 mutableState.update { it.copy(starting = true, outcome = null) }
                 val outcome = starter.start(id)
-                mutableState.update { it.copy(starting = false, outcome = outcome.takeUnless { it is StartOutcome.Started }) }
+                mutableState.update {
+                    it.copy(
+                        starting = false,
+                        outcome = outcome.takeUnless { it is StartOutcome.Started },
+                    )
+                }
                 if (outcome is StartOutcome.Started) onStarted()
             }
         }

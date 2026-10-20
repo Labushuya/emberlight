@@ -274,7 +274,11 @@ abstract class SpacesDatabase : RoomDatabase() {
          */
         fun shared(context: Context): SpacesDatabase =
             shared ?: synchronized(this) {
-                shared ?: open(context.applicationContext, spacesDirectory(context.applicationContext)).also { shared = it }
+                shared
+                    ?: open(
+                        context.applicationContext,
+                        spacesDirectory(context.applicationContext),
+                    ).also { shared = it }
             }
 
         /**

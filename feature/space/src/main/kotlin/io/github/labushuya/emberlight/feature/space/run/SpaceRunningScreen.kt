@@ -89,7 +89,12 @@ internal fun SpaceRunningScreen(
             onEnd = { showEndDialog = true },
             onConfirmNetwork = viewModel::confirmNetwork,
             onAcknowledgePause = viewModel::acknowledgePauses,
-            onSetup = { state.record?.id?.value?.let(onSetup) },
+            onSetup = {
+                state.record
+                    ?.id
+                    ?.value
+                    ?.let(onSetup)
+            },
             modifier = Modifier.padding(padding),
         )
     }
@@ -350,9 +355,14 @@ private fun statusLine(
     state: SpaceRunningUiState,
 ): String =
     when {
-        record.status == SpaceStatus.ENDED ->
+        record.status == SpaceStatus.ENDED -> {
             stringResource(R.string.space_running_status_ended, formatDate(record.endedAt ?: record.updatedAt))
-        state.runState is RunState.Paused -> stringResource(R.string.space_running_status_paused)
+        }
+
+        state.runState is RunState.Paused -> {
+            stringResource(R.string.space_running_status_paused)
+        }
+
         else -> {
             val expires = record.expiresAt
             if (expires != null) {
@@ -367,9 +377,21 @@ private fun statusLine(
 private fun remainingText(millis: Long): String {
     val minutes = millis / MILLIS_PER_MINUTE
     return when {
-        millis < MILLIS_PER_MINUTE -> stringResource(R.string.space_running_remaining_under_minute)
-        minutes < MINUTES_PER_HOUR -> stringResource(R.string.space_running_remaining_m, minutes)
-        else -> stringResource(R.string.space_running_remaining_hm, minutes / MINUTES_PER_HOUR, minutes % MINUTES_PER_HOUR)
+        millis < MILLIS_PER_MINUTE -> {
+            stringResource(R.string.space_running_remaining_under_minute)
+        }
+
+        minutes < MINUTES_PER_HOUR -> {
+            stringResource(R.string.space_running_remaining_m, minutes)
+        }
+
+        else -> {
+            stringResource(
+                R.string.space_running_remaining_hm,
+                minutes / MINUTES_PER_HOUR,
+                minutes % MINUTES_PER_HOUR,
+            )
+        }
     }
 }
 

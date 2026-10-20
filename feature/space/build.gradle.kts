@@ -12,6 +12,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.compose.material3)
     // Titelbilder (Paket 3.2): Coil lädt die Datei aus dem Space-Speicher, verkleinert und mit EXIF-Ausrichtung.

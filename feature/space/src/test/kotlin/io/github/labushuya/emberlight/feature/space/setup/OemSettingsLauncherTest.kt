@@ -28,11 +28,17 @@ class OemSettingsLauncherTest {
         override fun start(intent: Intent) {
             val component = intent.component
             when {
-                component != null && component in failing -> throw failing.getValue(component)
-                intent.action == Settings.ACTION_APPLICATION_DETAILS_SETTINGS && failingAppDetails != null ->
+                component != null && component in failing -> {
+                    throw failing.getValue(component)
+                }
+
+                intent.action == Settings.ACTION_APPLICATION_DETAILS_SETTINGS && failingAppDetails != null -> {
                     throw failingAppDetails
-                intent.action == Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS && failingBatteryList != null ->
+                }
+
+                intent.action == Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS && failingBatteryList != null -> {
                     throw failingBatteryList
+                }
             }
             started += intent
         }
