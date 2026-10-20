@@ -1,5 +1,6 @@
 # Release: Baut die signierte Release-APK und prüft sie. Auslöser sind zwei Fälle:
-# (a) Tag v*.*.* auf main: veröffentlicht ein GitHub-Release mit APK und SHA-256-Datei.
+# (a) Tag vX.Y.Z oder vX.Y.Z-(alpha|beta|rc).N auf main: veröffentlicht ein GitHub-Release mit APK und SHA-256-Datei.
+#     Vorab-Versionen werden als Prerelease veröffentlicht.
 # (b) workflow_dispatch mit Version: Probelauf. Baut, signiert und prüft wie (a), legt aber
 #     KEIN Release und KEINEN Tag an. Das Artefakt "release-dry-run" dient der Kontrolle.
 # Anleitung und Fehlerbilder: docs/RELEASE.md
@@ -7,12 +8,17 @@ name: Release
 
 on:
   push:
+    # Muster nach der GitHub-Filtersyntax (Cheat-Sheet "Filter pattern"): [0-9]+ ist eine oder mehr Ziffern,
+    # "." ist wörtlich. Die genaue Form prüft der Schritt "Version bestimmen und prüfen" (N von 1 bis 19).
     tags:
-      - 'v*.*.*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-alpha.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version X.Y.Z für den Probelauf, z. B. 0.1.0 (kein Release, kein Tag)'
+        description: 'Version für den Probelauf, z. B. 0.1.0 oder 0.3.0-alpha.1 (kein Release, kein Tag)'
         required: true
         type: string
 
@@ -55,22 +61,44 @@ jobs:
           else
             version="$INPUT_VERSION"
           fi
-          re='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          # Gleiches Schema wie EmberlightVersion (build-logic/convention, ADR 0004 Nachtrag):
+          # versionCode = (X*10000 + Y*100 + Z) * 100 + Stufe, Stufe alpha.N = N, beta.N = 20 + N, rc.N = 40 + N, final = 99.
+          re='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta|rc)\.([1-9]|1[0-9]))?$'
           if [[ ! "$version" =~ $re ]]; then
-            echo "::error title=Ungültige Version::Die Version '${version}' ist ungültig. Erwartet wird genau X.Y.Z ohne v-Präfix, z. B. 0.1.0."
+            echo "::error title=Ungültige Version::Die Version '${version}' ist ungültig. Erwartet wird X.Y.Z oder X.Y.Z-alpha.N, -beta.N bzw. -rc.N (N von 1 bis 19), ohne v-Präfix, z. B. 0.1.0 oder 0.3.0-alpha.1."
             exit 1
           fi
-          IFS=. read -r major minor patch <<< "$version"
-          if (( major > 214747 )); then
+          # Die Gruppen sind nach dem Match gesichert. Ungenutzte Gruppen sind leer.
+          major=${BASH_REMATCH[1]}
+          minor=${BASH_REMATCH[2]}
+          patch=${BASH_REMATCH[3]}
+          label=${BASH_REMATCH[5]:-}
+          number=${BASH_REMATCH[6]:-}
+          # Längenprüfung vor dem Rechnen, damit bash bei sehr großen Zahlen nicht überläuft.
+          if (( ${#major} > 4 )) || (( major > 2099 )); then
             echo "::error title=Ungültige Version::Die Major-Version ${major} ist zu groß, der versionCode würde den Android-Maximalwert überschreiten."
             exit 1
           fi
-          if (( minor > 99 || patch > 99 )); then
-            echo "::error title=Ungültige Version::Minor und Patch müssen kleiner als 100 sein (versionCode-Schema X*10000 + Y*100 + Z)."
+          if (( ${#minor} > 2 )) || (( minor > 99 )) || (( ${#patch} > 2 )) || (( patch > 99 )); then
+            echo "::error title=Ungültige Version::Minor und Patch müssen kleiner als 100 sein (versionCode-Schema, siehe ADR 0004)."
             exit 1
           fi
+          if [[ -z "$label" ]]; then
+            stage=99
+            is_prerelease=false
+          else
+            case "$label" in
+              alpha) offset=0 ;;
+              beta) offset=20 ;;
+              rc) offset=40 ;;
+            esac
+            stage=$(( offset + number ))
+            is_prerelease=true
+          fi
+          version_code=$(( (major * 10000 + minor * 100 + patch) * 100 + stage ))
           echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "version_code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
+          echo "version_code=${version_code}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
 
       # Vor Checkout und Build, damit ein fehlendes Secret sofort auffällt.
       - name: Signierschlüssel-Secrets prüfen
@@ -281,6 +309,7 @@ jobs:
       - name: Release-Notes erzeugen
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          IS_PRERELEASE: ${{ steps.version.outputs.is_prerelease }}
           APK_SHA256: ${{ steps.verify.outputs.apk_sha256 }}
           CERT_SHA256: ${{ steps.verify.outputs.cert_sha256 }}
         run: |
@@ -290,6 +319,9 @@ jobs:
           # shellcheck disable=SC2016
           {
             printf '## emberlight v%s\n\n' "$VERSION"
+            if [[ "$IS_PRERELEASE" == "true" ]]; then
+              printf '%s\n\n' "Vorab-Version zum Testen. Rückkehr zu einer älteren stabilen Version nur per Deinstallation (Space-Daten gehen dabei verloren)."
+            fi
             printf '### Installation\n\n'
             printf '1. Die Datei `emberlight-v%s.apk` aus diesem Release herunterladen.\n' "$VERSION"
             printf '2. Auf dem Android-Gerät öffnen. Fragt Android nach, die Installation aus unbekannten Quellen für den verwendeten Browser oder Dateimanager erlauben.\n'
@@ -301,19 +333,26 @@ jobs:
           } > "$notes"
 
       # Nur bei Tag: GitHub-Release mit APK und Prüfsumme. --notes-file steht vor den generierten Notes (gh-Quelltext).
+      # Vorab-Versionen als Prerelease, damit sie nicht als "Latest" erscheinen.
       - name: GitHub-Release veröffentlichen
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
+          IS_PRERELEASE: ${{ steps.version.outputs.is_prerelease }}
         run: |
           set -euo pipefail
+          prerelease_flag=()
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            prerelease_flag=(--prerelease)
+          fi
           gh release create "v${VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "emberlight v${VERSION}" \
             --notes-file "dist/release-notes-v${VERSION}.md" \
             --generate-notes \
+            "${prerelease_flag[@]}" \
             "dist/emberlight-v${VERSION}.apk" \
             "dist/emberlight-v${VERSION}.apk.sha256"
 
@@ -336,6 +375,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           VERSION: ${{ steps.version.outputs.version }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          IS_PRERELEASE: ${{ steps.version.outputs.is_prerelease }}
           APK_SHA256: ${{ steps.verify.outputs.apk_sha256 }}
           CERT_SHA256: ${{ steps.verify.outputs.cert_sha256 }}
           UPLOAD_OUTCOME: ${{ steps.upload.outcome }}
@@ -359,6 +399,7 @@ jobs:
             printf '| Feld | Wert |\n|---|---|\n'
             printf '| Version | `%s` |\n' "$VERSION"
             printf '| versionCode | `%s` |\n' "$VERSION_CODE"
+            printf '| Vorab-Version | %s |\n' "$IS_PRERELEASE"
             printf '| APK-SHA-256 | `%s` |\n' "$APK_SHA256"
             printf '| Zertifikat-SHA-256 | `%s` |\n' "$CERT_SHA256"
             printf '| Probelauf | %s |\n' "$dry"
