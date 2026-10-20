@@ -1,0 +1,23 @@
+{
+  "title": "emberlight",
+  "heading": "Dem Space beitreten",
+  "note": "Verbindung läuft direkt im WLAN zum Handy des Gastgebers, nicht über das Internet. Verschlüsselung folgt in einer späteren Version.",
+  "nameLabel": "Dein Name",
+  "join": "Beitreten",
+  "leave": "Abmelden",
+  "joinedAs": "Du bist dabei, {name}",
+  "joinedNote": "Hochladen und Herunterladen folgen in einer späteren Version dieser Seite.",
+  "nameEmpty": "Bitte gib einen Namen ein.",
+  "nameTooLong": "Der Name ist zu lang (höchstens 24 Zeichen).",
+  "nameForbidden": "Der Name enthält Zeichen, die nicht erlaubt sind.",
+  "nameTaken": "Dieser Name ist schon vergeben. Vorschlag: {suggestion}",
+  "inviteInvalid": "Diese Einladung ist nicht (mehr) gültig. Bitte scanne den neuen QR-Code des Gastgebers.",
+  "spaceFull": "Der Space ist voll.",
+  "spaceClosed": "Dieser Space ist beendet.",
+  "rateLimited": "Zu viele Versuche. Bitte warte {seconds} Sekunden und versuche es dann erneut.",
+  "network": "Keine Verbindung zum Gastgeber. Bist du noch im selben WLAN?",
+  "genericError": "Das hat nicht geklappt. Bitte versuche es erneut.",
+  "noInvite": "Scanne den QR-Code des Gastgebers, um beizutreten.",
+  "sessionEnded": "Deine Sitzung ist nicht mehr gültig. Scanne den QR-Code erneut, um beizutreten.",
+  "left": "Du bist abgemeldet."
+}

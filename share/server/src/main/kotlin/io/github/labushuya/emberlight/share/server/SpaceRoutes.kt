@@ -280,7 +280,7 @@ private suspend fun ApplicationCall.handleJoin(access: SpaceAccess) {
             respondError(HttpStatusCode.BadRequest, "bad_request")
             return
         }
-    when (val outcome = access.vault.join(body.inviteSecret, body.displayName)) {
+    when (val outcome = access.join(body.inviteSecret, body.displayName)) {
         is JoinOutcome.Joined -> {
             respondJson(
                 HttpStatusCode.Created,
@@ -290,6 +290,7 @@ private suspend fun ApplicationCall.handleJoin(access: SpaceAccess) {
                         "displayName" to JsonPrimitive(outcome.displayName),
                         "role" to JsonPrimitive(outcome.role.name),
                         "token" to JsonPrimitive(outcome.token),
+                        "spaceId" to JsonPrimitive(access.spaceId.value),
                     ),
                 ),
             )

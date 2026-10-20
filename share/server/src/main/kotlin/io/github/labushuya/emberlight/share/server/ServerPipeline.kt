@@ -35,6 +35,9 @@ internal val RouteTemplateKey = AttributeKey<String>("emberlight.route-template"
 /** Gesetzt von der Beitritts-Route, wenn die Einladung falsch war. Zählt als Fehlversuch (ADR 0018). */
 internal val JoinFailedKey = AttributeKey<Boolean>("emberlight.join-failed")
 
+/** Grenze für das Verwerfen nach einer frühen Ablehnung, aus [ServerEnvironment.drainMaxBytes]. */
+internal val DrainLimitKey = AttributeKey<Long>("emberlight.drain-limit")
+
 private const val UNMATCHED_ROUTE = "(keine Route)"
 
 /** Pfad des Beitritts. Er braucht keine Zugriffsprüfung, aber eine Drosselung (ADR 0018). */
@@ -46,8 +49,12 @@ private const val NOSNIFF_HEADER = "X-Content-Type-Options"
 /** Sekunden, nach denen ein 503 oder 429 zur Wiederholung auffordert (ADR 0014). */
 internal const val RETRY_AFTER_SECONDS = "5"
 
-/** Höchstens so viele Körper-Bytes werden nach einer frühen Ablehnung gelesen und verworfen (ADR 0014, lingering close). */
-internal const val DRAIN_MAX_BYTES = 1L shl 20
+/**
+ * Höchstens so viele Körper-Bytes werden nach einer frühen Ablehnung verworfen (ADR 0014, lingering close). Mit 1 MiB
+ * ging die Statuszeile auf dem Loopback des Windows-PCs verloren: Der Server schloss mit ungelesenen Bytes, Windows verwarf den
+ * Empfang (RST). Die harte Grenze ist deshalb [DRAIN_TIMEOUT_MS], die Bytegrenze liegt über dem Upload-Limit der Tests.
+ */
+internal const val DRAIN_MAX_BYTES = 64L shl 20
 
 /** Höchstdauer für das Verwerfen des Körpers nach einer frühen Ablehnung. */
 internal const val DRAIN_TIMEOUT_MS = 2_000L
@@ -66,6 +73,8 @@ internal class ServerEnvironment(
     /** Ablauf des Space (ADR 0017). Wirkt nach der Zugriffsprüfung, vor den Routen. */
     val closure: SpaceClosure,
     val joinLimiter: JoinLimiter = JoinLimiter(),
+    /** Höchstzahl verworfener Körper-Bytes nach einer frühen Ablehnung. Nur Tests ändern sie. */
+    val drainMaxBytes: Long = DRAIN_MAX_BYTES,
 )
 
 /**
@@ -88,6 +97,7 @@ internal fun Application.installEmberlightModule(
 ) {
     intercept(ApplicationCallPipeline.Setup) {
         val startedAt = System.nanoTime()
+        context.attributes.put(DrainLimitKey, env.drainMaxBytes)
         try {
             proceed()
         } finally {
@@ -233,9 +243,10 @@ internal suspend fun ApplicationCall.refuseEarly(
 /** Liest den Restkörper bis zur Grenze und verwirft ihn. Ein Fehler oder Zeitablauf beendet nur den Rest. */
 internal suspend fun ApplicationCall.drainRequestBody() {
     val body = request.receiveChannel()
+    val limit = attributes.getOrNull(DrainLimitKey) ?: DRAIN_MAX_BYTES
     try {
         withTimeoutOrNull(DRAIN_TIMEOUT_MS) {
-            body.discard(DRAIN_MAX_BYTES)
+            body.discard(limit)
         }
     } catch (cancelled: CancellationException) {
         throw cancelled

@@ -55,7 +55,7 @@ data class ParticipantInfo(
  * Teilnehmer und Einladung eines Space (ADR 0018). Die Datenbank ist der Maßstab. Schreibvorgänge laufen über den
  * Commit-Lock der Vault, daher ist die Reihenfolge der Änderungen festgelegt. Ohne Dateizugriff: Medien entfernt die Vault.
  */
-internal class ParticipantRoster(
+class ParticipantRoster internal constructor(
     private val database: SpacesDatabase,
     private val spaceId: SpaceId,
     private val nowMillis: () -> Long,

@@ -4,6 +4,7 @@ import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceVault
+import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
 import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
@@ -41,6 +42,18 @@ class SpaceAccess internal constructor(
         uploads.cancelOf(id)
         val outcome = vault.removeParticipant(id, deleteUploads)
         live.replace(vault.credentials())
+        return outcome
+    }
+
+    /**
+     * Beitritt über die Einladung. Nach einem Erfolg kennt die Zugriffsprüfung den neuen Token sofort (ADR 0018).
+     */
+    suspend fun join(
+        inviteSecret: String,
+        rawName: String,
+    ): JoinOutcome {
+        val outcome = vault.join(inviteSecret, rawName)
+        if (outcome is JoinOutcome.Joined) live.replace(vault.credentials())
         return outcome
     }
 
