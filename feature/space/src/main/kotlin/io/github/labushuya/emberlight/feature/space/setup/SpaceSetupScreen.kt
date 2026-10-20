@@ -12,6 +12,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,9 +20,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +54,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.core.app.ActivityCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -230,31 +234,60 @@ internal fun SpaceSetupScreen(
     }
 }
 
-/** Fehler des Startversuchs mit einem Text je Ursache. Bearbeiten führt zum Formular, wenn die Ursache dort liegt. */
+/**
+ * Fehler des Startversuchs als Dialog. Der Inhalt liegt in [StartOutcomeContent], damit der Golden-Test ihn ohne
+ * Dialogfenster prüft. Das Fenster bringt eine Abdunkelung mit, deren Zeitpunkt zwischen Läufen wechselt.
+ */
 @Composable
 internal fun StartOutcomeDialog(
     outcome: StartOutcome,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.space_setup_error_title)) },
-        text = { Text(outcomeText(outcome)) },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.space_setup_error_ok))
-            }
-        },
-        dismissButton =
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = AlertDialogDefaults.shape,
+            color = AlertDialogDefaults.containerColor,
+            tonalElevation = AlertDialogDefaults.TonalElevation,
+        ) {
+            StartOutcomeContent(outcome = outcome, onDismiss = onDismiss, onEdit = onEdit)
+        }
+    }
+}
+
+/** Inhalt des Fehlers: Titel, Ursache und die Knöpfe. Bearbeiten führt zum Formular, wenn die Ursache dort liegt. */
+@Composable
+internal fun StartOutcomeContent(
+    outcome: StartOutcome,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.padding(24.dp)) {
+        Text(
+            text = stringResource(R.string.space_setup_error_title),
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = outcomeText(outcome),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(24.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (outcomeNeedsEdit(outcome)) {
-                {
-                    TextButton(onClick = onEdit) { Text(stringResource(R.string.space_setup_error_edit)) }
-                }
-            } else {
-                null
-            },
-    )
+                TextButton(onClick = onEdit) { Text(stringResource(R.string.space_setup_error_edit)) }
+                Spacer(Modifier.width(8.dp))
+            }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.space_setup_error_ok)) }
+        }
+    }
 }
 
 /**
