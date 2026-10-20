@@ -28,6 +28,15 @@ class ReleaseManifestConventionPlugin : Plugin<Project> {
                             forbiddenTokens.set(FORBIDDEN_TOKENS)
                         }
                     target.tasks.named("check") { it.dependsOn(check) }
+                    // Paket 3.3: Der Server ist im Release über die Oberfläche erreichbar. R8 darf seine Pipeline nicht entfernen.
+                    val mapping =
+                        target.tasks.register<CheckReleaseMappingTask>("checkReleaseServerPipeline") {
+                            group = "verification"
+                            description = "Bricht ab, wenn R8 die Server-Pipeline aus dem Release entfernt hat."
+                            this.mapping.set(variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE))
+                            requiredClasses.set(ReleaseMappingGuard.SERVER_PIPELINE_CLASSES)
+                        }
+                    target.tasks.named("check") { it.dependsOn(mapping) }
                 }
             }
         }

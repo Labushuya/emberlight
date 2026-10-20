@@ -5,6 +5,7 @@
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
 
-# Keine -keep-Regeln für den Serverpfad (ADR 0014, Umsetzung 3.1a). R8 hält die Server-Pipeline über die Erreichbarkeit
-# vom Debug-Einstieg aus: Der Empfänger liegt im Manifest des benchmark-Builds, dessen Ketten zur Einrichtung und zur
-# Routing-Pipeline führen. Im Release gibt es bis Paket 3.3 keinen Einstieg, dort entfernt R8 den Serverpfad.
+# Keine -keep-Regeln für den Serverpfad (ADR 0014, ADR 0017). R8 hält die Server-Pipeline über die Erreichbarkeit: Seit
+# Paket 3.3 startet der Gastgeber den Space aus der Oberfläche des Release-Builds, der Dienst steht im Manifest von
+# share:server. Die Prüfung checkReleaseServerPipeline liest die Mapping-Datei und bricht ab, falls R8 Teile der
+# Pipeline entfernt hat.

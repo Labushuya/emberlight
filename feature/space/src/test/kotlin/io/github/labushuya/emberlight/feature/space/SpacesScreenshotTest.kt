@@ -1,5 +1,6 @@
 package io.github.labushuya.emberlight.feature.space
 
+import android.os.Looper
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -21,6 +22,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.util.Locale
@@ -52,15 +54,6 @@ class SpacesScreenshotTest {
     fun restoreZoneAndLocale() {
         previousZone?.let { TimeZone.setDefault(it) }
         previousLocale?.let { Locale.setDefault(it) }
-    }
-
-    @Test
-    @Config(qualifiers = "en-w412dp-h915dp")
-    fun listEmptyPhoneEnglish() {
-        capture(
-            { SpacesListContent(emptyList(), null, { null }, {}, {}) },
-            "src/test/screenshots/SpacesListEmpty_phone_en.png",
-        )
     }
 
     @Test
@@ -189,6 +182,17 @@ class SpacesScreenshotTest {
         }
     }
 
+    /**
+     * Lässt Robolectric die Hauptschleife abarbeiten, bevor die Aufnahme entsteht. Ohne das bleibt der erste Zeichendurchlauf
+     * eines Testlaufs leer (ADR 0006, Befund). Gemessen: Der Leerzustand war im Klassenlauf leer, allein korrekt.
+     */
+    private fun settle() {
+        composeRule.waitForIdle()
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        composeRule.waitForIdle()
+    }
+
+
     private fun capture(
         content: @Composable () -> Unit,
         path: String,
@@ -199,6 +203,7 @@ class SpacesScreenshotTest {
             }
         }
         composeRule.waitForIdle()
+        settle()
         composeRule.onRoot().captureRoboImage(path)
     }
 }

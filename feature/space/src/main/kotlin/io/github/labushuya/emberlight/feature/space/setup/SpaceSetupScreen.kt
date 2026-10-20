@@ -210,27 +210,41 @@ internal fun SpaceSetupScreen(
     }
 
     state.outcome?.let { outcome ->
-        AlertDialog(
-            onDismissRequest = viewModel::dismissOutcome,
-            title = { Text(stringResource(R.string.space_setup_error_title)) },
-            text = { Text(outcomeText(outcome)) },
-            confirmButton = {
-                TextButton(onClick = viewModel::dismissOutcome) {
-                    Text(stringResource(R.string.space_setup_error_ok))
-                }
-            },
-            dismissButton = if (outcomeNeedsEdit(outcome)) {
-                {
-                    TextButton(onClick = {
-                        viewModel.dismissOutcome()
-                        viewModel.spaceId?.let { onEdit(it.value) }
-                    }) { Text(stringResource(R.string.space_setup_error_edit)) }
-                }
-            } else {
-                null
+        StartOutcomeDialog(
+            outcome = outcome,
+            onDismiss = viewModel::dismissOutcome,
+            onEdit = {
+                viewModel.dismissOutcome()
+                viewModel.spaceId?.let { onEdit(it.value) }
             },
         )
     }
+}
+
+/** Fehler des Startversuchs mit einem Text je Ursache. Bearbeiten führt zum Formular, wenn die Ursache dort liegt. */
+@Composable
+internal fun StartOutcomeDialog(
+    outcome: StartOutcome,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.space_setup_error_title)) },
+        text = { Text(outcomeText(outcome)) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.space_setup_error_ok))
+            }
+        },
+        dismissButton = if (outcomeNeedsEdit(outcome)) {
+            {
+                TextButton(onClick = onEdit) { Text(stringResource(R.string.space_setup_error_edit)) }
+            }
+        } else {
+            null
+        },
+    )
 }
 
 /**

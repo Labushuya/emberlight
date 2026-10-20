@@ -21,3 +21,9 @@ dependencies {
 
     testImplementation(libs.kotlinx.coroutines.test)
 }
+
+// Screenshot-Goldens: Im gemeinsamen Test-Prozess entstehen leere Aufnahmen, die beim Verifizieren gegen sich selbst grün
+// wären (ADR 0006, Befund). Je Testklasse ein eigener Prozess, wie in der Galerie (ADR 0010).
+tasks.withType<Test>().configureEach {
+    forkEvery = 1
+}

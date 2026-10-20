@@ -41,6 +41,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.labushuya.emberlight.feature.space.R
 import io.github.labushuya.emberlight.feature.space.formatDate
+import io.github.labushuya.emberlight.feature.space.formatGib
 import io.github.labushuya.emberlight.share.server.PauseCause
 import io.github.labushuya.emberlight.share.server.RunState
 import io.github.labushuya.emberlight.share.space.MediaRow
@@ -199,8 +200,8 @@ internal fun SpaceRunningContent(
                 text =
                     stringResource(
                         R.string.space_running_storage_value,
-                        Formatter.formatShortFileSize(context, state.usedBytes),
-                        Formatter.formatShortFileSize(context, record.settings.storageLimitBytes),
+                        stringResource(R.string.space_storage_gib, formatGib(state.usedBytes)),
+                        stringResource(R.string.space_storage_gib, formatGib(record.settings.storageLimitBytes)),
                     ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
