@@ -9,3 +9,9 @@
 # Paket 3.3 startet der Gastgeber den Space aus der Oberfläche des Release-Builds, der Dienst steht im Manifest von
 # share:server. Die Prüfung checkReleaseServerPipeline liest die Mapping-Datei und bricht ab, falls R8 Teile der
 # Pipeline entfernt hat.
+
+# Der Serverpfad bleibt im Release erhalten, die Prüfung checkReleaseServerPipeline verlangt die Klasse (ADR 0018).
+-keep class io.github.labushuya.emberlight.share.server.KtorLocalServer {
+    <init>(...);
+    public *;
+}

@@ -540,12 +540,8 @@ class SpaceServerService : Service() {
         internal var serverFactory: (SpaceRuntime, ServerSetup, SpaceClosure) -> LocalServer =
             { runtime, setup, closure ->
                 val gates = ServerGates()
-                val space = spaceRoutes(runtime.access, gates)
                 KtorLocalServer(
-                    routes = {
-                        guestSite(runtime.guestAssets)
-                        space()
-                    },
+                    routes = serverRoutes(runtime.access, runtime.guestAssets, gates),
                     authorizer = runtime.access.live,
                     requestLog = { line -> if (setup.debugLogging) Log.i(TAG, line) },
                     gates = gates,

@@ -155,8 +155,8 @@ internal fun SpaceRunningContent(
     onAcknowledgePause: () -> Unit,
     onSetup: () -> Unit,
     onResume: () -> Unit,
-    onRemoveRequest: (ParticipantInfo) -> Unit = {},
-    onRotateRequest: () -> Unit = {},
+    onRemoveRequest: (ParticipantInfo) -> Unit,
+    onRotateRequest: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

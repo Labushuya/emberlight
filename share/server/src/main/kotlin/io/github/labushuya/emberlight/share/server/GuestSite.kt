@@ -78,3 +78,19 @@ internal class AssetGuestAssets(
         const val FOLDER = "guest"
     }
 }
+
+/**
+ * Alle Routen des Servers: Gäste-Seite und Space-API hinter derselben Zugriffskette. Eine eigene Funktion statt eines
+ * Lambdas im Aufrufer, damit der Aufbau dem bisherigen Pfad entspricht (ADR 0018, Release-Pipeline).
+ */
+internal fun serverRoutes(
+    access: SpaceAccess,
+    assets: GuestAssets,
+    gates: ServerGates,
+): Route.() -> Unit {
+    val space = spaceRoutes(access, gates)
+    return {
+        guestSite(assets)
+        space()
+    }
+}

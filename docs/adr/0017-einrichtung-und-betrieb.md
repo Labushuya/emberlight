@@ -211,3 +211,9 @@ Beim Aufnehmen der Goldens entstanden leere Bilder (`#FAFAFA`, ca. 3,4 KB). Eine
 ## Gerätetest
 
 Der Testkatalog für die Nutzerin bzw. den Nutzer steht in der PR-Beschreibung. Dieser ADR listet nur die Prüfpunkte, die die Architektur betreffen: Start der Hersteller-Einstellung, Pause bei Bildschirm aus, Netzwechsel mit gleicher und anderer Adresse, Ende über die Frist bei verstellter Uhr.
+
+## Nachtrag (20.10.2026): fester Port und Einladung im Betrieb
+
+- **Fester Port pro Space**: Der Port wird beim ersten Start gewählt und in `space.port` gespeichert. Jeder spätere Start, auch nach einer Pause oder einem Prozess-Neustart, versucht diesen Port zuerst. Ist er belegt, wählt der Server einen freien Port. Der Betrieb speichert den neuen Port und meldet die Adressänderung (`RunState.Running.addressChanged`). Die Oberfläche zeigt dann „Neue Adresse. Gäste brauchen den neuen QR-Code.“.
+- **Einladung im Betrieb**: Die Einladung bleibt über Pausen im selben Prozess gleich. Nach einem Prozess-Neustart entsteht eine neue Einladung, weil nur ihr Hash gespeichert ist (ADR 0018, Abweichungen). Die Gäste bleiben angemeldet.
+- **Ablauf nach der Authentifizierung**: Ein abgelaufener Space antwortet ohne gültigen Schlüssel mit `401`, mit gültigem Schlüssel mit `410` (ADR 0018, Abweichungen). Diese Reihenfolge gilt seit 3.4.

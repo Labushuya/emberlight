@@ -3,6 +3,7 @@ package io.github.labushuya.emberlight.share.server
 import android.annotation.SuppressLint
 import android.content.Context
 import io.github.labushuya.emberlight.share.space.Principal
+import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
@@ -89,9 +90,14 @@ internal class SpaceRuntime private constructor(
                 )
             }
             vault.recover()
-            // Der Token des Gastgebers ist zufällig und nur im Speicher. In der Datenbank steht sein Hash (ADR 0018).
-            val hostToken = Secrets.generate()
-            vault.ensureHost(Secrets.hashHex(hostToken))
+            // Der Token des Gastgebers ist zufällig und nur im Speicher. In der Datenbank steht sein Hash (ADR 0018). Mit einem
+            // Gastgeber aus dem Debug-Einstieg gilt dessen Hash. Ein neuer Token würde den Test-Token des PCs ungültig machen.
+            val hostToken =
+                if (setup.participants.any { it.principal.role == Role.HOST }) {
+                    null
+                } else {
+                    Secrets.generate().also { vault.ensureHost(Secrets.hashHex(it)) }
+                }
             val invite = vault.ensureInvite(InviteMemory.known(setup.spaceId))
             InviteMemory.remember(setup.spaceId, invite)
             val access =

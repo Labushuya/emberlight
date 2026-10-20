@@ -133,6 +133,8 @@ abstract class SpaceRunScreenshotSupport {
             onAcknowledgePause = {},
             onSetup = {},
             onResume = {},
+            onRemoveRequest = {},
+            onRotateRequest = {},
             modifier = Modifier.fillMaxSize(),
         )
     }

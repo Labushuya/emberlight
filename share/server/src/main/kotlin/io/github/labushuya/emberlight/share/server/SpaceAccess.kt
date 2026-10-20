@@ -21,7 +21,7 @@ class SpaceAccess internal constructor(
     val uploads: ActiveUploads,
     invite: String,
     /** Token des Gastgebers, nur im Speicher. Die Datenbank hat den Hash (ADR 0018). */
-    val hostToken: String,
+    val hostToken: String?,
 ) {
     /** Einladungsgeheimnis für den QR-Code. Nur im Speicher, in der Datenbank steht der Hash. */
     @Volatile

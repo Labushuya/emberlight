@@ -162,3 +162,39 @@ Nicht getestet: das Verhalten gegenüber einer echten Drittapp (ohne Testapp auf
 - Der Dienst startet nach einem Prozess-Tod neu (`START_STICKY`). Ein aktiver Space geht dabei wieder an den Server, wenn die Akku-Ausnahme besteht. Sonst bleibt er unterbrochen, bis er in der App fortgesetzt wird (ADR 0017). Ein Netzwechsel pausiert den Server (ADR 0013). Dasselbe Netz mit derselben IPv4-Adresse setzt ihn automatisch fort. Ein anderes Netz braucht die Bestätigung in der App (ADR 0017, Paket 3.3).
 - Die Hashes der Test-Teilnehmer bleiben im Space-Index, bis die App-Daten gelöscht werden. Klartext-Tokens gibt es auf dem Gerät nicht. Wer einen Token verliert, startet den Test mit einem neuen.
 - Die Medien im Test-Space bleiben im App-Speicher, bis die App-Daten gelöscht werden.
+
+## Beitritt mit curl (Paket 3.4)
+
+Der Gastgeber zeigt die Einladung im laufenden Space (QR-Code und Link, `http://<ip>:<port>/#i=<einladung>`). Für den Test vom PC kopiert man den Teil nach `#i=`. Er ist die Einladung. Der Browser schickt das Fragment nie an den Server, im Befehl steht es deshalb nur im JSON-Körper.
+
+```
+# Beitritt (201, Antwort mit persönlichem Token)
+curl -i -H "Host: <ip>:<port>" -H "Content-Type: application/json" \
+  -d '{"inviteSecret":"<einladung>","displayName":"Test-Gast"}' http://<ip>:<port>/api/v1/join
+
+# Eigene Sitzung prüfen
+curl -i -H "Host: <ip>:<port>" -H "Authorization: Bearer <guest-token>" http://<ip>:<port>/api/v1/me
+
+# Abmelden (204)
+curl -i -X DELETE -H "Host: <ip>:<port>" -H "Authorization: Bearer <guest-token>" http://<ip>:<port>/api/v1/me
+
+# Gastgeber: Teilnehmer ansehen, entfernen (mit Uploads), Einladung erneuern
+curl -i -H "Host: <ip>:<port>" -H "Authorization: Bearer <host-token>" http://<ip>:<port>/api/v1/participants
+curl -i -X DELETE -H "Host: <ip>:<port>" -H "Authorization: Bearer <host-token>" "http://<ip>:<port>/api/v1/participants/<id>?deleteUploads=true"
+curl -i -X POST -H "Host: <ip>:<port>" -H "Authorization: Bearer <host-token>" http://<ip>:<port>/api/v1/invite/rotate
+```
+
+Erwartet:
+
+- Beitritt mit richtiger Einladung: `201` mit `participantId`, `displayName`, `role`, `token`, `spaceId`.
+- Falsche Einladung: `403` mit `invite_invalid`. Nach zehn solchen Fehlversuchen von einem Absender antwortet der Server `429` mit `Retry-After`, zehn Minuten lang.
+- Doppelter Name, auch in Groß- oder Kleinschreibung: `409` mit `name_taken` und `suggestion`.
+- Name mit verbotenen Zeichen, etwa `<b>x</b>`: `422` mit `name_invalid` und `reason`. Nichts wird gespeichert.
+- `Content-Type` nicht `application/json`: `415`.
+- Gast auf `/participants` oder `/invite/rotate`: `403` mit `forbidden`.
+- Nach dem Entfernen liefert derselbe Token `401`. Seine Uploads bleiben, außer mit `deleteUploads=true`.
+- Nach dem Erneuern der Einladung liefert die alte Einladung `403`. Beigetretene Gäste bleiben.
+
+Im Browser: `http://<ip>:<port>/` öffnen. Die Seite liest die Einladung aus dem Fragment und entfernt sie sofort aus der Adresse.
+
+Die Gäste-Seite und ihre Dateien (`/`, `/guest.js`, `/guest.css`, `/i18n/*.json`) brauchen keine Authorization. Mit `curl -i -H "Host: <ip>:<port>" http://<ip>:<port>/` kommt `200` mit der Richtlinie `Content-Security-Policy`, `Referrer-Policy: no-referrer` und `X-Content-Type-Options: nosniff`.

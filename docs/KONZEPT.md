@@ -56,6 +56,10 @@ Eigenschaften eines Space: Name, Titelbild, Akzentfarbe, Laufzeit/Ablaufzeitpunk
 - Der Gastgeber ist als solcher gekennzeichnet.
 - Bekannte Grenze: Ohne Konten sind die Namen selbst gewählt und nicht geprüft. Wer einen fremden Namen wählt, ist nicht erkennbar.
 - Der Space zeigt alle Medien mit Uploader (Anzeigename) und Zeitpunkt.
+- **Wiederkehr** (Paket 3.4, [ADR 0018](adr/0018-einladung-und-beitritt.md)): Der Browser merkt sich den Gast für den Space. Wer die Seite erneut öffnet, bleibt angemeldet, solange der Token gilt. Ein Abmelden-Knopf löst die Sitzung im Browser und auf dem Server.
+- **Einladung erneuern**: Der Gastgeber erneuert die Einladung. Alte QR-Codes und Links sind danach ungültig. Beigetretene Gäste bleiben.
+- **Entfernte Gäste**: Der Zugang endet sofort, laufende Uploads brechen ab. Die Uploads bleiben und zeigen „von <Name> (entfernt)“. Beim Entfernen kann der Gastgeber auch alle Uploads des Gastes löschen. Der Gastgeber kann sich nicht selbst entfernen.
+- **Grenzen**: Höchstens 50 aktive Teilnehmer, der Gastgeber mitgezählt. Namen haben 1 bis 24 Zeichen (Buchstaben, Ziffern, Marks, Leerzeichen und `- _ . '`). Namen sind pro Space eindeutig, ohne Beachtung von Groß- und Kleinschreibung. Ist ein Name vergeben, schlägt der Server einen freien Namen vor.
 
 #### Rechte
 
@@ -153,6 +157,7 @@ Details und Messwerte stehen in den ADRs 0006 bis 0011.
 - **Namensvorschläge** (Nachtrag vom 20.10.2026): Ein Würfel neben dem Namensfeld schlägt einen Namen aus Adjektiv und Substantiv vor, etwa „Tanzende Waschbären“ oder „Dancing Raccoons“. Die Wortlisten sind je Sprache hinterlegt. Ist das Feld leer, übernimmt der Würfel den Vorschlag sofort. Steht ein eigener Name darin, fragt die App vorher nach. Der Vorschlag bleibt editierbar.
 
 - **Prozess-Tod und Neustart** (Nachbesserung 3.3b, 20.10.2026, [ADR 0017](adr/0017-einrichtung-und-betrieb.md)): Ein Prozess-Tod oder ein Abbruch durch das System beendet einen Space nicht. Der Dienst startet neu (`START_STICKY`) und setzt einen aktiven, nicht abgelaufenen Space am selben Port fort, wenn die Akku-Ausnahme besteht. Sonst bleibt der Space aktiv und gilt als „unterbrochen“, bis der Gastgeber ihn in der App fortsetzt. Die Unterbrechung ist eine Pause. Ein Space, dessen Frist während der Unterbrechung abläuft, endet zur Frist. Die frühere Regel „nach dem Neustart der App beendet“ entfällt. Sie hatte keine Umsetzung (ADR 0012 und 0014, Nachträge).
+- **Teilnahme, Einladung und Beitritt** (Paket 3.4, [ADR 0018](adr/0018-einladung-und-beitritt.md), Nutzerentscheidungen 1 bis 5 vom 20.10.2026, gemäß Empfehlung, änderbar bis zum Merge): Beitritt per QR-Code oder Link mit Einladungsgeheimnis im Fragment, persönlicher Token nur in der Beitrittsantwort, nur als Hash gespeichert. Wiederkehr im Browser, Abmelden, Einladung erneuern, entfernte Gäste mit Vermerk, Grenzen (50 Teilnehmer, Namensregeln, Drosselung). Abweichungen vom Entwurf stehen im ADR, unter anderem: Vor dem Beitritt zeigt die Gäste-Seite keine Daten des Space.
 
 ## Offene Punkte
 
@@ -169,5 +174,6 @@ Details und Messwerte stehen in den ADRs 0006 bis 0011.
 18.10.2026: Paket 3.0 abgeschlossen (Server-Basis, Foreground-Service, ADR 0012). Auf einem Honor-Gerät blieben mit Akku-Ausnahme allein die Anfragen im Akkubetrieb aus, mit zusätzlicher Hintergrund-Freigabe kamen sie durch (Beobachtung auf einem Gerät, eingetragen im Abschnitt Spaces, Betrieb).
 
 20.10.2026: Entscheidungen der Nutzerin bzw. des Nutzers zu Paket 3.2 umgesetzt: Namensvorschläge, harte Obergrenze des Speicherlimits, Begriff „Aufbewahrung nach dem Ende“, Datum und Uhrzeit über Auswahldialoge. Die Designentscheidungen (a) bis (f) sind in [docs/mockups/README.md](mockups/README.md) festgehalten.
-
 20.10.2026: Paket 3.3 (Einrichtung und Betrieb, ADR 0017). Nachtrag zum Abschnitt Spaces, Betrieb: Der Start verlangt Einrichtung (Pflicht: Lokales Netzwerk ab Android 37; empfohlen mit „Trotzdem starten“: Akku-Ausnahme, Hersteller-Freigabe, Benachrichtigungen). Pausen durch das System erkennt der Dienst über Herzschläge und meldet sie mit einem Banner. Das Ende prüft der Server bei jeder Anfrage, beim Herzschlag und über einen ungenauen Wecker. Bei einem WLAN-Wechsel pausiert der Server. Dasselbe Netz setzt er automatisch fort, ein anderes Netz bestätigt der Gastgeber in der App.
+
+20.10.2026: Paket 3.4 (Einladung und Beitritt, ADR 0018). Nutzerentscheidungen 1 bis 5 vom 20.10.2026 gemäß Empfehlung, änderbar bis zum Merge: Beitritt, Wiederkehr im Browser, entfernte Gäste, Grenzen, Name vergeben. Der Abschnitt Spaces, Teilnahme, ist ergänzt. Der feste Port pro Space ist im ADR 0017 nachgetragen.
