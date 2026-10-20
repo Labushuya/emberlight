@@ -12,6 +12,13 @@ Der Workflow `.github/workflows/release.yml` hat zwei Auslöser:
 
 Der Lauf bricht ab, wenn die Signierung nicht eingerichtet ist, die Version ungültig ist, der `versionCode` nicht über dem aller veröffentlichten Releases liegt (Abschnitt 5) oder die APK die Prüfung nicht besteht. Geprüft werden Signatur, Paketname, `versionName`, `versionCode` und, wenn gesetzt, das Zertifikat.
 
+Der Workflow hat zwei Jobs (Nachtrag in [ADR 0004](adr/0004-versionierung-und-release.md), 20.10.2026, Teil 2):
+
+1. **`test`** läuft ohne Signier-Secrets und mit Leserechten. Er bestimmt die Version, prüft Tag und Monotonie, installiert die Werkzeuge für die Standort-Gegenprobe und führt `./gradlew check` aus.
+2. **`release`** läuft nur, wenn `test` grün ist. Er hat die Signier-Secrets und Schreibrechte nur für `gh release create`. Er baut die APK neu (`assembleRelease`, ohne `check`), prüft sie und veröffentlicht sie nur bei einem Tag. Beim Probelauf entsteht nur das Artefakt `release-dry-run`.
+
+Schlägt `test` fehl, gibt es kein Release und keine signierte APK. Die Fehlermeldung steht im Job `test`.
+
 ## 2. Signierschlüssel
 
 Benötigt werden vier Repository-Secrets und eine Repository-Variable:

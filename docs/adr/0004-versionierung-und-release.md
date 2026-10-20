@@ -75,3 +75,35 @@ Die Stufe steht in den letzten zwei Stellen. Dadurch ist der Code über die SemV
 
 - GitHub Actions, Filtermuster für Tags (Cheat-Sheet „Filter pattern“, `*` und `+`): https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions
 - Android-Doku, Versionierung (Google Play erlaubt höchstens 2100000000, Downgrades werden über den versionCode verhindert): https://developer.android.com/studio/publish/versioning
+
+## Nachtrag 20.10.2026 (Teil 2): Zwei Jobs im Release-Workflow
+
+### Kontext
+
+Der Probelauf (Run 39500171156) hat gezeigt: Der Release-Job führte `./gradlew check` aus. Der Test `ExternalToolCrossCheckTest` (share:space) verlangt in der CI ExifTool, ffmpeg, libheif und libavif. Diese installierte nur `ci.yml`. Jedes echte Release wäre daran gescheitert. Die Signier-Secrets sollen zugleich nur in dem Job liegen, der tatsächlich signiert, und dort keine zusätzlichen Werkzeuge laufen lassen.
+
+### Entscheidung
+
+- Job `test` ohne Secrets, Permissions `contents: read`: Version bestimmen, Tag- und Monotonie-Prüfung, Werkzeuge installieren, `./gradlew check`.
+- Job `release` mit `needs: test`, `contents: write` und den Signier-Secrets: Secrets prüfen, `./gradlew assembleRelease` (ohne `check`), APK prüfen, Release-Dateien, Zusammenfassung, `gh release create` nur bei `push`, Probelauf-Artefakt, Keystore entfernen.
+- Die apt-Installation der Prüfwerkzeuge steht in der Composite-Action `.github/actions/install-cross-check-tools`. `ci.yml` und der Test-Job nutzen sie gemeinsam, damit die Paketliste nur an einer Stelle steht. Die Action enthält keine `uses:`-Zeilen, daher gilt für sie keine SHA-Pflicht.
+- Die Version bestimmt nur der Test-Job. Der Release-Job übernimmt Version, versionCode, Vorab-Kennzeichen und Monotonie-Ergebnis über Job-Outputs.
+- Der Release-Job baut die APK neu, statt ein Artefakt aus dem Test-Job zu übernehmen. Ein Artefakt aus einem Job ohne Secrets würde ungeprüft in den Job mit Signierschlüsseln wandern. Es wird auch kein Cache übergeben.
+- Gradle-Cache: Der Test-Job liest nur, ohne `cache-encryption-key`, weil er kein Secret bekommt. Der Release-Job liest nur und behält den Schlüssel für den Configuration Cache. `setup-gradle` schreibt nur auf dem Standardbranch, Läufe von anderen Branches lesen also nur Einträge von `main`.
+- Der Robolectric-Cache liegt nur noch im Test-Job (Restore). Der Release-Job führt keine Robolectric-Tests aus.
+
+### Konsequenzen
+
+- Monotonie und Tag-Prüfung laufen nur im Test-Job. Legt zwischen Test-Ende und Veröffentlichung ein anderer Lauf dasselbe Release an, verweigert `gh release create` das Überschreiben. Tags werden nie überschrieben.
+- Der Test-Job ohne Verschlüsselungsschlüssel lädt den Configuration Cache nicht. Der Lauf dauert dadurch etwas länger, das Ergebnis ändert sich nicht.
+- Der Release-Job wartet auf den Test-Job. Ein Release dauert damit länger, als wenn nur der Release-Job läuft.
+
+### Alternativen
+
+- Ein Job mit Werkzeugen und Signier-Secrets: verworfen. Die Werkzeuge liefen dann im Job mit den Signierschlüsseln.
+- Die apt-Schritte in beiden Workflows duplizieren: verworfen, die Paketlisten würden auseinanderlaufen.
+- Ein wiederverwendbarer Workflow statt Composite-Action: verworfen, dafür wäre eine eigene Workflow-Datei nötig, der Aufwand ist unverhältnismäßig.
+
+### Quellen
+
+- GitHub Actions, Composite-Actions und `needs`/Job-Outputs: https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action

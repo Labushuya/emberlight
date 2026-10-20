@@ -3,6 +3,12 @@
 #     Vorab-Versionen werden als Prerelease veröffentlicht.
 # (b) workflow_dispatch mit Version: Probelauf. Baut, signiert und prüft wie (a), legt aber
 #     KEIN Release und KEINEN Tag an. Das Artefakt "release-dry-run" dient der Kontrolle.
+# Der Ablauf hat zwei Jobs (ADR 0004, Nachtrag 20.10.2026, Teil 2):
+# - "test" ohne Secrets, nur contents: read. Bestimmt die Version, prüft Tag und Monotonie und führt ./gradlew check
+#   mit den Werkzeugen für die Standort-Gegenprobe aus. Dieser Job bekommt keine Signierschlüssel.
+# - "release" mit Secrets und contents: write, nur nach einem grünen "test". Baut die APK neu (ohne check), prüft sie
+#   und veröffentlicht. Er übernimmt aus "test" nur Version, versionCode, Vorab-Kennzeichen und Monotonie-Ergebnis.
+#   Kein Artefakt und kein Cache aus "test".
 # Anleitung und Fehlerbilder: docs/RELEASE.md
 name: Release
 
@@ -22,6 +28,7 @@ on:
         required: true
         type: string
 
+# Standard für alle Jobs: nur lesen. Schreibrechte bekommt allein der Job "release".
 permissions:
   contents: read
 
@@ -31,23 +38,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Signierte Release-APK
+  test:
+    name: Prüfung ohne Secrets
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    permissions:
-      contents: write
+    # Keine Secrets in diesem Job. Die Permissions bleiben auf contents: read (Standard oben).
     env:
       # Ein früher sporadischer Lint-Absturz soll beim Wiederauftreten mit vollständigem Stacktrace im Log stehen
       # (Wiedervorlage in ADR 0001).
       LINT_PRINT_STACKTRACE: "true"
-      # Build-Tools fest gepinnt statt "neueste installierte": Die Prüfung soll reproduzierbar sein, und
-      # Ausgabeformate der apksigner-Versionen unterscheiden sich (37.0.0 schreibt "V2 Signer: certificate ...").
-      # 37.0.0 ist laut actions/runner-images (Ubuntu 24.04) vorinstalliert und lokal gegen den Fingerprint geprüft.
-      ANDROID_BUILD_TOOLS_VERSION: "37.0.0"
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_code: ${{ steps.version.outputs.version_code }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      monotonic_result: ${{ steps.monotonic.outputs.monotonic_result }}
     steps:
       # Die Version kommt aus dem Tag oder dem Eingabefeld. Der Eingabewert geht nur über env: in die Shell,
       # nie direkt per ${{ }} in run:, sonst wäre Script-Injection möglich.
+      # Der Schritt läuft vor dem Build, damit ungültige Tags früh scheitern. Der Job "release" übernimmt die Ausgaben.
       - name: Version bestimmen und prüfen
         id: version
         env:
@@ -99,27 +107,6 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "version_code=${version_code}" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
-
-      # Vor Checkout und Build, damit ein fehlendes Secret sofort auffällt.
-      - name: Signierschlüssel-Secrets prüfen
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          missing=()
-          [[ -n "${KEYSTORE_BASE64:-}" ]] || missing+=("KEYSTORE_BASE64")
-          [[ -n "${KEYSTORE_PASSWORD:-}" ]] || missing+=("KEYSTORE_PASSWORD")
-          [[ -n "${KEY_ALIAS:-}" ]] || missing+=("KEY_ALIAS")
-          [[ -n "${KEY_PASSWORD:-}" ]] || missing+=("KEY_PASSWORD")
-          if (( ${#missing[@]} > 0 )); then
-            names=$(printf '%s, ' "${missing[@]}")
-            names=${names%, }
-            echo "::error title=Signierung nicht eingerichtet::Folgende Repository-Secrets fehlen: ${names}. Anleitung: docs/RELEASE.md, Abschnitt Signierschlüssel."
-            exit 1
-          fi
 
       - name: Quellcode auschecken
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -208,13 +195,12 @@ jobs:
             21
             17
 
+      # Ohne cache-encryption-key, weil dieser Job kein Secret bekommt. setup-gradle kann dadurch den verschlüsselten
+      # Configuration Cache nicht lesen. Das kostet Laufzeit, ändert das Ergebnis aber nicht. Der Job schreibt nie in den Cache.
       - name: Gradle einrichten
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
-          # Release-Läufe schreiben keinen Cache, damit ein Lauf nichts in den gemeinsamen Cache legt.
           cache-read-only: true
-          # Gleicher Schlüssel wie in ci.yml. Er wird zum Lesen des verschlüsselten Configuration Cache gebraucht.
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       # Robolectric-Systemabbilder nur lesen, aus demselben Schlüssel wie in ci.yml (siehe dort und docs/adr/0006).
       - name: Robolectric-Version und SDK bestimmen
@@ -231,12 +217,106 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "sdk=${sdk}" >> "$GITHUB_OUTPUT"
 
-      # Nur Restore. Der Release-Lauf speichert nichts, wie die Gradle-Einrichtung oben.
+      # Nur Restore. Dieser Job speichert nichts, wie die Gradle-Einrichtung oben.
       - name: Robolectric-Systemabbilder aus dem Cache holen
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.m2/repository/org/robolectric/android-all-instrumented
           key: robolectric-${{ steps.robolectric.outputs.version }}-sdk${{ steps.robolectric.outputs.sdk }}-${{ runner.os }}
+
+      # Dieselben Werkzeuge wie in ci.yml, damit die Gegenprobe (ExternalToolCrossCheckTest, CI=true) nicht bricht.
+      - name: Werkzeuge für die Standort-Gegenprobe installieren
+        uses: ./.github/actions/install-cross-check-tools
+
+      # Wie in ci.yml, aber ohne Koverexport und ohne Debug-APK. Die Release-APK baut der Job "release" neu.
+      - name: Prüfung ausführen
+        run: ./gradlew check -Pemberlight.testForks=2 -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+
+      # Gradle kürzt Ausnahmen im Log (nur Typ und Ort). Bei Fehlschlag die Meldungen aus den Testberichten in den Log schreiben.
+      - name: Meldungen fehlgeschlagener Tests zeigen
+        if: failure()
+        shell: bash
+        run: |
+          set -uo pipefail
+          find . -path '*/build/test-results/*' -name '*.xml' -exec grep -l '<failure' {} + 2>/dev/null | head -5 |
+            while read -r report; do
+              echo "::group::Testbericht $report"
+              grep -A12 '<failure' "$report" | sed -e 's/&#10;/\n/g' -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&quot;/"/g' | head -80
+              echo "::endgroup::"
+            done
+          exit 0
+
+      # Gegenprobe-Ausgabe (ADR 0015): ExifTool-Zeilen vorher und nachher je Format, aus dem Testbericht (Systemausgabe).
+      - name: Gegenprobe-Ausgabe (ExifTool vorher und nachher) anzeigen
+        if: always()
+        shell: bash
+        run: |
+          find . -path '*/build/test-results/*' -name '*ExternalToolCrossCheckTest.xml' \
+            -exec grep -h 'GEGENPROBE' {} + 2>/dev/null | sed -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&quot;/"/g' -e 's/&amp;/\&/g' || true
+          exit 0
+
+  release:
+    name: Signierte Release-APK
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # Schreibrecht nur hier, für gh release create (nur bei push). Dieser Job hat die Signier-Secrets.
+    permissions:
+      contents: write
+    env:
+      # Ein früher sporadischer Lint-Absturz soll beim Wiederauftreten mit vollständigem Stacktrace im Log stehen
+      # (Wiedervorlage in ADR 0001).
+      LINT_PRINT_STACKTRACE: "true"
+      # Build-Tools fest gepinnt statt "neueste installierte": Die Prüfung soll reproduzierbar sein, und
+      # Ausgabeformate der apksigner-Versionen unterscheiden sich (37.0.0 schreibt "V2 Signer: certificate ...").
+      # 37.0.0 ist laut actions/runner-images (Ubuntu 24.04) vorinstalliert und lokal gegen den Fingerprint geprüft.
+      ANDROID_BUILD_TOOLS_VERSION: "37.0.0"
+    steps:
+      # Vor Checkout und Build, damit ein fehlendes Secret sofort auffällt.
+      - name: Signierschlüssel-Secrets prüfen
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "${KEYSTORE_BASE64:-}" ]] || missing+=("KEYSTORE_BASE64")
+          [[ -n "${KEYSTORE_PASSWORD:-}" ]] || missing+=("KEYSTORE_PASSWORD")
+          [[ -n "${KEY_ALIAS:-}" ]] || missing+=("KEY_ALIAS")
+          [[ -n "${KEY_PASSWORD:-}" ]] || missing+=("KEY_PASSWORD")
+          if (( ${#missing[@]} > 0 )); then
+            names=$(printf '%s, ' "${missing[@]}")
+            names=${names%, }
+            echo "::error title=Signierung nicht eingerichtet::Folgende Repository-Secrets fehlen: ${names}. Anleitung: docs/RELEASE.md, Abschnitt Signierschlüssel."
+            exit 1
+          fi
+
+      - name: Quellcode auschecken
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Vollständige Historie wie bisher, damit der Build dieselben Eingaben hat wie der Prüflauf.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: JDK 21 und 17 einrichten
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            17
+
+      # Release-Läufe schreiben keinen Cache, damit ein Lauf nichts in den gemeinsamen Cache legt. setup-gradle
+      # schreibt außerdem nur auf dem Standardbranch. Läufe von anderen Branches lesen also nur Einträge von main.
+      # Der Schlüssel bleibt, damit der verschlüsselte Configuration Cache aus main gelesen werden kann.
+      - name: Gradle einrichten
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: true
+          # Gleicher Schlüssel wie in ci.yml. Er wird zum Lesen des verschlüsselten Configuration Cache gebraucht.
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       # Keystore nur mit Rechten für den aktuellen Benutzer. Die Datei wird am Ende wieder gelöscht.
       - name: Keystore dekodieren
@@ -248,24 +328,25 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "${RUNNER_TEMP}/emberlight-release.p12"
           test -s "${RUNNER_TEMP}/emberlight-release.p12"
 
+      # Nur assembleRelease, ohne check. Geprüft wurde im Job "test" mit demselben Commit. Die Version kommt aus "test".
       - name: Release-APK bauen
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.test.outputs.version }}
           EMBERLIGHT_KEYSTORE_FILE: ${{ runner.temp }}/emberlight-release.p12
           EMBERLIGHT_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           EMBERLIGHT_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           EMBERLIGHT_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          ./gradlew check assembleRelease -Pemberlight.version="$VERSION" -Pemberlight.requireReleaseSigning=true \
+          ./gradlew assembleRelease -Pemberlight.version="$VERSION" -Pemberlight.requireReleaseSigning=true \
             -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
 
       # Prüft die fertige APK: Signatur, Paketname, Version, versionCode und Zertifikat gegen die Repository-Variable.
       - name: APK prüfen
         id: verify
         env:
-          VERSION: ${{ steps.version.outputs.version }}
-          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          VERSION: ${{ needs.test.outputs.version }}
+          VERSION_CODE: ${{ needs.test.outputs.version_code }}
           EXPECTED_CERT: ${{ vars.RELEASE_CERT_SHA256 }}
         run: |
           set -euo pipefail
@@ -344,7 +425,7 @@ jobs:
       # Format wie sha256sum, damit "sha256sum -c" die Datei direkt prüfen kann.
       - name: Release-Dateien erzeugen
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.test.outputs.version }}
         run: |
           set -euo pipefail
           apk_name="emberlight-v${VERSION}.apk"
@@ -354,8 +435,8 @@ jobs:
 
       - name: Release-Notes erzeugen
         env:
-          VERSION: ${{ steps.version.outputs.version }}
-          IS_PRERELEASE: ${{ steps.version.outputs.is_prerelease }}
+          VERSION: ${{ needs.test.outputs.version }}
+          IS_PRERELEASE: ${{ needs.test.outputs.is_prerelease }}
           APK_SHA256: ${{ steps.verify.outputs.apk_sha256 }}
           CERT_SHA256: ${{ steps.verify.outputs.cert_sha256 }}
         run: |
@@ -379,13 +460,14 @@ jobs:
           } > "$notes"
 
       # Nur bei Tag: GitHub-Release mit APK und Prüfsumme. --notes-file steht vor den generierten Notes (gh-Quelltext).
-      # Vorab-Versionen als Prerelease, damit sie nicht als "Latest" erscheinen.
+      # Vorab-Versionen als Prerelease, damit sie nicht als "Latest" erscheinen. Existiert das Release schon, bricht
+      # gh release create ab und überschreibt nichts. Die Vorprüfung im Job "test" fängt den Fall früher ab.
       - name: GitHub-Release veröffentlichen
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-          IS_PRERELEASE: ${{ steps.version.outputs.is_prerelease }}
+          VERSION: ${{ needs.test.outputs.version }}
+          IS_PRERELEASE: ${{ needs.test.outputs.is_prerelease }}
         run: |
           set -euo pipefail
           prerelease_flag=()
@@ -419,12 +501,12 @@ jobs:
       - name: Zusammenfassung schreiben
         env:
           EVENT_NAME: ${{ github.event_name }}
-          VERSION: ${{ steps.version.outputs.version }}
-          VERSION_CODE: ${{ steps.version.outputs.version_code }}
-          IS_PRERELEASE: ${{ steps.version.outputs.is_prerelease }}
+          VERSION: ${{ needs.test.outputs.version }}
+          VERSION_CODE: ${{ needs.test.outputs.version_code }}
+          IS_PRERELEASE: ${{ needs.test.outputs.is_prerelease }}
           APK_SHA256: ${{ steps.verify.outputs.apk_sha256 }}
           CERT_SHA256: ${{ steps.verify.outputs.cert_sha256 }}
-          MONOTONIC: ${{ steps.monotonic.outputs.monotonic_result }}
+          MONOTONIC: ${{ needs.test.outputs.monotonic_result }}
           UPLOAD_OUTCOME: ${{ steps.upload.outcome }}
         run: |
           set -euo pipefail

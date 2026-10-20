@@ -1,0 +1,23 @@
+# Installiert die Werkzeuge für die Standort-Gegenprobe (ADR 0015) auf dem Runner: ExifTool, ffmpeg, heif-enc (HEIC mit
+# dem x265-Plugin) und avifenc (AVIF). Der Test in share:space (ExternalToolCrossCheckTest) bricht ohne sie ab, weil
+# CI=true gesetzt ist. Verwendet von ci.yml und vom Test-Job in release.yml. Nur dort, nie auf dem Rechner der Entwicklung.
+# Paketnamen geprüft für ubuntu-latest (noble, 24.04): libheif-examples 1.17.6, libheif-plugin-x265 1.17.6, libavif-bin 1.0.4.
+# Diese Action braucht einen vorherigen Checkout des Repositorys (lokaler Pfad). Keine uses:-Zeilen, daher keine SHA-Pflicht.
+name: Werkzeuge für die Standort-Gegenprobe installieren
+description: ExifTool, ffmpeg, libheif und libavif per apt für den Test ExternalToolCrossCheckTest installieren.
+
+runs:
+  using: composite
+  steps:
+    - name: Werkzeuge installieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update -y
+        sudo apt-get install -y --no-install-recommends \
+          libimage-exiftool-perl ffmpeg libheif-examples libheif-plugin-x265 libavif-bin
+        exiftool -ver
+        ffmpeg -version | head -1
+        # Nur zur Protokollierung. Fehlt ein Werkzeug, bricht der Test in share:space mit CI=true ab.
+        heif-enc --version 2>&1 | head -1 || true
+        avifenc --version 2>&1 | head -1 || true
