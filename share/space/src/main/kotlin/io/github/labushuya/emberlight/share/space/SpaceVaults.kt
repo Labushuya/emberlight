@@ -60,7 +60,8 @@ class SpaceVaults internal constructor(
      * öffnet sie neu, das gelöschte Verzeichnis gibt es dann nicht mehr.
      */
     suspend fun forget(spaceId: SpaceId) {
-        lock.withLock { vaults.remove(spaceId) }
+        val vault = lock.withLock { vaults.remove(spaceId) }
+        vault?.retire()
     }
 
     /** Beendet den Vorschau-Worker. Nur für Tests gedacht, im Prozess lebt er bis zum Ende. */

@@ -18,6 +18,9 @@ internal class FakePreviewRenderer(
 
     private var latch = CountDownLatch(0)
 
+    /** Hält das Rendern an, nachdem der Aufruf protokolliert ist. Für Tests, die eine Löschung mitten im Rendern auslösen. */
+    var gate: CountDownLatch? = null
+
     data class Call(
         val kind: String,
         val source: String,
@@ -57,6 +60,7 @@ internal class FakePreviewRenderer(
     ): Boolean {
         calls += Call(kind, source.name, longEdge)
         latch.countDown()
+        gate?.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         if (!ok) return false
         target.writeBytes("$kind-$longEdge".toByteArray(Charsets.US_ASCII))
         return true
