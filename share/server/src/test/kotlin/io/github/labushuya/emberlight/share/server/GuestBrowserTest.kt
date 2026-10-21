@@ -160,7 +160,10 @@ internal class NodeBrowserRun(
             ProcessBuilder(node, File("src/test/browser/$file").absolutePath)
                 .directory(File(".").absoluteFile)
         builder.environment()["EMBERLIGHT_BROWSER_CONFIG"] = config.toString()
-        builder.environment()["EMBERLIGHT_BROWSER_TMP"] = System.getProperty("java.io.tmpdir") ?: ""
+        // Profil-Ordner des Browsers: ein eigener Ordner aus der Umgebung, sonst der Temp-Ordner der JVM.
+        if (builder.environment()["EMBERLIGHT_BROWSER_TMP"].isNullOrBlank()) {
+            builder.environment()["EMBERLIGHT_BROWSER_TMP"] = System.getProperty("java.io.tmpdir") ?: ""
+        }
         builder.environment()["EMBERLIGHT_CHROME"] = chromePath
         if (System.getenv("CI") == "true" &&
             System

@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.share.server
 
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
@@ -60,18 +61,17 @@ internal class PrefsEndNoticeStore(
     override fun warned(spaceId: String): Boolean = prefs.getBoolean(key(WARNED, spaceId), false)
 
     override fun markWarned(spaceId: String) {
-        prefs.edit().putBoolean(key(WARNED, spaceId), true).apply()
+        prefs.edit { putBoolean(key(WARNED, spaceId), true) }
     }
 
     override fun ended(spaceId: String): Boolean = prefs.getBoolean(key(ENDED, spaceId), false)
 
     override fun markEnded(spaceId: String) {
         // Mit dem Ende ist die Vorwarnung erledigt. Ihr Merkmal wird nicht mehr gebraucht.
-        prefs
-            .edit()
-            .putBoolean(key(ENDED, spaceId), true)
-            .remove(key(WARNED, spaceId))
-            .apply()
+        prefs.edit {
+            putBoolean(key(ENDED, spaceId), true)
+            remove(key(WARNED, spaceId))
+        }
     }
 
     private fun key(
