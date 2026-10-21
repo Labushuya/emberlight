@@ -223,7 +223,6 @@
     <string name="space_detail_start">Space starten</string>
     <string name="space_detail_open_running">Zum laufenden Space</string>
     <string name="space_detail_ended_at">Beendet am %1$s</string>
-    <string name="space_detail_retention_info">Aufbewahrung nach dem Ende: %1$s</string>
     <string name="space_setup_title">Einrichtung</string>
     <string name="space_setup_intro">Damit der Space auch im Hintergrund läuft, prüft emberlight diese Punkte. Pflicht-Punkte müssen erfüllt sein.</string>
     <string name="space_setup_required">Pflicht</string>

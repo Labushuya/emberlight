@@ -219,7 +219,6 @@
     <string name="space_detail_start">Start space</string>
     <string name="space_detail_open_running">Open running space</string>
     <string name="space_detail_ended_at">Ended on %1$s</string>
-    <string name="space_detail_retention_info">Keep after the end: %1$s</string>
     <string name="space_setup_title">Setup</string>
     <string name="space_setup_intro">So the space keeps running in the background, emberlight checks these points. Required points must be met.</string>
     <string name="space_setup_required">Required</string>
