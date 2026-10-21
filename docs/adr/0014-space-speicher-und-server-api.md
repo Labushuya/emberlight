@@ -298,3 +298,16 @@ Die Entscheidung `START_NOT_STICKY` aus diesem ADR ist ersetzt. Der Dienst läuf
 
 - `POST /api/v1/join/preview` mit JSON-Körper `{"inviteSecret": "…"}`. Antwort `200` mit `{"spaceName", "accentColor"}`, `accentColor` ist ein Hex-Wert aus der festen Palette. Ohne gültiges Geheimnis `403 invite_invalid`. Fehlversuche zählen im selben Drosselungszähler wie der Beitritt. Körpergrenze, Content-Type-Prüfung und Torwache gelten wie beim Beitritt. Begründung und Abweichung zu ADR 0018, Entscheidung 19.
 - Die Pfade `join` und `join/preview` teilen die Ausnahme von der Zugriffsprüfung (`isInviteRequest`). Der Ablauf (`410`) gilt für beide.
+
+## Nachtrag (21.10.2026): API für Medien im Browser (Paket 3.5a)
+
+Alle Änderungen sind additiv. `SERVER_API_VERSION` bleibt 1.
+
+- `GET /api/v1/space`: zusätzlich `remainingSeconds` (`null` ohne Ende), `endsAt` (ISO 8601, UTC, `null` ohne Ende), `revision` (Zähler, steigt bei Uploads, Löschungen, Beitritt, Entfernen und Erneuern der Einladung) und `limits` mit `imageMaxBytes` und `videoMaxBytes`.
+- `GET /api/v1/media`: je Eintrag zusätzlich `mine`, `urlsExpireInSeconds` (600), `viewUrl`, `downloadUrl` und bei Video `streamUrl`. Die Adressen sind signiert und pro anfragendem Teilnehmer (ADR 0019).
+- `GET /api/v1/media/{id}` (Header-Auth): ein Eintrag mit denselben Feldern, für die Erneuerung einer Adresse. `404 not_found`, wenn das Medium fehlt.
+- Medienrouten `GET /api/v1/media/{id}/view` (inline, Original) und `GET /api/v1/media/{id}/stream` (nur Video, Range). `GET /api/v1/media/{id}/content` bleibt der Anhang-Download.
+- Mehrere Bereiche im `Range`-Header: `416` mit `Content-Range: bytes */<Größe>`.
+- Medienantworten tragen `Referrer-Policy`, `Cross-Origin-Resource-Policy`, `Content-Security-Policy` und `nosniff` (ADR 0019).
+- Neue Fehlercodes: `403 url_invalid`, `403 url_expired`, `403 participant_inactive` (nur bei signierten Adressen), `503 service_busy` mit `Retry-After` auch für Medien (eigene Grenze, ADR 0019).
+- Offen mit den Vorschauen: `previewUrl`, `previewState`, `videoCodec`.

@@ -480,3 +480,10 @@ Grenzwerte, bestätigt am 18.10.2026: Bild 50 MiB, Video 2 GiB, Standard-Speiche
 - **Reihenfolge der Prüfungen.** Host, Netz, Drosselung (nur für den Beitritt, `429`), Authorization (`401`, entfällt für den Beitritt und für die Gäste-Seite), Space-Zustand (`410`), Rolle (`403`), Route. Gegenüber 3.1 steht die Authorization vor dem Ablauf (ADR 0018, Abweichungen).
 - **Logging.** Unverändert: Route-Templates, nie Tokens, Einladungsgeheimnisse oder Header.
 - **Speicher des Tokens.** Gespeichert wird nur der SHA-256. Der Gastgeber-Token wird bei jedem Start gewürfelt und nur im Speicher der Sitzung gehalten.
+
+## Nachtrag (21.10.2026): Medien-URLs für den Browser (Paket 3.5a)
+
+- Die Regel „Token nie in URL“ gilt für Bearer-Tokens. Sie bleibt unverändert. Für Medien im Browser gibt es eine zweite Form: eine signierte, kurzlebige Adresse mit `pid`, `exp` und `sig` in der Abfrage (HMAC-SHA256, 10 Minuten, für Videos 30 Minuten). Sie ist an Teilnehmer, Medium und Zweck gebunden und endet mit dem Ablauf oder dem Entfernen des Teilnehmers.
+- Begründung: Ein Browser lädt Bilder, Videos und Downloads direkt von einer URL und kann dabei keinen Header senden. Ein dauerhafter Token in der URL wäre ein Risiko für Verlauf, Proxys und Weitergabe. Eine Signatur mit kurzer Laufzeit, die nur für den einzelnen Abruf gilt, hält dieses Risiko klein.
+- Das Protokoll (Route-Templates) enthält weder Query noch Signatur. Der Test `logLinesNeverContainTheQueryOrTheSignature` prüft das.
+- Details und Abgrenzung: [ADR 0019](0019-medienzugriff-und-vorschauen.md).
