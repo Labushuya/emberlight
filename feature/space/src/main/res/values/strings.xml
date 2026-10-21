@@ -309,6 +309,11 @@
     <string name="space_interrupted_text">emberlight was stopped in the background. Guests can reach the space again once you resume it.</string>
     <string name="space_interrupted_resume">Resume</string>
     <string name="space_running_status_interrupted">Interrupted · resume needed</string>
+    <string name="space_running_status_queued">Starts shortly</string>
+    <plurals name="space_running_start_queued">
+        <item quantity="one">The previous space is still ending (up to %d second). Your new space starts automatically afterwards.</item>
+        <item quantity="other">The previous space is still ending (up to %d seconds). Your new space starts automatically afterwards.</item>
+    </plurals>
     <string name="space_invite_title">Invitation</string>
     <string name="space_invite_qr_description">QR code to join the space</string>
     <string name="space_invite_hint">Guests scan the code or open the link in the browser on the same Wi-Fi.</string>

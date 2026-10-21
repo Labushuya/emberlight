@@ -44,6 +44,8 @@ data class SpaceRunningUiState(
     val participants: List<ParticipantInfo> = emptyList(),
     /** Beitrittsadresse mit Einladung, nur solange der Server läuft. */
     val invite: String? = null,
+    /** Der Start dieses Space wartet auf den Nachlauf des vorigen (bis zu 60 s). Der Server läuft dann noch nicht. */
+    val startQueued: Boolean = false,
 ) {
     /** Die Adresse hat sich geändert, weil der feste Port belegt war (Paket 3.4). */
     val addressChanged: Boolean get() = (runState as? RunState.Running)?.addressChanged == true
@@ -69,7 +71,8 @@ data class SpaceRunningUiState(
     val interrupted: Boolean
         get() {
             val current = record ?: return false
-            if (current.status != SpaceStatus.ACTIVE || runState !is RunState.Idle) return false
+            // Ein wartender Start ist kein unterbrochener Lauf, er startet von selbst.
+            if (current.status != SpaceStatus.ACTIVE || runState !is RunState.Idle || startQueued) return false
             val expires = current.expiresAt ?: return true
             return nowMillis < expires
         }
@@ -119,14 +122,19 @@ class SpaceRunningViewModel
 
         @OptIn(ExperimentalCoroutinesApi::class)
         private fun observeSpace(id: SpaceId): Flow<SpaceRunningUiState> {
+            val server =
+                combine(SpaceServerService.runState, SpaceServerService.startQueued) { run, queued ->
+                    run to
+                        queued
+                }
             val base =
                 combine(
                     combine(spaces.observe(id), runs.observeUsedBytes(id)) { record, used -> record to used },
                     runs.observePauses(id),
-                    SpaceServerService.runState,
+                    server,
                     ticker(),
                     resumeFailure,
-                ) { (record, used), pauses, runState, now, failure ->
+                ) { (record, used), pauses, (runState, queued), now, failure ->
                     SpaceRunningUiState(
                         record = record,
                         loaded = true,
@@ -135,6 +143,7 @@ class SpaceRunningViewModel
                         pause = pauses.firstOrNull { !it.acknowledged },
                         nowMillis = now,
                         resumeFailure = failure,
+                        startQueued = queued,
                     )
                 }
             // Teilnehmer laden neu bei jeder Änderung (ADR 0018). Die Einladung folgt dem Betriebszustand.

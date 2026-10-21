@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
@@ -54,6 +55,7 @@ import io.github.labushuya.emberlight.feature.space.upload.HostUploadUiState
 import io.github.labushuya.emberlight.feature.space.upload.HostUploadViewModel
 import io.github.labushuya.emberlight.share.server.PauseCause
 import io.github.labushuya.emberlight.share.server.RunState
+import io.github.labushuya.emberlight.share.server.SpaceServerService
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
@@ -255,6 +257,11 @@ internal fun SpaceRunningContent(
             )
             Spacer(Modifier.height(16.dp))
 
+            if (state.startQueued && state.runState !is RunState.Running) {
+                QueuedStartCard(seconds = SpaceServerService.closeGraceSeconds)
+                Spacer(Modifier.height(16.dp))
+            }
+
             if (state.interrupted) {
                 InterruptedCard(failure = state.resumeFailure, onResume = onResume)
                 Spacer(Modifier.height(16.dp))
@@ -353,8 +360,10 @@ internal fun SpaceRunningContent(
             Spacer(Modifier.height(24.dp))
 
             if (running) {
+                // Während der Start im Nachlauf wartet, gibt es nichts zu beenden: der Dienst hat den Lauf noch nicht.
                 OutlinedButton(
                     onClick = onEnd,
+                    enabled = !state.startQueued,
                     modifier = Modifier.fillMaxWidth(),
                     colors =
                         androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
@@ -403,6 +412,26 @@ private fun PauseBanner(
                 TextButton(onClick = onAcknowledge) { Text(stringResource(R.string.space_running_pause_ack)) }
             }
         }
+    }
+}
+
+/**
+ * Hinweis, solange der Start im Nachlauf des vorigen Space wartet (ADR 0017, Nachtrag 21.10.2026). Verschwindet, sobald der
+ * Server läuft. Die Ankündigung ist höflich (Polite), damit Vorlesegeräte sie einmal ansagen.
+ */
+@Composable
+private fun QueuedStartCard(seconds: Int) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Text(
+            text = pluralStringResource(R.plurals.space_running_start_queued, seconds, seconds),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(16.dp),
+        )
     }
 }
 
@@ -489,6 +518,10 @@ private fun statusLine(
 
         state.interrupted -> {
             stringResource(R.string.space_running_status_interrupted)
+        }
+
+        state.startQueued && state.runState !is RunState.Running -> {
+            stringResource(R.string.space_running_status_queued)
         }
 
         state.runState is RunState.Paused -> {

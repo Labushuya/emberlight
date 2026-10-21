@@ -46,6 +46,14 @@ class SpaceRunScreenshotTest : SpaceRunScreenshotSupport() {
     }
 
     @Test
+    fun runningStartQueuedPhoneEnglish() {
+        capture(
+            { Running(state(usedBytes = 0L, runState = RunState.Idle, startQueued = true)) },
+            "src/test/screenshots/SpaceRunning_startQueued_phone_en.png",
+        )
+    }
+
+    @Test
     fun detailEndedPhoneEnglish() {
         capture({
             SpaceDetailContent(record = ended(), coverFile = null, onEdit = {

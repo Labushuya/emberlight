@@ -556,6 +556,25 @@ class SpaceRunnerTest {
             assertTrue(env.state.value is RunState.Running)
             assertEquals(2, env.servers.size)
             assertEquals(0, env.host.idles)
+            // Die Warteschlange ist abgearbeitet, nachdem der Start entschieden ist. Die Meldung „wartet“ endet dann.
+            assertEquals(RunEvent.StartQueueEnded, env.host.events.last())
+        }
+
+    @Test
+    fun aQueuedStartDroppedWithTheServiceEndsItsQueueToo() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.submit(RunCommand.Stop(StopReason.DESTROYED))
+            runCurrent()
+
+            assertTrue(RunEvent.StartQueueEnded in env.host.events)
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(1, env.servers.size)
         }
 
     @Test

@@ -23,6 +23,13 @@ class SpaceRunningUiStateTest {
     }
 
     @Test
+    fun aQueuedStartIsNotAnInterruptedRun() {
+        val queued = state(status = SpaceStatus.ACTIVE, expiresAt = NOW + HOUR).copy(startQueued = true)
+
+        assertFalse(queued.interrupted)
+    }
+
+    @Test
     fun anActiveSpaceWithoutAnEndIsInterruptedToo() {
         assertTrue(state(status = SpaceStatus.ACTIVE, expiresAt = null).interrupted)
     }

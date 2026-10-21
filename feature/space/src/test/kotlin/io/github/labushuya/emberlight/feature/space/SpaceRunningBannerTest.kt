@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.feature.space
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -13,6 +14,7 @@ import io.github.labushuya.emberlight.feature.space.run.SpaceRunningUiState
 import io.github.labushuya.emberlight.feature.space.run.StartOutcome
 import io.github.labushuya.emberlight.share.server.PauseCause
 import io.github.labushuya.emberlight.share.server.RunState
+import io.github.labushuya.emberlight.share.server.SpaceServerService
 import io.github.labushuya.emberlight.share.server.WifiAddress
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.management.Lifetime
@@ -132,6 +134,68 @@ class SpaceRunningBannerTest {
             .assertIsDisplayed()
     }
 
+    @Test
+    fun aQueuedStartShowsTheHintInsteadOfTheInterruptedBanner() {
+        composeRule.setContent {
+            EmberlightTheme {
+                SpaceRunningContent(
+                    state = state(runState = RunState.Idle, startQueued = true),
+                    onEnd = {},
+                    onConfirmNetwork = {},
+                    onAcknowledgePause = {},
+                    onSetup = {},
+                    onResume = {},
+                    onRemoveRequest = {},
+                    onRotateRequest = {},
+                    onAcknowledgeInvite = {},
+                )
+            }
+        }
+
+        val queuedText =
+            context.resources.getQuantityString(
+                R.plurals.space_running_start_queued,
+                SpaceServerService.closeGraceSeconds,
+                SpaceServerService.closeGraceSeconds,
+            )
+        composeRule.onNodeWithText(queuedText).assertIsDisplayed()
+        assertAbsent(context.getString(R.string.space_interrupted_title))
+        assertAbsent(context.getString(R.string.space_interrupted_resume))
+        // Beenden geht im Nachlauf nicht: der Lauf wartet noch, der Knopf ist deaktiviert.
+        composeRule.onNodeWithText(context.getString(R.string.space_running_end)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun theQueuedHintDisappearsWhenTheServerRuns() {
+        composeRule.setContent {
+            EmberlightTheme {
+                SpaceRunningContent(
+                    state =
+                        state(
+                            runState = RunState.Running(SPACE_ID, "Test", 8787, WIFI, NOW, NOW + HOUR),
+                            startQueued = true,
+                        ),
+                    onEnd = {},
+                    onConfirmNetwork = {},
+                    onAcknowledgePause = {},
+                    onSetup = {},
+                    onResume = {},
+                    onRemoveRequest = {},
+                    onRotateRequest = {},
+                    onAcknowledgeInvite = {},
+                )
+            }
+        }
+
+        assertAbsent(
+            context.resources.getQuantityString(
+                R.plurals.space_running_start_queued,
+                SpaceServerService.closeGraceSeconds,
+                SpaceServerService.closeGraceSeconds,
+            ),
+        )
+    }
+
     /** Der Knoten fehlt im Baum. Ein Knoten mit diesem Text darf nicht da sein. */
     private fun assertAbsent(text: String) {
         assertTrue(composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty())
@@ -140,6 +204,7 @@ class SpaceRunningBannerTest {
     private fun state(
         runState: RunState,
         resumeFailure: StartOutcome? = null,
+        startQueued: Boolean = false,
     ): SpaceRunningUiState =
         SpaceRunningUiState(
             record =
@@ -164,6 +229,7 @@ class SpaceRunningBannerTest {
             runState = runState,
             nowMillis = NOW,
             resumeFailure = resumeFailure,
+            startQueued = startQueued,
         )
 
     private companion object {

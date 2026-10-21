@@ -108,6 +108,9 @@ internal sealed interface RunEvent {
 
     /** Ein Start kam während des Nachlaufs. Er wartet und startet, sobald der Nachlauf vorbei ist. */
     data object StartQueued : RunEvent
+
+    /** Die Warteschlange ist abgearbeitet oder verworfen. Der wartende Start hat gestartet, gescheitert oder ist mit dem Dienst beendet. */
+    data object StartQueueEnded : RunEvent
 }
 
 /** Schnittstelle zur Umgebung des Betriebs: Speicher, Netz, Sperren, Wecker und Hinweise. Der Dienst setzt sie um. */
@@ -483,8 +486,10 @@ internal class SpaceRunner(
         if (current is Phase.Closing) {
             // Der Nachlauf läuft schon. Nur das Ende des Dienstes bricht ihn ab, jedes andere Ende ist bereits geschehen.
             if (reason == StopReason.DESTROYED) {
+                val dropped = pendingStart != null
                 pendingStart = null
                 finishClosing(current)
+                if (dropped) host.onEvent(RunEvent.StartQueueEnded)
             }
             return
         }
@@ -555,7 +560,13 @@ internal class SpaceRunner(
         publish(RunState.Idle)
         val next = pendingStart
         pendingStart = null
-        if (next != null) start(next) else host.onIdle()
+        if (next != null) {
+            // Die Meldung „wartet“ bleibt, bis der Start entschieden ist: gestartet, verweigert oder abgelehnt.
+            start(next)
+            host.onEvent(RunEvent.StartQueueEnded)
+        } else {
+            host.onIdle()
+        }
     }
 
     private suspend fun heartbeat() {
