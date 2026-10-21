@@ -239,6 +239,21 @@ class HostMediaViewModelTest {
     }
 
     @Test
+    fun theDetailOfAStoredImageIsItsFileAndAnUnknownMediumHasNone() {
+        val media = MediaId.generate()
+        insert(media, host, hash = 'a')
+        File(spacesDir, "${space.value}/${"a".repeat(64)}").writeBytes(byteArrayOf(1, 2, 3))
+        model.show(space)
+        awaitState { it.items.any { item -> item.id == media.value } }
+
+        val detail = runBlocking { model.detailOf(media.value) }
+
+        assertEquals(false, detail?.isVideo)
+        assertTrue(detail?.file?.isFile == true)
+        assertNull(runBlocking { model.detailOf(MediaId.generate().value) })
+    }
+
+    @Test
     fun withoutAShownSpaceTheListIsEmpty() {
         assertFalse(latest.loaded)
         assertTrue(latest.items.isEmpty())

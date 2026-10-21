@@ -3,6 +3,7 @@ package io.github.labushuya.emberlight.feature.space.upload
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.net.toUri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.labushuya.emberlight.share.server.ActiveSpaces
 import io.github.labushuya.emberlight.share.server.RunState
@@ -48,7 +49,7 @@ class ContentHostUploadPort
         override suspend fun describe(uri: String): PickedFile =
             withContext(Dispatchers.IO) {
                 val fallback = PickedFile(name = FALLBACK_NAME, sizeBytes = null)
-                val parsed = runCatching { Uri.parse(uri) }.getOrNull() ?: return@withContext fallback
+                val parsed = runCatching { uri.toUri() }.getOrNull() ?: return@withContext fallback
                 runCatching {
                     context.contentResolver
                         .query(parsed, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
@@ -69,7 +70,7 @@ class ContentHostUploadPort
         ): PickedUploadOutcome =
             withContext(Dispatchers.IO) {
                 val parsed =
-                    runCatching { Uri.parse(uri) }.getOrNull() ?: return@withContext PickedUploadOutcome.Unreadable
+                    runCatching { uri.toUri() }.getOrNull() ?: return@withContext PickedUploadOutcome.Unreadable
                 val file = describe(uri)
                 val input = openOrNull(parsed) ?: return@withContext PickedUploadOutcome.Unreadable
                 input.use { stream ->

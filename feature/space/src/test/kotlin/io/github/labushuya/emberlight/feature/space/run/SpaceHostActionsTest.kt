@@ -213,6 +213,18 @@ class SpaceHostActionsTest {
     }
 
     @Test
+    fun theHostDeletesAMediumFromTheAppAndAnUnknownOneIsNotFound() {
+        val outcome = runBlocking { actions.deleteMedia(space, MediaId.parse(otherUpload)!!) }
+
+        assertEquals(io.github.labushuya.emberlight.share.space.DeleteOutcome.Deleted, outcome)
+        assertEquals(setOf(guestUpload), uploadIds())
+        assertEquals(
+            io.github.labushuya.emberlight.share.space.DeleteOutcome.NotFound,
+            runBlocking { actions.deleteMedia(space, MediaId.generate()) },
+        )
+    }
+
+    @Test
     fun noInviteIsReportedWhileNoServerRuns() {
         assertNull(actions.currentInvite(space))
     }
