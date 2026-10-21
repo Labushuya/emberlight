@@ -24,6 +24,12 @@ enum class NotRemovableReason(
     STRUCTURE("structure"),
     UNSUPPORTED("unsupported"),
     VERIFICATION_FAILED("verification_failed"),
+
+    /**
+     * Binärer Standort (GPS-IFD, GPMF, camm, djmd) ist gefunden, lässt sich aber nicht längenerhaltend entfernen (ADR
+     * 0015, Nachtrag 3.1b-2). Fail closed: Ohne Einwilligung wird der Upload abgelehnt.
+     */
+    LOCATION_NOT_REMOVABLE("location_not_removable"),
 }
 
 /** Abbruch der Bereinigung. Fail closed: jede unklare Struktur führt hierhin, nie zu einer Teilbereinigung. */
@@ -99,6 +105,27 @@ internal class FileStore(
     override fun truncate(newLength: Long) {
         file.setLength(newLength)
         currentLength = newLength
+    }
+}
+
+/** Sicht auf den Bereich [start, end) eines anderen Speichers. Die Länge ist die des Bereichs. */
+internal class RangeStore(
+    private val base: ByteStore,
+    private val start: Long,
+    end: Long,
+) : ByteStore {
+    override val length: Long = end - start
+
+    override fun read(
+        offset: Long,
+        count: Int,
+    ): ByteArray = base.read(start + offset, count)
+
+    override fun write(
+        offset: Long,
+        bytes: ByteArray,
+    ) {
+        base.write(start + offset, bytes)
     }
 }
 

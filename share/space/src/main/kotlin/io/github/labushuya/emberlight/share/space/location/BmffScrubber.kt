@@ -12,11 +12,17 @@ import io.github.labushuya.emberlight.share.space.ContentInspector
  *   `com.apple.quicktime.location.*` und `©xyz` werden in der `data`-Nutzlast überschrieben. `keys` und Indizes
  *   bleiben unverändert.
  * - XMP-`uuid`: XMP-Scrubber. `free`/`skip` mit Standort: `free_box_location`.
- * - Metadaten-Tracks (`gpmd`, `camm`, `mebx` mit `location`, Handler `meta`): `metadata_track`.
+ * - Metadaten-Tracks mit binärem Standort (Nachtrag 3.1b-2): `gpmd` mit `GPS5`/`GPS9`, `camm` mit GPS-Records (Typ 5
+ *   oder 6), `djmd` (DJI, immer). Die Samples dieser Tracks werden längenerhaltend mit 0x00 geleert. Die Sample-Lage
+ *   kommt aus `stsz`, `stsc` und `stco`/`co64`. Ein `gpmd`/`camm`-Track ohne GPS-Befund bleibt unverändert.
+ * - Metadaten-Tracks ohne lesbare Sample-Tabelle, `mebx` mit `location` und unbekannte Handler `meta`:
+ *   `metadata_track` (fail closed, wie bisher).
+ * - Unbekannte Boxen mit binärem Standort (TIFF mit GPS-IFD) werden geleert (`location_box_binary`). Ist die Box zu groß
+ *   für den Speicher, gilt `location_not_removable`.
  * - Alles, was nicht eingeordnet werden kann und Standort-Text enthält: `unsupported`.
  *
- * Mediendaten (`mdat`) werden nie gelesen. Ein Anhang hinter der letzten gültigen Top-Level-Box wird abgeschnitten
- * (ADR 0015, Anhänge).
+ * Mediendaten (`mdat`) werden nie gelesen, außer den Samples von Metadaten-Tracks oben. Ein Anhang hinter der letzten
+ * gültigen Top-Level-Box wird abgeschnitten (ADR 0015, Anhänge).
  */
 internal object BmffScrubber {
     private val XMP_UUID =
@@ -41,7 +47,9 @@ internal object BmffScrubber {
     private const val COPYRIGHT_XYZ = "©xyz"
     private val FREE_TYPE = ascii("free")
     private const val LOCATION_KEY_PREFIX = "com.apple.quicktime.location."
-    private val METADATA_SAMPLE_TYPES = setOf("gpmd", "camm")
+    private val SAMPLE_TRACK_TYPES = setOf("gpmd", "camm", "djmd")
+    private const val TRACK_FINDING = "location_track"
+    private const val BOX_FINDING = "location_box_binary"
 
     internal class Box(
         val type: String,
@@ -56,10 +64,23 @@ internal object BmffScrubber {
         val end: Long,
     )
 
-    /** Sammelt Angaben je `trak`: Handler-Typ und Sample-Einträge. */
+    /** Ein Byte-Bereich eines Samples: Start und Länge. */
+    private class Span(
+        val start: Long,
+        val size: Long,
+    )
+
+    /**
+     * Sammelt Angaben je `trak`: Handler-Typ, Sample-Einträge und die Sample-Tabellen (ISO 14496-12, §8.7).
+     * [sampleSizes] aus `stsz`, [chunkOffsets] aus `stco`/`co64`, [sampleToChunk] aus `stsc` als Paare (erster Chunk,
+     * Samples je Chunk).
+     */
     private class Track {
         var handler: String? = null
         val entries = ArrayList<SampleEntry>()
+        var sampleSizes: LongArray? = null
+        var chunkOffsets: LongArray? = null
+        var sampleToChunk: List<LongArray>? = null
     }
 
     /**
@@ -202,6 +223,10 @@ internal object BmffScrubber {
                     if (track != null) sampleEntries(pass, box, track) else generic(pass, box)
                 }
 
+                "stsz", "stco", "co64", "stsc" -> {
+                    if (track != null) sampleTable(pass, box, track) else generic(pass, box)
+                }
+
                 "udta" -> {
                     userData(pass, box, depth + 1)
                 }
@@ -243,7 +268,141 @@ internal object BmffScrubber {
         }
     }
 
-    /** Metadaten-Tracks: `gpmd` und `camm` immer, `mebx` nur mit Standort-Key, Handler `meta` immer. */
+    /**
+     * `stsz` (Größen), `stco`/`co64` (Chunk-Offsets), `stsc` (Samples je Chunk). Nur die Felder der Tabellen, keine
+     * Sample-Daten. Ein Eintrag über [ScrubLimits.MAX_ENTRIES] gilt als Strukturfehler.
+     */
+    private fun sampleTable(
+        pass: ScrubPass,
+        box: Box,
+        track: Track,
+    ) {
+        val p = box.payload + 4
+        when (box.type) {
+            "stsz" -> {
+                val fixed = pass.u32Be(p, box.end)
+                val count = pass.u32Be(p + 4, box.end)
+                if (count > ScrubLimits.MAX_ENTRIES) bail(NotRemovableReason.STRUCTURE)
+                track.sampleSizes =
+                    LongArray(count.toInt()) { index ->
+                        if (fixed != 0L) fixed else pass.u32Be(p + 8 + 4L * index, box.end)
+                    }
+            }
+
+            "stco" -> {
+                val count = pass.u32Be(p, box.end)
+                if (count > ScrubLimits.MAX_ENTRIES) bail(NotRemovableReason.STRUCTURE)
+                track.chunkOffsets = LongArray(count.toInt()) { index -> pass.u32Be(p + 4 + 4L * index, box.end) }
+            }
+
+            "co64" -> {
+                val count = pass.u32Be(p, box.end)
+                if (count > ScrubLimits.MAX_ENTRIES) bail(NotRemovableReason.STRUCTURE)
+                track.chunkOffsets =
+                    LongArray(count.toInt()) { index ->
+                        val at = p + 4 + 8L * index
+                        val high = pass.u32Be(at, box.end)
+                        if (high > 0x7FFF_FFFFL) bail(NotRemovableReason.STRUCTURE)
+                        (high shl 32) or pass.u32Be(at + 4, box.end)
+                    }
+            }
+
+            "stsc" -> {
+                val count = pass.u32Be(p, box.end)
+                if (count > ScrubLimits.MAX_ENTRIES) bail(NotRemovableReason.STRUCTURE)
+                track.sampleToChunk =
+                    List(count.toInt()) { index ->
+                        val at = p + 4 + 12L * index
+                        longArrayOf(pass.u32Be(at, box.end), pass.u32Be(at + 4, box.end))
+                    }
+            }
+        }
+    }
+
+    /**
+     * Byte-Bereiche aller Samples eines Tracks. Fehlt eine der drei Tabellen, liefert es `null`. Passen die Tabellen nicht
+     * zusammen, ist die Struktur fehlerhaft.
+     */
+    private fun sampleSpans(track: Track): List<Span>? {
+        val sizes = track.sampleSizes ?: return null
+        val chunks = track.chunkOffsets ?: return null
+        val map = track.sampleToChunk ?: return null
+        if (map.isEmpty() || map[0][0] != 1L) bail(NotRemovableReason.STRUCTURE)
+        val spans = ArrayList<Span>(sizes.size)
+        var sample = 0
+        var entry = 0
+        for (chunk in chunks.indices) {
+            val chunkNumber = chunk + 1L
+            // Der letzte Eintrag mit erstem Chunk ≤ aktueller Chunk gilt (ISO 14496-12, stsc). Die Liste ist aufsteigend.
+            while (entry + 1 < map.size && map[entry + 1][0] <= chunkNumber) entry++
+            if (map[entry][0] > chunkNumber) bail(NotRemovableReason.STRUCTURE)
+            val perChunk = map[entry][1]
+            var offset = chunks[chunk]
+            for (inChunk in 0L until perChunk) {
+                if (sample >= sizes.size) bail(NotRemovableReason.STRUCTURE)
+                val size = sizes[sample++]
+                spans.add(Span(offset, size))
+                offset += size
+            }
+        }
+        if (sample != sizes.size) bail(NotRemovableReason.STRUCTURE)
+        return spans
+    }
+
+    /**
+     * Ob die Samples eines Metadaten-Tracks binären Standort tragen. `gpmd`: GPMF-Schlüssel `GPS5` oder `GPS9` (Schlüssel
+     * sind vierstellige ASCII-Kennungen). `camm`: Record mit Typ 5 oder 6 (Kopf: zwei Nullbytes, dann der Typ als
+     * Little-Endian-Zahl). `djmd` (DJI) gilt immer als Standortträger, weil seine Felder nicht sicher lesbar sind. Ein
+     * Fehlalarm betrifft nur diesen Metadaten-Track, nie Bild- oder Videodaten.
+     */
+    private fun carriesGps(
+        pass: ScrubPass,
+        type: String,
+        spans: List<Span>,
+    ): Boolean {
+        if (type == "djmd") return true
+        return spans.any { span ->
+            pass.count("track_samples")
+            val bytes = pass.bytes(span.start, span.size, pass.store.length)
+            when (type) {
+                "gpmd" -> containsAscii(bytes, "GPS5") || containsAscii(bytes, "GPS9")
+                "camm" -> cammGps(bytes)
+                else -> false
+            }
+        }
+    }
+
+    private fun containsAscii(
+        bytes: ByteArray,
+        text: String,
+    ): Boolean = String(bytes, Charsets.ISO_8859_1).contains(text)
+
+    /** camm-Record mit Kopf `00 00`, dann Typ 5 oder 6 als Little-Endian-Zahl. An jeder Stelle gesucht. */
+    private fun cammGps(bytes: ByteArray): Boolean {
+        for (i in 0 until bytes.size - 3) {
+            if (bytes[i] == 0.toByte() && bytes[i + 1] == 0.toByte() && bytes[i + 3] == 0.toByte()) {
+                val type = bytes[i + 2].toInt()
+                if (type == 5 || type == 6) return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Ein Metadaten-Track mit Sample-Daten: Ohne lesbare Tabellen gilt er als `metadata_track` (fail closed). Mit
+     * binärem Standort werden alle Samples geleert. Ohne Befund bleibt er unverändert.
+     */
+    private fun sampleTrack(
+        pass: ScrubPass,
+        track: Track,
+        type: String,
+    ) {
+        val spans = sampleSpans(track) ?: bail(NotRemovableReason.METADATA_TRACK)
+        if (!carriesGps(pass, type, spans)) return
+        for (span in spans) pass.blank(span.start, span.size, 0, TRACK_FINDING)
+    }
+
+    /** Metadaten-Tracks: Sample-Tracks mit GPS-Befund werden geleert, `mebx` nur mit Standort-Key, Handler `meta` immer. */
     private fun verifyTrack(
         pass: ScrubPass,
         track: Track,
@@ -251,8 +410,8 @@ internal object BmffScrubber {
         if (track.handler == "meta" && track.entries.isEmpty()) bail(NotRemovableReason.METADATA_TRACK)
         for (entry in track.entries) {
             when {
-                entry.type in METADATA_SAMPLE_TYPES -> {
-                    bail(NotRemovableReason.METADATA_TRACK)
+                entry.type in SAMPLE_TRACK_TYPES -> {
+                    sampleTrack(pass, track, entry.type)
                 }
 
                 entry.type == "mebx" -> {
@@ -482,11 +641,20 @@ internal object BmffScrubber {
         if (text.contains("gps ") || LocationText.containsIn(text)) bail(NotRemovableReason.FREE_BOX_LOCATION)
     }
 
-    /** Alles, was der Walker nicht einordnet: Standort-Text darin führt zu `unsupported`, sonst bleibt es. */
+    /**
+     * Alles, was der Walker nicht einordnet. Enthält es ein eingebettetes TIFF mit GPS-Befund, wird die Nutzlast geleert
+     * (`location_box_binary`, längenerhaltend). Standort-Text darin führt zu `unsupported`, sonst bleibt es.
+     */
     internal fun generic(
         pass: ScrubPass,
         box: Box,
     ) {
+        if (StrictLocationProbe.containsBinaryLocation(RangeStore(pass.store, box.payload, box.end))) {
+            val count = box.end - box.payload
+            if (count > ScrubLimits.MAX_READ) bail(NotRemovableReason.LOCATION_NOT_REMOVABLE)
+            pass.blank(box.payload, count, 0, BOX_FINDING)
+            return
+        }
         if (LocationText.containsIn(pass.store, box.payload, box.end)) bail(NotRemovableReason.UNSUPPORTED)
     }
 }

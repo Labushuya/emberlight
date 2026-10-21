@@ -22,6 +22,7 @@ internal object PngScrubber {
     private const val RAW_PROFILE_PREFIX = "Raw profile type "
     private const val XMP_KEYWORD = "XML:com.adobe.xmp"
     private const val SCAN_CHUNK = 64 * 1024
+    private const val UNKNOWN_TEXT_FINDING = "text_location_binary"
 
     /** Ein dekodiertes Raw-Profile. [digitAt] sind die Positionen der Hex-Ziffern im Text, zwei je Byte. */
     private class RawProfile(
@@ -81,7 +82,28 @@ internal object PngScrubber {
         when {
             keyword == RAW_PROFILE_EXIF -> rawProfile(pass, dataStart + nul + 1, dataEnd, 0)
             keyword.startsWith(RAW_PROFILE_PREFIX) -> blankRawProfile(pass, dataStart + nul + 1, dataEnd)
+            else -> unknownText(pass, dataStart + nul + 1, dataEnd)
         }
+    }
+
+    /**
+     * Text mit unbekanntem Schlüsselwort (ADR 0015, Nachtrag 3.1b-2). Liegt darin ein TIFF mit GPS-Befund, roh oder als
+     * Hex-Profil, wird der ganze Textwert mit Nullen geleert. Der Wert wird von keinem Decoder gebraucht, die Länge bleibt.
+     */
+    private fun unknownText(
+        pass: ScrubPass,
+        start: Long,
+        end: Long,
+    ) {
+        val raw = pass.bytes(start, end - start, end)
+        val candidates = ArrayList<ByteArray>(2).apply { add(raw) }
+        try {
+            candidates.add(decodeProfile(String(raw, Charsets.ISO_8859_1)).bytes)
+        } catch (notAProfile: Unremovable) {
+            // Kein Hex-Profil: Nur der Rohtext zählt.
+        }
+        if (candidates.none { StrictLocationProbe.containsBinaryLocation(MemoryStore(it)) }) return
+        pass.blank(start, end - start, 0, UNKNOWN_TEXT_FINDING)
     }
 
     /** Anderes Raw-Profile: Jede Hex-Ziffer wird durch `0` ersetzt. Leerraum bleibt, damit die Ziffernzahl stimmt. */
@@ -138,6 +160,7 @@ internal object PngScrubber {
             keyword == XMP_KEYWORD -> XmpScrubber.scrubRegion(pass, textStart, dataEnd)
             keyword == RAW_PROFILE_EXIF -> rawProfile(pass, textStart, dataEnd, 0)
             keyword.startsWith(RAW_PROFILE_PREFIX) -> blankRawProfile(pass, textStart, dataEnd)
+            else -> unknownText(pass, textStart, dataEnd)
         }
     }
 
@@ -151,6 +174,17 @@ internal object PngScrubber {
     ) {
         val asText = String(text, Charsets.ISO_8859_1)
         if (LocationText.containsIn(asText)) bail(NotRemovableReason.COMPRESSED_TEXT)
+        // Binäres TIFF mit GPS-Befund im komprimierten Text: nicht sicher entfernbar, also ablehnen (fail closed).
+        if (StrictLocationProbe.containsBinaryLocation(MemoryStore(text))) bail(NotRemovableReason.COMPRESSED_TEXT)
+        val hexProfile =
+            try {
+                decodeProfile(asText).bytes
+            } catch (notAProfile: Unremovable) {
+                null
+            }
+        if (hexProfile != null && StrictLocationProbe.containsBinaryLocation(MemoryStore(hexProfile))) {
+            bail(NotRemovableReason.COMPRESSED_TEXT)
+        }
         when (keyword) {
             XMP_KEYWORD -> {
                 if (XmpScrubber.locationSpans(text).isNotEmpty()) bail(NotRemovableReason.COMPRESSED_TEXT)

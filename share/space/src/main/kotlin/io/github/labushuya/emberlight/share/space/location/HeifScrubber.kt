@@ -10,6 +10,9 @@ package io.github.labushuya.emberlight.share.space.location
  *   durch den XMP-Scrubber. Alle Items dieser Typen werden erfasst, auch Thumbnails und Hilfsbilder.
  * - Items ohne `infe`, doppelte Einträge, mehrfache `iinf`/`iloc`/`idat`/`hdlr` und unbekannte Versionen gelten als
  *   nicht bereinigbar (fail closed).
+ * - Items, die weder Exif, XMP noch ein bekannter Bildtyp ([KNOWN_IMAGE_TYPES]) sind (etwa `uri ` oder fremde `mime`):
+ *   Tragen sie einen binären oder Text-Standort, werden alle Extents geleert (`heif_item_location`, Nachtrag 3.1b-2).
+ *   Bildtypen werden nicht gelesen, damit Bilddaten keinen Fehlalarm auslösen.
  *
  * `moov` auf Top-Level (HEIF-Sequenzen, Bursts) wird wie bei MP4 geprüft. Mediendaten (`mdat`) werden nie gelesen.
  */
@@ -21,6 +24,28 @@ internal object HeifScrubber {
     private const val METHOD_IDAT = 1
     private const val METHOD_ITEM = 2
     private const val HANDLER_PICTURE = "pict"
+    private const val ITEM_FINDING = "heif_item_location"
+
+    /** Item-Typen, deren Inhalt Bilddaten ist (ISO/IEC 23008-12, Codecs). Sie werden nie nach Standort abgesucht. */
+    private val KNOWN_IMAGE_TYPES =
+        setOf(
+            "hvc1",
+            "hev1",
+            "avc1",
+            "avc3",
+            "av01",
+            "av02",
+            "vvc1",
+            "evc1",
+            "lhv1",
+            "hvc2",
+            "grid",
+            "iden",
+            "iovl",
+            "tmap",
+            "unci",
+            "jpeg",
+        )
     private val EXIF_ID = ascii("Exif\u0000\u0000")
     private val SIZES = setOf(0, 4, 8)
 
@@ -93,7 +118,10 @@ internal object HeifScrubber {
             val info = infos[location.itemId] ?: bail(NotRemovableReason.STRUCTURE)
             val isExif = info.type == EXIF_TYPE
             val isXmp = info.type == MIME_TYPE && info.contentType == XMP_CONTENT_TYPE
-            if (!isExif && !isXmp) continue
+            if (!isExif && !isXmp) {
+                if (info.type !in KNOWN_IMAGE_TYPES) unknownItem(pass, location, idat)
+                continue
+            }
             if (location.method == METHOD_ITEM) bail(NotRemovableReason.UNSUPPORTED)
             val item = pass.view(itemStore(pass, location, idat))
             if (isExif) {
@@ -102,6 +130,26 @@ internal object HeifScrubber {
                 XmpScrubber.scrubRegion(item, 0, item.store.length)
             }
         }
+    }
+
+    /**
+     * Item eines unbekannten Typs oder Nicht-Bild-Items. Hat es einen Standort (binär im TIFF-Format oder als Text), werden
+     * alle seine Extents mit Nullen geleert. Das Item braucht kein Decoder, die Länge bleibt. Ist es zu groß für den
+     * Speicher oder liegt es über ein anderes Item (Methode 2), gilt der Standort als nicht entfernbar.
+     */
+    private fun unknownItem(
+        pass: ScrubPass,
+        location: Location,
+        idat: BmffScrubber.Box?,
+    ) {
+        if (location.method == METHOD_ITEM) bail(NotRemovableReason.UNSUPPORTED)
+        val item = pass.view(itemStore(pass, location, idat))
+        val size = item.store.length
+        if (!StrictLocationProbe.containsBinaryLocation(item.store) && !LocationText.containsIn(item.store, 0, size)) {
+            return
+        }
+        if (size > ScrubLimits.MAX_READ) bail(NotRemovableReason.LOCATION_NOT_REMOVABLE)
+        item.blank(0, size, 0, ITEM_FINDING)
     }
 
     /** Das einzige Kind mit [type]. Mehrere gleichartige Kinder sind mehrdeutig und gelten als Strukturfehler. */
