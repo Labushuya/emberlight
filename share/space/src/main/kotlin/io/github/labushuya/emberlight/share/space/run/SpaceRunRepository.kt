@@ -135,6 +135,33 @@ class SpaceRunRepository(
             }
         }
 
+    /**
+     * Verlängert den aktiven Space auf [newEndsAtMillis]. Anfang und Laufzeit-Anker (`startedAt`) bleiben unverändert, damit
+     * die gemessene Laufzeit weiter gilt (ADR 0017). Liefert `null`, wenn die Verlängerung gilt, sonst den Grund.
+     */
+    suspend fun extend(
+        id: SpaceId,
+        newEndsAtMillis: Long,
+    ): ExtendProblem? =
+        database.withTransaction {
+            val row = spaces.find(id.value)
+            val now = clock.wallMillis()
+            val problem =
+                SpaceRunPolicy.extendProblem(
+                    status = row?.let { r -> SpaceStatus.entries.firstOrNull { it.name == r.status } },
+                    startedAtMillis = row?.startedAt,
+                    currentEndsAtMillis = row?.expiresAt,
+                    newEndsAtMillis = newEndsAtMillis,
+                    nowWallMillis = now,
+                )
+            if (row == null || problem != null) {
+                problem ?: ExtendProblem.NOT_ACTIVE
+            } else {
+                spaces.upsert(row.copy(expiresAt = newEndsAtMillis, updatedAt = now))
+                null
+            }
+        }
+
     /** Macht einen Start rückgängig, der nicht zustande kam (etwa kein WLAN beim Dienst). Der Space ist wieder Entwurf. */
     suspend fun abortStart(id: SpaceId): Boolean =
         database.withTransaction {
