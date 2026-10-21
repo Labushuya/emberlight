@@ -798,9 +798,7 @@ internal class SpaceRunner(
                 publish(pausedState(newSetup, updated.cause, updated.pending))
             }
 
-            is Phase.Idle, is Phase.Closing -> {
-                Unit
-            }
+            is Phase.Idle, is Phase.Closing -> {}
         }
     }
 

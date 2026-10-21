@@ -91,6 +91,13 @@ class GuestBrowserTest {
     }
 
     @Test
+    fun extensionWhileTheOneMinuteWarningIsOpenClosesItAndShowsTheBanner() {
+        runScenario(file = "extension.test.mjs", spaceName = "Verlängert", endsInSeconds = 45) { scene ->
+            mapOf("session" to session(scene, scene.join("Lena")))
+        }
+    }
+
+    @Test
     fun endingByAGoneSpaceAnswersWithTheEndingView() {
         runScenario(file = "closed.test.mjs", spaceName = SPACE_NAME, endsInSeconds = 3_600) { scene ->
             mapOf("session" to session(scene, scene.join("Lena")))
@@ -321,6 +328,7 @@ internal class NodeBrowserRun(
             runCatching {
                 when (name) {
                     "close-space" -> scene.markClosed()
+                    "extend-hour" -> scene.extendBy(HOUR_MILLIS)
                     "hold-uploads" -> scene.holdUploadSlots()
                     "release-uploads" -> scene.releaseUploadSlots()
                     "fill-storage" -> scene.fillStorage()
@@ -337,6 +345,7 @@ internal class NodeBrowserRun(
 
     private companion object {
         const val CONTROL_PREFIX = "EMBERLIGHT-CONTROL "
+        const val HOUR_MILLIS = 3_600_000L
         const val RUN_TIMEOUT_SECONDS = 240L
     }
 }

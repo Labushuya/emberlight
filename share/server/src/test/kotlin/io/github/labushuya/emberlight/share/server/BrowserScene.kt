@@ -183,6 +183,12 @@ internal class BrowserScene(
     /** Markiert den Space als beendet. Der nächste Aufruf eines Gastes bekommt `410`. */
     fun markClosed() = closure.markClosed()
 
+    /** Verlängert das Ende um [millis], wie der Gastgeber über den Dienst (Paket 3.6a). Die Revision steigt dabei. */
+    fun extendBy(millis: Long) {
+        val current = access.endsAtMillis ?: System.currentTimeMillis()
+        access.extendEnd(current + millis)
+    }
+
     /** Gast, dessen Upload-Plätze die Steuerung der Browser-Tests belegt. */
     var primaryGuest: ParticipantId? = null
     private val heldSlots = mutableListOf<ParticipantId>()
