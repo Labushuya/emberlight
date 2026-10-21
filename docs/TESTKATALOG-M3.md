@@ -128,7 +128,7 @@ Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Pa
 
 - [ ] **5.22 [Entwickler] curl-Prüfung.** Handlung: Die Befehle aus `docs/DEBUG-SERVER.md` ausführen. Erwartet: Beitritt mit gültiger Einladung `201`. Vorschau mit gültigem Geheimnis `200` mit genau `spaceName` und `accentColor`. Falsche Einladung bei Beitritt und Vorschau `403` (`invite_invalid`). Falscher Content-Type `415`. Gast auf `/participants` `403`. *(seit 3.4, PR #35 Punkt 21, Entwickler-Prüfung)*
 
-## 6 Medien im Browser (3.5a-1 Server umgesetzt, 3.5a-2 und 3.5a-3 folgen)
+## 6 Medien im Browser (3.5a-1 und 3.5a-2 Server umgesetzt, 3.5a-3 folgt)
 
 - [ ] **6.1 Medienliste im Browser.** Handlung: Gast öffnet den Space im Browser. Erwartet: Bilder und Videos mit Uploader und Zeitpunkt. HEIC erscheint als JPEG-Ansicht. *(folgt 3.5a)*
 - [ ] **6.2 [Entwickler] Signierte Medien-URLs.** Handlung: Eine Medien-URL abrufen, nach Ablauf erneut abrufen. Erwartet: Eine abgelaufene URL wird abgewiesen, eine neue Abfrage liefert eine neue, gültige URL. *(3.5a-1 umgesetzt, Server-Tests `MediaUrlSignerTest`, `SignedMediaApiTest`; Entwickler-Prüfung am Gerät offen)*
@@ -140,6 +140,12 @@ Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Pa
 - [ ] **6.8 Ende-Ansicht.** Handlung: Das Ende abwarten, dann die Seite neu laden. Erwartet: Ganzseitige Ende-Ansicht. Die Seite merkt sich die Ende-Ansicht, auch nach dem Neuladen. *(folgt 3.5a)*
 - [ ] **6.9 [Entwickler] Nachlauf 60 Sekunden.** Handlung: Kurz nach dem Ende eine Anfrage senden, dann nach 60 Sekunden erneut. Erwartet: In den ersten 60 Sekunden antwortet der Server mit `410`, danach beendet er sich. Die Seite zeigt die Ende-Ansicht ohne Verbindungsfehler. *(3.5a-1 umgesetzt, Server-Test `SpaceClosureSocketTest`; Entwickler-Prüfung am Gerät offen)*
 - [ ] **6.10 Verbindungsverlust.** Handlung: WLAN am Handy des Gasts ausschalten, Seite bedienen, dann wieder einschalten. Erwartet: Klarer Text statt einer Fehlerseite. Nach der Rückkehr des WLAN lädt die Seite weiter. *(folgt 3.5a)*
+
+- [ ] **6.11 HEIC-Ansicht.** Handlung: Ein HEIC-Foto (vom iPhone) in den Space hochladen, die Liste neu laden, bis die Ansicht bereit ist, dann öffnen. Erwartet: Die Ansicht zeigt das Foto als JPEG, nicht als leeres Bild. Der Download liefert weiterhin das Original. Unter Android 9 bleibt die Ansicht aus, der Platzhalter erscheint. *(3.5a-2 Server umgesetzt, Test `PreviewApiTest`; Gerätetest mit echten HEIC-Dateien offen)*
+- [ ] **6.12 Video-Vorschaubild.** Handlung: Ein MP4 hochladen, die Liste ansehen. Erwartet: Ein Vorschaubild aus dem Video, etwa bei 1 s (bei kurzen Videos bei 10 % der Länge). Die Drehung stimmt. *(3.5a-2 Server umgesetzt; Frame-Auswahl und Drehung am Gerät offen)*
+- [ ] **6.13 Platzhalter bei `failed`.** Handlung: Ein Bild mit mehr als 100 Megapixeln hochladen oder ein AVIF-Bild auf einem Gerät unter Android 12. Erwartet: Platzhalter statt Bild, kein Dauerladen. Das Original lässt sich weiterhin herunterladen. *(3.5a-2 umgesetzt, Test `SpaceVaultPreviewTest`; Gerätetest offen)*
+- [ ] **6.14 Speicherzählung mit Vorschauen.** Handlung: Space mit kleinem Speicherlimit füllen, dann Medien löschen. Erwartet: Die Speicheranzeige zählt die Vorschauen mit. Nach dem Löschen sinkt sie um Original und Vorschau. *(3.5a-2 umgesetzt, Tests `SpaceVaultPreviewTest`, `SpacesDatabaseMigrationToVersionSevenTest`)*
+- [ ] **6.15 [Entwickler] Vorschau-Route.** Handlung: `GET /api/v1/media/{id}/preview` mit Header abrufen, vor und nach dem Rendern. Erwartet: Vorher `404` mit `preview_unavailable`, danach `200` mit `image/jpeg`. Das Medien-Gate bremst die Vorschau nicht. *(3.5a-2 Server-Test `PreviewApiTest`; Entwickler-Prüfung am Gerät offen)*
 
 ## 7 Upload im Browser (3.5b, folgt)
 
