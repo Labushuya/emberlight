@@ -225,6 +225,13 @@ class GuestBrowserTest {
     }
 
     @Test
+    fun resumeWaitsForBusyOrUnreachableHostWithoutShowingTheInviteHint() {
+        runScenario(file = "resume.test.mjs", spaceName = SPACE_NAME, endsInSeconds = null) { scene ->
+            mapOf("session" to session(scene, scene.join("Lena")))
+        }
+    }
+
+    @Test
     fun formatSignaturesAreJudgedTheSameWayInTheBrowser() {
         runScenario(file = "formats.test.mjs", spaceName = SPACE_NAME, endsInSeconds = null) { emptyMap() }
     }
@@ -296,6 +303,11 @@ class GuestBrowserTest {
                 }
             val run = NodeBrowserRun(scene, chrome)
             val exitCode = run.execute(file, config)
+            // Das Protokoll des Laufs liegt im Ausgabeordner des Tasks (Gradle: browser-test-log). Es wird überschrieben.
+            System.getProperty("emberlight.browserTestLog")?.takeIf { it.isNotBlank() }?.let { dir ->
+                File(dir).mkdirs()
+                File(dir, file.removeSuffix(".mjs") + ".log").writeText(run.output())
+            }
             assertEquals("Browser-Test $file (Ausgabe unten)\n${run.output()}", 0, exitCode)
             // Messwerte der Browser-Tests (Zeilen mit „Messung“) landen im Protokoll des Laufs.
             run

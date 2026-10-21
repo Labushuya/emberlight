@@ -67,9 +67,14 @@
     });
   }
 
+  // Wartezeiten zwischen den Versuchen der Sitzungsprüfung in Millisekunden: erst kurz, dann alle fünf Sekunden.
+  var RESUME_BACKOFF_MS = [500, 1000, 2000, 4000];
+  var RESUME_STEADY_MS = 5000;
+
   /**
    * Prüft gespeicherte Sitzungen mit `GET /api/v1/me`. Gibt `true` zurück, wenn die Seite den Space oder das Ende zeigt.
-   * Ohne Verbindung bleibt die gespeicherte Sitzung erhalten, die Space-Ansicht wartet auf die Verbindung.
+   * Eine Sitzung wird nur bei 401 verworfen (ADR 0018). Vorübergehende Fehler (503, 429, 5xx, Netzfehler, unlesbare
+   * Antwort) wiederholt die Seite mit Wartezeit. Dabei zeigt sie nie den QR-Hinweis, solange die Sitzung besteht.
    */
   function resumeStored() {
     var entries = core.storedSessions();
@@ -81,28 +86,51 @@
       core.space.showEnded(ended);
       return Promise.resolve(true);
     }
+    return checkStored(stored, 0);
+  }
+
+  function checkStored(stored, attempt) {
     return core.api("GET", "/api/v1/me", stored.token).then(
       function (result) {
-        if (result.status === 200 && result.data && result.data.spaceId === stored.spaceId) {
+        var status = result.status;
+        if (status === 200 && !result.unreadable && result.data && result.data.spaceId === stored.spaceId) {
           openStored(stored, result.data);
           return true;
         }
-        if (result.status === 410) {
+        if (status === 410) {
           endedFromStored(stored);
           return true;
         }
-        if (result.status === 401 || result.status === 200) {
-          // Mit 200 und fremder Space-ID passt die gespeicherte Sitzung nicht zu diesem Space.
+        if (status === 401) {
           core.forgetSession(stored.spaceId);
+          return false;
         }
-        return false;
+        if (status === 429 || status >= 500 || (status === 200 && result.unreadable)) {
+          return retryStored(stored, attempt, "connecting");
+        }
+        if (status === 403) {
+          // Der Server lehnt Ort oder Adresse ab (falsches WLAN, andere Adresse). Die Sitzung bleibt.
+          return retryStored(stored, attempt, "network");
+        }
+        // Alles andere ist unerwartet (etwa ein 200 für einen anderen Space). Die Sitzung bleibt, die Seite prüft weiter.
+        return retryStored(stored, attempt, "generic");
       },
       function () {
-        openStored(stored, stored);
-        core.setStatus(text("network"));
-        return true;
+        return retryStored(stored, attempt, "connecting");
       }
     );
+  }
+
+  /** Zeigt den Grund in der Statuszeile (nur wenn er sich ändert) und prüft nach der Wartezeit erneut. */
+  function retryStored(stored, attempt, reason) {
+    var message = reason === "network" ? text("network") : reason === "generic" ? text("genericError") : text("connecting");
+    if (core.el.status.textContent !== message) core.setStatus(message);
+    var delay = attempt < RESUME_BACKOFF_MS.length ? RESUME_BACKOFF_MS[attempt] : RESUME_STEADY_MS;
+    return new Promise(function (resolve) {
+      setTimeout(resolve, delay);
+    }).then(function () {
+      return checkStored(stored, attempt + 1);
+    });
   }
 
   /**

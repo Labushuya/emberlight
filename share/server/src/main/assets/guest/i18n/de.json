@@ -16,6 +16,7 @@
   "spaceClosed": "Dieser Space ist beendet.",
   "rateLimited": "Zu viele Versuche. Bitte warte {seconds} Sekunden und versuche es dann erneut.",
   "network": "Keine Verbindung zum Gastgeber. Bist du noch im selben WLAN?",
+  "connecting": "Verbindung wird hergestellt…",
   "genericError": "Das hat nicht geklappt. Bitte versuche es erneut.",
   "noInvite": "Scanne den QR-Code des Gastgebers, um beizutreten.",
   "sessionEnded": "Deine Sitzung ist nicht mehr gültig. Scanne den QR-Code erneut, um beizutreten.",

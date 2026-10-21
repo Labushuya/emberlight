@@ -135,6 +135,7 @@ Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Pa
 - [ ] **5.19 Abmelden.** Handlung: „Abmelden“ antippen. Erwartet: „Du bist abgemeldet.“. Neuladen ohne Einladung ermöglicht keinen Beitritt. *(seit 3.4, PR #35 Punkt 11)*
 - [ ] **5.20 Zu viele Versuche.** Handlung: Zehn falsche Einladungen hintereinander von einem Gerät (Beitritt oder Vorschau), dann einen elften Versuch. Erwartet: „Zu viele Versuche“. Nach zehn Minuten ist der Beitritt wieder möglich. *(seit 3.4, PR #35 Punkt 15)*
 - [ ] **5.21 Seite ohne Einladung.** Handlung: Die Adresse ohne `#i=` öffnen. Erwartet: Der Text „Dem Space beitreten“, keine Daten des Space. *(seit 3.4b, Ergänzung aus ADR 0018)*
+- [ ] **5.23 Wiederaufnahme bei kurzer Störung.** Handlung: Gast hat einen Space offen, dann die Seite neu laden, während der Server kurz belegt oder das WLAN kurz getrennt ist. Erwartet: „Verbindung wird hergestellt…“, danach wechselt die Seite in den Space, sobald der Server wieder antwortet. Der Hinweis „Scanne den QR-Code…“ erscheint dabei nicht. *(seit Fix Gäste-Wiederaufnahme, ADR 0018 Nachtrag, Browser-Test `resume.test.mjs`; Gerät offen)*
 
 ### Entwickler
 

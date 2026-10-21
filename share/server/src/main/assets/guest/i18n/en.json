@@ -16,6 +16,7 @@
   "spaceClosed": "This space has ended.",
   "rateLimited": "Too many attempts. Please wait {seconds} seconds and try again.",
   "network": "No connection to the host. Are you still on the same Wi-Fi?",
+  "connecting": "Connecting to the host…",
   "genericError": "That did not work. Please try again.",
   "noInvite": "Scan the host's QR code to join.",
   "sessionEnded": "Your session is no longer valid. Scan the QR code again to join.",

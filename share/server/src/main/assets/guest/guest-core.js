@@ -81,7 +81,10 @@
       });
   };
 
-  /** Eine Anfrage an die API. Liefert Status, Daten und Retry-After, nie Text als HTML. */
+  /**
+   * Eine Anfrage an die API. Liefert Status, Daten und Retry-After, nie Text als HTML. Ist der Körper kein gültiges JSON,
+   * ist `unreadable` gesetzt und `data` leer. Die Aufrufer dürfen dann nicht daraus auf den Inhalt schließen.
+   */
   core.api = function (method, path, token, body) {
     var headers = {};
     if (token) headers["Authorization"] = "Bearer " + token;
@@ -97,16 +100,16 @@
     }).then(function (response) {
       var retryAfter = response.headers.get("Retry-After");
       if (response.status === 204) {
-        return { status: 204, data: null, retryAfter: retryAfter };
+        return { status: 204, data: null, retryAfter: retryAfter, unreadable: false };
       }
-      return response
-        .json()
-        .catch(function () {
-          return {};
-        })
-        .then(function (data) {
-          return { status: response.status, data: data, retryAfter: retryAfter };
-        });
+      return response.json().then(
+        function (data) {
+          return { status: response.status, data: data, retryAfter: retryAfter, unreadable: false };
+        },
+        function () {
+          return { status: response.status, data: {}, retryAfter: retryAfter, unreadable: true };
+        }
+      );
     });
   };
 

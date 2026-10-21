@@ -81,12 +81,25 @@ Folge für Paket 3.5: Die Gäste-Seite prüft die Größe vor dem Senden. Auf de
 
 Siehe die Liste in der PR-Beschreibung von #35. Sie enthält die Schritte für das Gerät und den Browser am PC.
 
+## Nachtrag: Wiederaufnahme bei vorübergehenden Fehlern (Fix Gäste-Seite)
+
+Die Prüfung der gespeicherten Sitzung mit `GET /api/v1/me` wertet die Antwort so aus:
+
+- `200` mit passender Space-ID: Space. `410`: Ende-Ansicht. Nur `401` verwirft die gespeicherte Sitzung. Danach folgt der Beitritt mit Einladung oder der Hinweis zum Scannen.
+- `429`, `5xx`, Netzfehler und `200` mit unlesbarem Körper sind vorübergehend. Die Seite wartet 0,5, 1, 2 und 4 Sekunden, danach alle 5 Sekunden. Sie zeigt „Verbindung wird hergestellt…“ (Statuszeile). Der QR-Hinweis erscheint nicht, solange eine Sitzung gespeichert ist.
+- `403` (Ort oder Adresse nicht zugelassen) zeigt den Hinweis zum WLAN und prüft weiter. Andere Antworten zeigen „Das hat nicht geklappt“ und prüfen ebenfalls weiter. Die Sitzung bleibt in beiden Fällen erhalten.
+
+Begründung: Vor dem Fix verwarf die Seite die Sitzung bei einem `200` mit unlesbarem Körper nicht, zeigte aber den QR-Hinweis. Ein kurzes `503` (Parallelität des Servers) und ein `429` zeigten ihn ebenfalls. Ein Netzfehler öffnete den Space ohne Verbindung. Gäste mussten neu scannen. Die Browser-Tests `resume.test.mjs` prüfen Wiederholung bei zwei Antworten `503` und bei zwei Netzfehlern.
+
+Offen: Eine Antwort `200` für einen anderen Space verwirft die Sitzung nicht mehr (vorher doch). Die Seite prüft dann weiter. Ob sie eine solche Sitzung verwerfen soll, ist offen (siehe Offene Punkte).
+
 ## Offene Punkte
 
 - Titelbild auf der Gäste-Seite. Name und Farbe sind mit dem Geheimnis vorab sichtbar (siehe Abweichungen). Das Titelbild folgt mit einer Route, die nur nach dem Beitritt erreichbar ist.
 - Der AndroidKeyStore-Pfad (`AndroidKeyStoreInviteSecretCipher`) ist unter Robolectric nicht prüfbar. Die Tests nutzen einen Fake. Die Probe auf einem Gerät steht aus: Erstellung des Schlüssels, Neustart mit gleichem QR, Verhalten nach Restore und nach Löschen der App-Daten.
 - Die Gäste-Seite ist nur durch die statische Prüfung und die Server-Tests abgedeckt. Ein Test im Browser fehlt. Die Datei `guest.js` ist syntaktisch geprüft, aber nicht ausgeführt.
 - Gerätetest mit dem Testkatalog. Nicht Teil dieses ADR.
+- Gäste-Seite: Verwerfen einer Sitzung bei `200` für einen fremden Space (siehe Nachtrag Wiederaufnahme). Die Seite prüft weiter. Ein Weg zurück ohne Löschen der Website-Daten fehlt dann noch.
 - Der Gastgeber-Upload aus der App (3.5, System-Fotoauswahl, Kopie mit Standort-Entfernung) ist in `PLAN-M3.md` eingeplant.
 
 ## Quellen
