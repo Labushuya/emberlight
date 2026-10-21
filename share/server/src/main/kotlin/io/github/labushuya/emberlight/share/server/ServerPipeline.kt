@@ -286,12 +286,24 @@ internal suspend fun ApplicationCall.respondError(
     code: String,
     extra: Map<String, JsonElement> = emptyMap(),
 ) {
-    if (status.value >= SERVER_ERROR_MIN) {
-        Log.e(SERVER_LOG_TAG, "Antwort ${status.value}: $code")
-    } else {
-        Log.w(SERVER_LOG_TAG, "Antwort ${status.value}: $code")
-    }
+    logResponse(status, code)
     respondJson(status, JsonObject(mapOf("error" to JsonPrimitive(code)) + extra))
+}
+
+/**
+ * Protokollzeile zu einer Fehlerantwort. Ein Fehler im Protokoll darf die Antwort nie verhindern. Auf dem JVM ohne
+ * Android-Stub wirft `Log` eine Ausnahme, deshalb wird sie hier abgefangen.
+ */
+private fun logResponse(
+    status: HttpStatusCode,
+    code: String,
+) {
+    try {
+        val message = "Antwort ${status.value}: $code"
+        if (status.value >= SERVER_ERROR_MIN) Log.e(SERVER_LOG_TAG, message) else Log.w(SERVER_LOG_TAG, message)
+    } catch (unavailable: RuntimeException) {
+        // Ohne Android-Laufzeit (Unit-Tests auf dem JVM) gibt es kein Protokoll. Die Antwort geht trotzdem raus.
+    }
 }
 
 private const val SERVER_LOG_TAG = "EmberlightServer"
