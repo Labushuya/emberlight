@@ -117,7 +117,7 @@ Entscheidungen 1 bis 4 vom 20.10.2026 (Namensvorschläge, harte Speichergrenze, 
 
 ## Offene Punkte nach 3.6b
 
-- Gerätetest 3.6b mit dem Testkatalog, Abschnitt 10 (Punkte 10.11 bis 10.24): Erinnerung und Aktionen, Wecker nach dem Schlafen, Neustart, Berechtigung aus.
+- Gerätetest 3.6b mit dem Testkatalog, Abschnitt 10 (Punkte 10.16 bis 10.29): Erinnerung und Aktionen, Wecker nach dem Schlafen, Neustart, Berechtigung aus.
 - Die Vorschau-Worker einer geöffneten Vault laufen nach dem Löschen weiter. Ob ein Vorschau-Job eine Datei neu anlegt, ist am Gerät zu beobachten (ADR 0021).
 - Die automatische Löschung nach Fristende, der Status `DELETED` mit Listeneintrag und die Vorlage folgen in 3.6c. `SpacePurge` ist dafür vorbereitet.
 - „In Galerie übernehmen“ kommt mit 3.7, nicht in 3.6b.
