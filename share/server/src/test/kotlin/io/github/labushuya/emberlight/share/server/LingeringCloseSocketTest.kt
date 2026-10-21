@@ -16,6 +16,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -154,10 +155,15 @@ class LingeringCloseSocketTest {
 
     /**
      * Gegenprobe (ADR 0014, Umsetzung 3.4): Dieselbe Ablehnung ohne Verwerfen des Körpers. Auf dem Windows-Loopback geht die
-     * Statuszeile dann verloren. Der Test hält das fest, damit niemand das Verwerfen unbemerkt entfernt.
+     * Statuszeile dann verloren. Der Test hält das fest, damit niemand das Verwerfen unbemerkt entfernt. Das Verhalten hängt
+     * am Betriebssystem (auf Linux kommt die Statuszeile an), deshalb läuft die Gegenprobe nur unter Windows.
      */
     @Test
     fun withoutDrainTheRefusalIsLostOnThisPlatform() {
+        assumeTrue(
+            "Gegenprobe gilt nur für den Windows-Loopback.",
+            System.getProperty("os.name").orEmpty().startsWith("Windows"),
+        )
         val gates = ServerGates()
         val bare =
             KtorLocalServer(
