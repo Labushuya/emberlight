@@ -17,4 +17,11 @@
         <package android:name="com.asus.mobilemanager" />
         <package android:name="com.evenwell.powersaving.g3" />
     </queries>
+
+    <application>
+        <!-- Wecker und Aktion „1 Tag länger aufbewahren“ der Erinnerung zur Aufbewahrung (Paket 3.6b, ADR 0021). Nicht exportiert. -->
+        <receiver
+            android:name="io.github.labushuya.emberlight.feature.space.retention.RetentionReceiver"
+            android:exported="false" />
+    </application>
 </manifest>

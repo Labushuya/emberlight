@@ -9,12 +9,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
 import io.github.labushuya.emberlight.extensions.AppOverlay
 import io.github.labushuya.emberlight.extensions.LaunchIntentHandler
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerImageSourceContribution
+import io.github.labushuya.emberlight.feature.space.retention.RetentionReminders
 import io.github.labushuya.emberlight.share.server.SpaceServerService
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -29,6 +32,9 @@ class MainActivity : ComponentActivity() {
 
     /** Zusätzliche Bildquellen des Vollbild-Viewers. Im Release-Build leer. */
     @Inject
+    lateinit var retentionReminders: RetentionReminders
+
+    @Inject
     lateinit var viewerImageSources: Set<@JvmSuppressWildcards ViewerImageSourceContribution>
 
     /** Ziel aus einer Benachrichtigung des Dienstes (Paket 3.3). Die Oberfläche öffnet es und setzt es zurück. */
@@ -38,6 +44,8 @@ class MainActivity : ComponentActivity() {
         // Muss vor super.onCreate stehen, damit der Splash beim Kaltstart greift.
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        // Beim Start: unterbrochene Löschungen fortsetzen und verpasste Erinnerungen nachholen (Paket 3.6b).
+        lifecycleScope.launch { retentionReminders.startupCatchUp() }
         handleLaunchIntent(intent)
 
         // Dunkle Symbole sind auf dem dunklen Hintergrund nicht lesbar: Systemleisten transparent mit hellen Symbolen.

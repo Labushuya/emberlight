@@ -34,6 +34,7 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
+import java.util.concurrent.CountDownLatch
 
 /**
  * Vorschauen im Vault (Paket 3.5a-2, ADR 0019): Einreihung ohne Warten, Zustände, Speicherzählung, Löschen,
@@ -216,6 +217,44 @@ class SpaceVaultPreviewTest {
 
         assertEquals("", entryOf(vault, id).videoCodec)
         assertEquals(1, silent.calls.count { it.kind == "codec" })
+    }
+
+    @Test
+    fun aRetiredVaultRendersNothingAndCreatesNoFile() {
+        val vault = vault()
+        val id = upload(vault, MediaFixtures.jpeg(100))
+
+        runBlocking { vault.retire() }
+        runBlocking { vault.renderPreviews(id) }
+
+        assertTrue(renderer.calls.isEmpty())
+        assertFalse(File(spacesDir, "${space.value}/${SpaceStorage.PREVIEW_DIR}").exists())
+        assertEquals("PENDING", entryOf(vault, id).previewState)
+    }
+
+    @Test
+    fun aPurgeThatStartsWhileTheWorkerRendersLeavesNoFileBehind() {
+        val gated = FakePreviewRenderer().apply { gate = CountDownLatch(1) }
+        val vault = vault(renderer = gated)
+        val id = upload(vault, MediaFixtures.jpeg(100))
+        gated.expect(1)
+        val workers = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            vault.startPreviews(workers)
+            assertTrue(gated.awaitCalls())
+
+            // Löschung beginnt: Vorschauen freigeben, dann das Verzeichnis entfernen.
+            runBlocking { vault.retire() }
+            SpaceStorage(spacesDir, space).deleteEverything()
+            runBlocking { workers.coroutineContext[kotlinx.coroutines.Job]?.cancelAndJoin() }
+
+            assertFalse(File(spacesDir, space.value).exists())
+            assertFalse(previewFile(shaOf(vault, id), PreviewRules.PREVIEW_LONG_EDGE).exists())
+        } finally {
+            gated.gate?.countDown()
+            runBlocking { workers.coroutineContext[kotlinx.coroutines.Job]?.cancelAndJoin() }
+            vault.stopPreviews()
+        }
     }
 
     @Test

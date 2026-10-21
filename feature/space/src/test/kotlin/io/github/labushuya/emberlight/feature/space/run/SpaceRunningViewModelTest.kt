@@ -18,6 +18,7 @@ import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
+import io.github.labushuya.emberlight.share.space.run.ExtendProblem
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
 import io.github.labushuya.emberlight.share.space.run.RunClock
 import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
@@ -223,6 +224,44 @@ class SpaceRunningViewModelTest {
         collector = CoroutineScope(Dispatchers.Unconfined).launch { vm.state.collect { latest = it } }
         return vm
     }
+
+    @Test
+    fun aPlusHourExtensionStartsTheExtendCommandWithTheNewEnd() =
+        runBlocking {
+            seed(SpaceStatus.ACTIVE, expiresAt = NOW + HOUR)
+            val vm = viewModel()
+            awaitState { it.loaded }
+
+            assertNull(vm.extend(ExtendChoice.PlusHour))
+
+            val intent = nextStartedService { it.action == SpaceServerService.ACTION_EXTEND }
+            assertEquals(NOW + 2 * HOUR, intent.getLongExtra(SpaceServerService.EXTRA_ENDS_AT, -1L))
+        }
+
+    @Test
+    fun anExtensionBeyondThirtyDaysFromTheStartIsRefusedWithoutAnyCommand() =
+        runBlocking {
+            seed(SpaceStatus.ACTIVE, expiresAt = NOW + 29 * DAY + 23 * HOUR)
+            val vm = viewModel()
+            awaitState { it.loaded }
+
+            assertEquals(ExtendProblem.TOO_LONG, vm.extend(ExtendChoice.PlusHour))
+
+            assertNull(Shadows.shadowOf(context as Application).nextStartedService)
+        }
+
+    @Test
+    fun anEndedSpaceCannotBeExtendedAndAnEndInThePastIsRefused() =
+        runBlocking {
+            seed(SpaceStatus.ENDED, expiresAt = NOW + HOUR)
+            val vm = viewModel()
+            awaitState { it.loaded }
+            assertEquals(ExtendProblem.NOT_ACTIVE, vm.extend(ExtendChoice.PlusDay))
+
+            seed(SpaceStatus.ACTIVE, expiresAt = NOW + HOUR)
+            awaitState { it.record?.status == SpaceStatus.ACTIVE }
+            assertEquals(ExtendProblem.NOT_IN_FUTURE, vm.extend(ExtendChoice.Until(NOW - MINUTE)))
+        }
 
     private suspend fun seed(
         status: SpaceStatus,

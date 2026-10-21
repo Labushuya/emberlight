@@ -10,6 +10,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
@@ -49,9 +50,14 @@ internal class PreviewService(
     private val probe: StorageProbe,
     private val lock: Mutex,
     private val renderer: PreviewRenderer,
+    /** `true`, sobald eine Löschung des Space läuft. Dann wird nichts mehr geschrieben (ADR 0021). */
+    private val purging: suspend () -> Boolean = { false },
 ) {
     private val queue = Channel<String>(Channel.UNLIMITED)
     private var worker: Job? = null
+
+    /** Gesetzt von [retire]. Ab dann schreibt diese Vault keine Vorschau mehr. Nur unter [lock] lesen und setzen. */
+    private var retired = false
 
     /** Reiht ein Medium ein. Blockiert nie. */
     fun enqueue(id: MediaId) {
@@ -81,6 +87,15 @@ internal class PreviewService(
         worker = null
     }
 
+    /**
+     * Gibt die Vorschauen frei, bevor die Dateien eines Space gelöscht werden (ADR 0021). Der Worker wird abgebrochen. Das
+     * Setzen des Merkmals wartet auf [lock]: Ein laufender Commit endet vorher, danach schreibt keiner mehr.
+     */
+    suspend fun retire() {
+        lock.withLock { retired = true }
+        stop()
+    }
+
     /** Video-Codec aus dem Kopf der Datei. Leer, wenn er nicht erkannt wird (ADR 0019, Codec). */
     suspend fun codecOf(file: Path): String =
         withContext(Dispatchers.IO) { renderer.videoCodec(file.toFile()) }.orEmpty()
@@ -104,7 +119,9 @@ internal class PreviewService(
      */
     suspend fun process(id: String) {
         try {
-            val row = lock.withLock { media.findById(id) }?.takeIf { it.state == STATE_READY } ?: return
+            val row =
+                lock.withLock { if (writable()) media.findById(id) else null }?.takeIf { it.state == STATE_READY }
+                    ?: return
             val source = storage.contentPath(row.sha256)
             if (PreviewRules.isVideo(row.mime) && row.videoCodec == null) {
                 val codec = codecOf(source)
@@ -169,25 +186,38 @@ internal class PreviewService(
         view: Boolean,
     ) {
         val edge = if (view) PreviewRules.VIEW_LONG_EDGE else PreviewRules.PREVIEW_LONG_EDGE
-        lock.withLock { write(id, view, PreviewState.PENDING, 0L, null) }
+        // Die Prüfung und der offene Zustand gehören zusammen: Eine Löschung, die danach startet, sieht den offenen Zustand.
+        val started = lock.withLock { writable().also { if (it) write(id, view, PreviewState.PENDING, 0L, null) } }
+        if (!started) return
         val temp = storage.newTempPath()
-        val source = storage.contentPath(sha256).toFile()
-        val result: RenderResult =
-            withTimeoutOrNull(PreviewRules.RENDER_TIMEOUT_MS) {
-                withContext(Dispatchers.IO) {
-                    runInterruptible {
-                        if (PreviewRules.isVideo(mime)) {
-                            renderer.renderVideoFrame(source, edge, temp.toFile())
-                        } else {
-                            renderer.renderImage(source, mime, edge, temp.toFile())
+        try {
+            val source = storage.contentPath(sha256).toFile()
+            val result: RenderResult =
+                withTimeoutOrNull(PreviewRules.RENDER_TIMEOUT_MS) {
+                    withContext(Dispatchers.IO) {
+                        runInterruptible {
+                            if (PreviewRules.isVideo(mime)) {
+                                renderer.renderVideoFrame(source, edge, temp.toFile())
+                            } else {
+                                renderer.renderImage(source, mime, edge, temp.toFile())
+                            }
                         }
                     }
-                }
-            } ?: RenderResult.Failed(REASON_TIMEOUT)
-        lock.withLock { commit(id, sha256, view, edge, temp, result) }
+                } ?: RenderResult.Failed(REASON_TIMEOUT)
+            lock.withLock { commit(id, sha256, view, edge, temp, result) }
+        } finally {
+            // Gleich ob übernommen, verworfen oder abgebrochen: eine Teildatei bleibt nicht liegen (ADR 0021).
+            withContext(NonCancellable + Dispatchers.IO) { Files.deleteIfExists(temp) }
+        }
     }
 
-    /** Übernimmt das Ergebnis. Fehlt das Medium inzwischen, wird die Teildatei verworfen. */
+    /**
+     * Darf die Vault noch schreiben? Nein nach [retire] und während einer Löschung des Space. Nur unter [lock] aufrufen,
+     * sonst prüft man veraltete Werte.
+     */
+    private suspend fun writable(): Boolean = !retired && !purging()
+
+    /** Übernimmt das Ergebnis. Fehlt das Medium inzwischen oder darf nicht mehr geschrieben werden, wird die Teildatei verworfen. */
     private suspend fun commit(
         id: String,
         sha256: String,
@@ -196,7 +226,7 @@ internal class PreviewService(
         temp: Path,
         result: RenderResult,
     ) {
-        val row = media.findById(id)?.takeIf { it.state == STATE_READY }
+        val row = (if (writable()) media.findById(id) else null)?.takeIf { it.state == STATE_READY }
         if (row == null) {
             withContext(Dispatchers.IO) { Files.deleteIfExists(temp) }
             return

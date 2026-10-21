@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
+import io.github.labushuya.emberlight.share.space.management.SpaceStatus
+import io.github.labushuya.emberlight.share.space.retention.RetentionRules
 import java.io.File
 import io.github.labushuya.emberlight.core.design.R as DesignR
 
@@ -69,6 +71,7 @@ internal fun SpacesScreen(
 ) {
     val spaces by viewModel.spaces.collectAsStateWithLifecycle()
     val detail by detailViewModel.state.collectAsStateWithLifecycle()
+    val purgeFailed by detailViewModel.failure.collectAsStateWithLifecycle()
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val wide = maxWidth >= WIDE_LAYOUT_MIN_WIDTH
         var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -98,6 +101,11 @@ internal fun SpacesScreen(
                         coverFile = detailViewModel::coverFile,
                         onEdit = onEdit,
                         onDelete = { detailViewModel.delete(onDone = {}) },
+                        onChangeRetention = { days -> detailViewModel.changeRetention(days) },
+                        onPurge = { detailViewModel.purge(onDone = {}) },
+                        notificationsAllowed = detailViewModel.notificationsAllowed,
+                        purgeFailed = purgeFailed,
+                        confirmPurgeOnOpen = detailViewModel.confirmPurgeRequested,
                     )
                 }
             }
@@ -239,7 +247,7 @@ private fun SpaceCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = stringResource(R.string.space_status_draft),
+                    text = statusLabel(record.status),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -253,6 +261,20 @@ private fun SpaceCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Beendete Spaces zeigen das Löschdatum, sobald die Aufbewahrung läuft (Paket 3.6b).
+                if (record.status == SpaceStatus.ENDED && !record.purging) {
+                    val until =
+                        record.endedAt?.let {
+                            RetentionRules.effectiveUntil(it, record.settings.retentionDays, record.retentionUntil)
+                        }
+                    if (until != null) {
+                        Text(
+                            text = stringResource(R.string.space_retention_list_until, formatDate(until)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
         }
     }

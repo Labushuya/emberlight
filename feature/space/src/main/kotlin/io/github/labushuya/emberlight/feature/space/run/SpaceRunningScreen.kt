@@ -59,6 +59,7 @@ import io.github.labushuya.emberlight.share.server.SpaceServerService
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
+import io.github.labushuya.emberlight.share.space.run.ExtendProblem
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
 
 /**
@@ -80,6 +81,8 @@ internal fun SpaceRunningScreen(
     val upload by uploadViewModel.state.collectAsStateWithLifecycle()
     val media by mediaViewModel.state.collectAsStateWithLifecycle()
     var showEndDialog by rememberSaveable { mutableStateOf(false) }
+    var showExtendDialog by rememberSaveable { mutableStateOf(false) }
+    var extendProblem by remember { mutableStateOf<ExtendProblem?>(null) }
     var removing by remember { mutableStateOf<ParticipantInfo?>(null) }
     var rotating by rememberSaveable { mutableStateOf(false) }
     var openMediaId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -140,8 +143,33 @@ internal fun SpaceRunningScreen(
             onUploadCancel = uploadViewModel::cancel,
             onMediaFilter = mediaViewModel::setFilter,
             onMediaOpen = { openMediaId = it.id },
+            onExtend = { showExtendDialog = true },
             modifier = Modifier.padding(padding),
         )
+    }
+    val currentEnd = state.record?.expiresAt
+    if (showExtendDialog && currentEnd != null) {
+        ExtendDialog(
+            currentEndsAtMillis = currentEnd,
+            problem = extendProblem,
+            onChoose = { choice ->
+                // Gilt die Wahl, schließt der Dialog. Sonst bleibt er offen und sagt den Grund.
+                val problem = viewModel.extend(choice)
+                extendProblem = problem
+                if (problem == null) showExtendDialog = false
+            },
+            onDismiss = {
+                showExtendDialog = false
+                extendProblem = null
+            },
+        )
+    }
+    // Endet der Space während der Dialog offen ist, gibt es nichts mehr zu verlängern.
+    LaunchedEffect(state.record?.status) {
+        if (state.record?.status != SpaceStatus.ACTIVE) {
+            showExtendDialog = false
+            extendProblem = null
+        }
     }
     upload.locationQuestion?.let { name ->
         LocationQuestionDialog(
@@ -227,6 +255,7 @@ internal fun SpaceRunningContent(
     onUploadCancel: () -> Unit = {},
     onMediaFilter: (MediaFilter) -> Unit = {},
     onMediaOpen: (HostMediaItem) -> Unit = {},
+    onExtend: () -> Unit = {},
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         val record = state.record
@@ -358,6 +387,18 @@ internal fun SpaceRunningContent(
             }
             HostMediaSection(state = media, onFilter = onMediaFilter, onOpen = onMediaOpen)
             Spacer(Modifier.height(24.dp))
+
+            // Verlängern gilt nur für einen aktiven Space, nicht im Nachlauf. Der Nachlauf hat den Status „beendet“ (Paket 3.6a).
+            if (record.status == SpaceStatus.ACTIVE && record.expiresAt != null) {
+                OutlinedButton(
+                    onClick = onExtend,
+                    enabled = !state.startQueued,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.space_running_extend))
+                }
+                Spacer(Modifier.height(8.dp))
+            }
 
             if (running) {
                 // Während der Start im Nachlauf wartet, gibt es nichts zu beenden: der Dienst hat den Lauf noch nicht.

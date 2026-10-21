@@ -64,6 +64,7 @@ import io.github.labushuya.emberlight.feature.space.navigateToSpaceEdit
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceRunning
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceSetup
 import io.github.labushuya.emberlight.feature.space.navigateToSpaces
+import io.github.labushuya.emberlight.feature.space.retention.RetentionRoutes
 import io.github.labushuya.emberlight.feature.space.spacesScreens
 import io.github.labushuya.emberlight.share.server.SpaceServerService
 
@@ -219,8 +220,19 @@ private fun AppNavHost(navController: NavHostController) {
 /** Übersetzt das Ziel aus einer Benachrichtigung (ADR 0017). Unbekannte Ziele werden ignoriert. */
 private fun NavHostController.openLaunchRoute(route: String) {
     when (route) {
-        SpaceServerService.ROUTE_CONFIRM_END -> navigateToSpaceRunning(confirmEnd = true)
-        SpaceServerService.ROUTE_OPEN_SPACE, SpaceServerService.ROUTE_CONFIRM_NETWORK -> navigateToSpaceRunning()
+        SpaceServerService.ROUTE_CONFIRM_END -> {
+            navigateToSpaceRunning(confirmEnd = true)
+        }
+
+        SpaceServerService.ROUTE_OPEN_SPACE, SpaceServerService.ROUTE_CONFIRM_NETWORK -> {
+            navigateToSpaceRunning()
+        }
+
+        else -> {
+            RetentionRoutes.parse(route)?.let { target ->
+                navigateToSpaceDetail(target.spaceId, confirmPurge = target.confirmPurge)
+            }
+        }
     }
 }
 
