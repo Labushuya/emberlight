@@ -12,7 +12,8 @@ import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerPlaybackViewM
 
 /**
  * Galerie mit Zustand. Verbindet das ViewModel mit den Systemdialogen und den Einstellungen. [onAlbumClick] meldet ein
- * Antippen auf ein Album. Der Viewer öffnet sich über dem Raster, seine Wiedergabe gehört zu diesem Ziel.
+ * Antippen auf ein Album, [onAbout] das Öffnen von „Über & Lizenzen“ aus dem Überlaufmenü. Der Viewer öffnet sich über dem
+ * Raster, seine Wiedergabe gehört zu diesem Ziel.
  */
 @Composable
 // Der Wiedergabe-Halter gehört dem Ziel und wird nur bis zum Overlay weitergereicht (ADR 0010).
@@ -20,6 +21,7 @@ import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerPlaybackViewM
 internal fun GalleryScreen(
     modifier: Modifier = Modifier,
     onAlbumClick: (Long?) -> Unit = {},
+    onAbout: () -> Unit = {},
     viewModel: GalleryViewModel = hiltViewModel(),
     playback: ViewerPlaybackViewModel = hiltViewModel(),
     details: ViewerDetailsViewModel = hiltViewModel(),
@@ -35,6 +37,7 @@ internal fun GalleryScreen(
         onRequestPermission = requestPermission,
         onOpenSettings = rememberAppSettingsOpener(),
         onAlbumClick = onAlbumClick,
+        onAbout = onAbout,
         onZoomLevelChange = viewModel::onZoomLevelChanged,
         playback = playback,
         exif = details,

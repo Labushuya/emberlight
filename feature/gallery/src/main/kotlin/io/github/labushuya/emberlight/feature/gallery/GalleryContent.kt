@@ -59,6 +59,7 @@ internal fun GalleryContent(
     onZoomLevelChange: (Int) -> Unit,
     playback: ViewerPlaybackViewModel,
     modifier: Modifier = Modifier,
+    onAbout: () -> Unit = {},
     zone: ZoneId = ZoneId.systemDefault(),
     exif: ExifLookup = ExifLookup.None,
     photosGridState: LazyGridState = rememberLazyGridState(),
@@ -82,6 +83,7 @@ internal fun GalleryContent(
             onOpenSettings = onOpenSettings,
             onAlbumClick = onAlbumClick,
             onZoomLevelChange = onZoomLevelChange,
+            onAbout = onAbout,
             browser = browser,
             photosGridState = photosGridState,
             albumsGridState = albumsGridState,
@@ -100,6 +102,7 @@ private fun GalleryScaffold(
     onOpenSettings: () -> Unit,
     onAlbumClick: (Long?) -> Unit,
     onZoomLevelChange: (Int) -> Unit,
+    onAbout: () -> Unit,
     browser: MediaBrowserState,
     photosGridState: LazyGridState,
     albumsGridState: LazyGridState,
@@ -112,6 +115,7 @@ private fun GalleryScaffold(
             Column {
                 TopAppBar(
                     title = { Text(text = stringResource(R.string.feature_gallery_title)) },
+                    actions = { GalleryOverflowMenu(onAbout = onAbout) },
                     scrollBehavior = scrollBehavior,
                 )
                 SecondaryTabRow(selectedTabIndex = tab.ordinal) {
