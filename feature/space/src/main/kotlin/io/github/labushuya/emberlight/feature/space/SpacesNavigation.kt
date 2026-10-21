@@ -13,10 +13,14 @@ import kotlinx.serialization.Serializable
 @Serializable
 data object SpacesRoute
 
-/** Detail eines Space. [id] ist die Kennung als Text (Base64url, 22 Zeichen). */
+/**
+ * Detail eines Space. [id] ist die Kennung als Text (Base64url, 22 Zeichen). [confirmPurge] öffnet direkt die Bestätigung
+ * „Jetzt löschen“, etwa aus einer Benachrichtigung (Paket 3.6b). Löschen geschieht erst nach der Bestätigung.
+ */
 @Serializable
 data class SpaceDetailRoute(
     val id: String,
+    val confirmPurge: Boolean = false,
 )
 
 /** Formular für Anlegen (ohne [id]) oder Bearbeiten eines Entwurfs. */
@@ -94,8 +98,11 @@ fun NavController.navigateToSpaces(navOptions: NavOptions? = null) {
     navigate(route = SpacesRoute, navOptions = navOptions)
 }
 
-fun NavController.navigateToSpaceDetail(id: String) {
-    navigate(route = SpaceDetailRoute(id = id))
+fun NavController.navigateToSpaceDetail(
+    id: String,
+    confirmPurge: Boolean = false,
+) {
+    navigate(route = SpaceDetailRoute(id = id, confirmPurge = confirmPurge))
 }
 
 fun NavController.navigateToSpaceEdit(id: String? = null) {

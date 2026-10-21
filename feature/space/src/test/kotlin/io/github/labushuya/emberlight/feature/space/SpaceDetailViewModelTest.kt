@@ -5,12 +5,16 @@ package io.github.labushuya.emberlight.feature.space
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
+import io.github.labushuya.emberlight.feature.space.retention.RetentionNotifier
+import io.github.labushuya.emberlight.feature.space.retention.RetentionReminders
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.management.SpaceDefaults
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
+import io.github.labushuya.emberlight.share.space.retention.RetentionRepository
+import io.github.labushuya.emberlight.share.space.retention.SpacePurge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,6 +33,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -41,16 +46,26 @@ class SpaceDetailViewModelTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private lateinit var database: SpacesDatabase
     private lateinit var repository: SpaceRepository
+    private lateinit var spacesDirectory: File
 
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val spacesDir = folder.newFolder("spaces")
+        spacesDirectory = spacesDir
         database = SpacesDatabase.open(context, spacesDir)
         repository = SpaceRepository(database, SpaceCoverStore(spacesDir), spacesDir, StorageProbe { FREE_BYTES })
     }
 
     private var collector: Job? = null
+
+    /** Aufbewahrung mit denselben Daten wie das Repository (Paket 3.6b). */
+    private fun retention(): RetentionReminders =
+        RetentionReminders(
+            context,
+            RetentionRepository(database, SpacePurge(database, SpaceCoverStore(spacesDirectory)) {}),
+            RetentionNotifier(context),
+        )
 
     @After
     fun tearDown() {
@@ -63,7 +78,7 @@ class SpaceDetailViewModelTest {
     fun selectingASpaceLoadsItAndClearingTheSelectionHidesIt() {
         val id = SpaceId.parse(ID)!!
         runBlocking { repository.create(id, SpaceDefaults.settings().copy(name = "Lena"), null) }
-        val vm = observed(SpaceDetailViewModel(SavedStateHandle(), repository))
+        val vm = observed(SpaceDetailViewModel(SavedStateHandle(), repository, retention()))
 
         vm.select(ID)
         assertEquals("Lena", awaitValue(vm.state) { it.record != null }.record?.settings?.name)
@@ -80,7 +95,7 @@ class SpaceDetailViewModelTest {
     fun deletingRemovesTheSpaceAndReportsBack() {
         val id = SpaceId.parse(ID)!!
         runBlocking { repository.create(id, SpaceDefaults.settings().copy(name = "Weg"), null) }
-        val vm = observed(SpaceDetailViewModel(SavedStateHandle(mapOf("id" to ID)), repository))
+        val vm = observed(SpaceDetailViewModel(SavedStateHandle(mapOf("id" to ID)), repository, retention()))
         awaitValue(vm.state) { it.record != null }
         val backCalled = CountDownLatch(1)
 

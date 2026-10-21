@@ -182,7 +182,10 @@ class SpaceVault internal constructor(
     private val participants = database.participants()
     private val roster = ParticipantRoster(database, storage.spaceId, inviteCipher, nowMillis)
     private val commitLock = Mutex()
-    private val previews = PreviewService(media, storage, limits, probe, commitLock, renderer)
+    private val previews =
+        PreviewService(media, storage, limits, probe, commitLock, renderer, purging = {
+            database.spaces().find(storage.spaceId.value)?.purging == true
+        })
 
     /**
      * Nimmt einen Upload entgegen. Die Reihenfolge entspricht ADR 0013 und ADR 0015: Kopf lesen und erkennen, Größe und
@@ -371,6 +374,9 @@ class SpaceVault internal constructor(
 
     /** Beendet den Worker. Angefangene Vorschauen holt der nächste Start nach. */
     fun stopPreviews() = previews.stop()
+
+    /** Gibt die Vorschauen frei, bevor die Dateien des Space gelöscht werden (ADR 0021). Danach schreibt diese Vault nichts mehr. */
+    suspend fun retire() = previews.retire()
 
     /** Erzeugt die Vorschauen eines Mediums im Aufrufer. Der Worker tut dasselbe, Tests nutzen es ebenfalls. */
     suspend fun renderPreviews(id: MediaId) = previews.process(id.value)

@@ -228,6 +228,10 @@ interface ParticipantDao {
     @Query("SELECT * FROM participant WHERE id = :id")
     suspend fun findById(id: String): ParticipantEntity?
 
+    /** Alle Teilnehmer eines Space, auch die entfernten. Für die Löschung (Paket 3.6b). */
+    @Query("DELETE FROM participant WHERE space_id = :spaceId")
+    suspend fun deleteOf(spaceId: String): Int
+
     /** Alle aktiven Teilnehmer des Space (ohne entfernte). */
     @Query("SELECT * FROM participant WHERE space_id = :spaceId AND revoked_at IS NULL ORDER BY created_at, id")
     suspend fun activeOf(spaceId: String): List<ParticipantEntity>
@@ -291,6 +295,15 @@ data class SpaceEntity(
     @ColumnInfo(name = "invite_ciphertext") val inviteCiphertext: ByteArray? = null,
     /** Initialisierungsvektor zu [inviteCiphertext] (Paket 3.4, ADR 0018). */
     @ColumnInfo(name = "invite_iv") val inviteIv: ByteArray? = null,
+    /**
+     * Ende der Aufbewahrung in UTC-Millisekunden, nur gesetzt, wenn der Gastgeber die Frist geändert hat (Paket 3.6b,
+     * ADR 0021). `null` heißt: Ende plus [retentionDays].
+     */
+    @ColumnInfo(name = "retention_until") val retentionUntil: Long? = null,
+    /** Geplanter Zeitpunkt der Erinnerung, der schon gesendet wurde (Paket 3.6b, ADR 0021). Verhindert Doppelte. */
+    @ColumnInfo(name = "retention_reminded_for") val retentionRemindedFor: Long? = null,
+    /** Die Löschung läuft oder ist unterbrochen (Paket 3.6b, ADR 0021). Der Start des Prozesses setzt sie fort. */
+    @ColumnInfo(name = "purging", defaultValue = "0") val purging: Boolean = false,
 )
 
 /**
@@ -359,6 +372,33 @@ interface SpaceDao {
     @Query("DELETE FROM media WHERE space_id = :spaceId")
     suspend fun deleteMediaOf(spaceId: String): Int
 
+    /** Beendete Spaces, für Erinnerung und Löschung (Paket 3.6b). */
+    @Query("SELECT * FROM space WHERE status = 'ENDED'")
+    suspend fun allEnded(): List<SpaceEntity>
+
+    /** Spaces, deren Löschung begonnen wurde (Paket 3.6b). Der Start setzt sie fort. */
+    @Query("SELECT * FROM space WHERE purging = 1")
+    suspend fun allPurging(): List<SpaceEntity>
+
+    /** Neues Ende der Aufbewahrung. Eine bereits gesendete Erinnerung gilt dann nicht mehr. */
+    @Query("UPDATE space SET retention_until = :until, retention_reminded_for = NULL, updated_at = :now WHERE id = :id")
+    suspend fun setRetentionUntil(
+        id: String,
+        until: Long,
+        now: Long,
+    ): Int
+
+    /** Merkt die gesendete Erinnerung (geplanter Zeitpunkt) am Space. */
+    @Query("UPDATE space SET retention_reminded_for = :plannedAt WHERE id = :id")
+    suspend fun setRemindedFor(
+        id: String,
+        plannedAt: Long,
+    ): Int
+
+    /** Markiert den Beginn der Löschung. Ab hier wird nur noch fortgesetzt, nicht mehr abgebrochen. */
+    @Query("UPDATE space SET purging = 1 WHERE id = :id")
+    suspend fun markPurging(id: String): Int
+
     /**
      * Einladung setzen: Hash, verschlüsseltes Geheimnis mit IV und die Zeitstempel. Bei einer Erneuerung bleibt
      * [rotatedAt] gesetzt. Alte Einladungen sind damit vollständig ersetzt.
@@ -389,7 +429,7 @@ interface SpaceDao {
  */
 @Database(
     entities = [MediaEntity::class, ParticipantEntity::class, SpaceEntity::class, PauseEventEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class SpacesDatabase : RoomDatabase() {
@@ -447,6 +487,20 @@ abstract class SpacesDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_created_at` INTEGER")
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_rotated_at` INTEGER")
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `port` INTEGER")
+                }
+            }
+
+        /**
+         * Version 7 → 8 (Paket 3.6b, ADR 0021): Ende der Aufbewahrung (nur bei Änderung), Merkmal der gesendeten Erinnerung
+         * und Merkmal der laufenden Löschung an `space`. Additiv. Bestehende Spaces haben `NULL` und `0`. Ihre Frist ist
+         * damit wie bisher Ende plus Frist.
+         */
+        val MIGRATION_7_8: Migration =
+            object : Migration(7, 8) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `retention_until` INTEGER")
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `retention_reminded_for` INTEGER")
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `purging` INTEGER NOT NULL DEFAULT 0")
                 }
             }
 
@@ -542,8 +596,15 @@ abstract class SpacesDatabase : RoomDatabase() {
             spacesDir.mkdirs()
             return Room
                 .databaseBuilder(IndexLocationContext(context, spacesDir), SpacesDatabase::class.java, FILE_NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
-                .build()
+                .addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                    MIGRATION_5_6,
+                    MIGRATION_6_7,
+                    MIGRATION_7_8,
+                ).build()
         }
     }
 }

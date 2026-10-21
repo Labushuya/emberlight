@@ -163,4 +163,10 @@ data class SpaceRecord(
     val startedAt: Long? = null,
     val expiresAt: Long? = null,
     val endedAt: Long? = null,
+    /** Ende der Aufbewahrung, nur bei Änderung durch den Gastgeber gesetzt (Paket 3.6b). [SpaceRetention] rechnet den Rest. */
+    val retentionUntil: Long? = null,
+    /** Geplanter Zeitpunkt der Erinnerung, der schon gesendet ist (Paket 3.6b). */
+    val retentionRemindedFor: Long? = null,
+    /** Löschung läuft oder ist unterbrochen (Paket 3.6b). */
+    val purging: Boolean = false,
 )

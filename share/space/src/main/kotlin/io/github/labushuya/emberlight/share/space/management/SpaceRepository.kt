@@ -185,6 +185,9 @@ class SpaceRepository(
                 inviteCreatedAt = previous?.inviteCreatedAt,
                 inviteRotatedAt = previous?.inviteRotatedAt,
                 port = previous?.port,
+                retentionUntil = previous?.retentionUntil,
+                retentionRemindedFor = previous?.retentionRemindedFor,
+                purging = previous?.purging ?: false,
             ),
         )
         // Nach dem Speichern bleibt nur das Titelbild, das der Space nun verweist. Ein ersetztes Bild verschwindet.
@@ -226,6 +229,9 @@ internal fun SpaceEntity.toSpaceRecord(): SpaceRecord =
         startedAt = startedAt,
         expiresAt = expiresAt,
         endedAt = endedAt,
+        retentionUntil = retentionUntil,
+        retentionRemindedFor = retentionRemindedFor,
+        purging = purging,
     )
 
 private fun lifetimeFrom(

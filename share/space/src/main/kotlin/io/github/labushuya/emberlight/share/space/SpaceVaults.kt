@@ -55,6 +55,15 @@ class SpaceVaults internal constructor(
         return vaultFor(spaceId, SpaceLimits(storageLimitBytes = row.storageLimitBytes), inviteCipher)
     }
 
+    /**
+     * Gibt die Vault eines Space frei, bevor seine Dateien gelöscht werden (Paket 3.6b, ADR 0021). Ein späterer Zugriff
+     * öffnet sie neu, das gelöschte Verzeichnis gibt es dann nicht mehr.
+     */
+    suspend fun forget(spaceId: SpaceId) {
+        val vault = lock.withLock { vaults.remove(spaceId) }
+        vault?.retire()
+    }
+
     /** Beendet den Vorschau-Worker. Nur für Tests gedacht, im Prozess lebt er bis zum Ende. */
     fun close() {
         workers.close()
