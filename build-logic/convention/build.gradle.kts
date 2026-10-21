@@ -20,6 +20,7 @@ dependencies {
     implementation(libs.hilt.gradle.plugin)
     implementation(libs.kover.gradle.plugin)
     implementation(libs.roborazzi.gradle.plugin)
+    implementation(libs.aboutlibraries.gradle.plugin)
 
     testImplementation(libs.kotlin.test.junit)
     // Negativtests der Build-Sperre laufen gegen ein Fixture-Projekt (ServerIsolationPluginTest).
@@ -75,6 +76,10 @@ gradlePlugin {
         register("releaseManifest") {
             id = "emberlight.release.manifest"
             implementationClass = "io.github.labushuya.emberlight.buildlogic.ReleaseManifestConventionPlugin"
+        }
+        register("aboutLibraries") {
+            id = "emberlight.about.libraries"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.AboutLibrariesConventionPlugin"
         }
     }
 }

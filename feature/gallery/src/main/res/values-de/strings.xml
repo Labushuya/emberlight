@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="feature_gallery_title">Galerie</string>
+    <string name="feature_gallery_menu_more">Weitere Optionen</string>
+    <string name="feature_gallery_menu_about">Über &amp; Lizenzen</string>
     <string name="feature_gallery_tab_photos">Fotos</string>
     <string name="feature_gallery_tab_albums">Alben</string>
     <string name="feature_gallery_album_other">Sonstige</string>

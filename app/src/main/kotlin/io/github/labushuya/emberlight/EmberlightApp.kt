@@ -46,6 +46,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
+import io.github.labushuya.emberlight.about.aboutScreen
+import io.github.labushuya.emberlight.about.navigateToAbout
 import io.github.labushuya.emberlight.core.design.motion.EmberlightMotion
 import io.github.labushuya.emberlight.core.design.motion.LocalNavigationChrome
 import io.github.labushuya.emberlight.core.design.motion.NavigationChrome
@@ -195,8 +197,12 @@ private fun DestinationIcon(
 @Composable
 private fun AppNavHost(navController: NavHostController) {
     NavHost(navController = navController, startDestination = GalleryRoute) {
-        galleryScreen(onAlbumClick = { bucketId -> navController.navigateToAlbum(bucketId) })
+        galleryScreen(
+            onAlbumClick = { bucketId -> navController.navigateToAlbum(bucketId) },
+            onAbout = { navController.navigateToAbout() },
+        )
         albumScreen(onBack = { navController.popBackStack() })
+        aboutScreen(onBack = { navController.popBackStack() })
         spacesScreens(
             onCreate = { navController.navigateToSpaceEdit() },
             onOpen = { id -> navController.navigateToSpaceDetail(id) },

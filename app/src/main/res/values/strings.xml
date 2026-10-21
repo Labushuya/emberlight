@@ -3,4 +3,26 @@
     <string name="app_name" translatable="false">emberlight</string>
     <string name="app_nav_gallery">Gallery</string>
     <string name="app_nav_spaces">Spaces</string>
+    <string name="about_title">About &amp; licenses</string>
+    <string name="about_back">Back</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_free_software">emberlight is free software under the GPL-3.0-or-later.</string>
+    <string name="about_source_button">Source code on GitHub</string>
+    <string name="about_no_browser">No app found to open this link.</string>
+    <string name="about_libraries_title">Libraries</string>
+    <string name="about_libraries_intro">These libraries are included in the app. Tap one to see its license.</string>
+    <string name="about_libraries_not_included">This build does not include a list of libraries. Release builds contain the full list.</string>
+    <string name="about_libraries_unreadable">The list of libraries could not be read.</string>
+    <string name="about_library_detail">Version %1$s, %2$s</string>
+    <string name="about_library_version">Version %1$s</string>
+    <string name="about_library_show_license">Show license</string>
+    <string name="about_license_unknown">License unknown</string>
+    <string name="about_fonts_title">Fonts</string>
+    <string name="about_font_license">SIL Open Font License 1.1</string>
+    <string name="about_license_title">License</string>
+    <string name="about_gpl_summary">The full text of the GNU General Public License, version 3 or later, applies to emberlight.</string>
+    <string name="about_gpl_show">Show GPL text</string>
+    <string name="about_gpl_link">Open GPL-3.0 online</string>
+    <string name="about_license_text_missing">License text not available.</string>
+    <string name="about_close">Close</string>
 </resources>

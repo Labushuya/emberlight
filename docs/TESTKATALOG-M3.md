@@ -248,5 +248,18 @@ Die Hinweise für Gäste zum Ende stehen in Abschnitt 6 (Vorgabe 3.5a). Die Punk
 ## 11 Übernahme in die Galerie (3.7, folgt)
 
 - [ ] **11.1 Ausgewählte Medien übernehmen.** Handlung: Medien im Space auswählen, übernehmen. Erwartet: Nur die ausgewählten Medien liegen in `Pictures/Emberlight/<Space>` und erscheinen in der Galerie. *(folgt 3.7)*
-- [ ] **11.2 Über/Lizenzen.** Handlung: „Über/Lizenzen“ öffnen. Erwartet: Lizenzhinweise aller mitgelieferten Bibliotheken, der Hinweis auf GPL-3.0, ein Link auf den Quellcode, die OFL-Hinweise für Fraunces und Inter. *(folgt 3.7)*
+- [ ] **11.2 Über/Lizenzen.** Handlung: „Über/Lizenzen“ öffnen. Erwartet: Lizenzhinweise aller mitgelieferten Bibliotheken, der Hinweis auf GPL-3.0, ein Link auf den Quellcode, die OFL-Hinweise für Fraunces und Inter. *(vorgezogen, siehe Abschnitt 12)*
 - [ ] **11.3 Release v0.3.0.** Handlung: Die signierte Endversion installieren, SHA-256 prüfen, die App starten. Erwartet: Die Prüfsumme stimmt, die Endversion ersetzt die Vorab-Version. *(folgt 3.7)*
+
+## 12 Über & Lizenzen (vorgezogen aus 3.7, umgesetzt, Gerätetests offen)
+
+- [ ] **12.1 Seite erreichbar.** Handlung: In der Galerie das Überlaufmenü (drei Punkte oben rechts) öffnen und „Über & Lizenzen“ wählen. Erwartet: Die Seite öffnet sich, die Galerie bleibt in der Leiste markiert. Mit „Zurück“ kommt man in die Galerie. *(umgesetzt, ADR 0020)*
+- [ ] **12.2 Version.** Handlung: Auf der Seite die Version ablesen. Erwartet: Sie stimmt mit der installierten Version überein (Einstellungen, Apps, emberlight). *(umgesetzt)*
+- [ ] **12.3 Freie Software.** Handlung: Den Satz unter dem Namen lesen. Erwartet: „emberlight ist freie Software unter der GPL-3.0-or-later.“ *(umgesetzt)*
+- [ ] **12.4 Quellcode-Link.** Handlung: „Quellcode auf GitHub“ antippen. Erwartet: Der Systembrowser öffnet `https://github.com/Labushuya/emberlight`. Ohne Browser erscheint ein Hinweis, die App stürzt nicht ab. *(umgesetzt)*
+- [ ] **12.5 Bibliotheksliste.** Handlung: Die Liste „Bibliotheken“ durchsehen. Erwartet: Jede mitgelieferte Laufzeitbibliothek mit Version und Lizenz. Keine Test- oder Debug-Werkzeuge. Eine Bibliothek ohne Lizenzangabe steht als „Lizenz unbekannt“ da. *(umgesetzt)*
+- [ ] **12.6 Lizenztext.** Handlung: Eine Bibliothek antippen. Erwartet: Ein Dialog zeigt den Volltext ihrer Lizenz, „Schließen“ schließt ihn. *(umgesetzt)*
+- [ ] **12.7 Schriften.** Handlung: „Fraunces“ und „Inter“ antippen. Erwartet: Jeweils der Text der SIL Open Font License 1.1 mit der Copyright-Zeile. *(umgesetzt)*
+- [ ] **12.8 GPL-Text.** Handlung: „GPL-Text anzeigen“ antippen, danach „GPL-3.0 online öffnen“. Erwartet: Der Volltext der GPL-3.0 steht im Dialog. Der Link öffnet gnu.org im Browser. *(umgesetzt)*
+- [ ] **12.9 Sprache.** Handlung: Die Seite auf Deutsch und auf Englisch öffnen. Erwartet: Alle Texte sind übersetzt. Lizenznamen, Versionen und Schriftnamen bleiben unverändert. *(umgesetzt)*
+- [ ] **12.10 Großes Display.** Handlung: Die Seite im Querformat auf einem Tablet öffnen. Erwartet: Keine abgeschnittenen Texte, die Navigation bleibt erreichbar. *(folgt Gerätetest)*

@@ -2,6 +2,7 @@ package io.github.labushuya.emberlight
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import io.github.labushuya.emberlight.about.AboutRoute
 import io.github.labushuya.emberlight.feature.gallery.GalleryRoute
 import io.github.labushuya.emberlight.feature.gallery.album.AlbumRoute
 import io.github.labushuya.emberlight.feature.space.SpaceDetailRoute
@@ -26,7 +27,8 @@ enum class TopLevelDestination(
         selectedIcon = DesignR.drawable.ic_photo_library_filled,
         unselectedIcon = DesignR.drawable.ic_photo_library_outlined,
         labelRes = R.string.app_nav_gallery,
-        routes = listOf(GalleryRoute::class, AlbumRoute::class),
+        // „Über & Lizenzen“ öffnet sich aus der Galerie (Überlaufmenü), deshalb bleibt die Galerie dort markiert (ADR 0020).
+        routes = listOf(GalleryRoute::class, AlbumRoute::class, AboutRoute::class),
     ),
     SPACES(
         selectedIcon = DesignR.drawable.ic_groups_filled,

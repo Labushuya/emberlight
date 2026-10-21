@@ -6,6 +6,10 @@ plugins {
     id("emberlight.android.application.compose")
     id("emberlight.release.manifest")
     id("emberlight.hilt")
+    // Serialisierung für die typsichere Route „Über & Lizenzen“ (ADR 0002, ADR 0020). Die Features tragen es schon selbst.
+    id("emberlight.serialization")
+    // Lizenzliste „Über & Lizenzen“ (ADR 0020): erzeugt aus den Release-Laufzeitabhängigkeiten eine Ressource.
+    id("emberlight.about.libraries")
 }
 
 android {
@@ -75,6 +79,8 @@ dependencies {
     implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
     // Nur für den Demo-Schalter (src/demo). Ohne Demo-Source-Set wird die Bibliothek nicht gebraucht, sie ist aber klein.
     implementation(libs.androidx.datastore.preferences)
+    // Lesen der erzeugten Lizenzliste für den Bildschirm „Über & Lizenzen“ (ADR 0020). Nur der Kern, die Oberfläche ist eigene Arbeit.
+    implementation(libs.aboutlibraries.core)
 
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.ext.junit)
