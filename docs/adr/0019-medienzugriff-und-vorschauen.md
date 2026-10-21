@@ -221,3 +221,18 @@ Dieser Nachtrag hält fest, wie 3.5c die Entscheidungen oben nutzt. Die Schnitts
 - `GuestBrowserTest.uploadInTheBrowserWithProgressQueueDuplicateRejectionAndLocation`: Nach dem Browser-Lauf prüft der Fall über `BrowserScene.hostRepository()` (App-Repository auf derselben Datenbank wie der Server), dass „Lena“ und „Omar“ als Teilnehmer stehen und als Uploader im Raster erscheinen.
 
 **Offen.** Das „von “ ohne Namen am Gerät ist nicht erklärt. Die Prüfung dafür ist ein Gerätetest mit einem Beitritt und Upload bei laufender Ansicht.
+
+## Nachtrag 3.6d: Revision bei fertigen Vorschauen (21.10.2026)
+
+**Befund.** Die Gäste-Seite lädt die Liste nur neu, wenn sich `revision` ändert. Ein Upload erhöhte sie, das spätere Fertigwerden der Vorschau aber nicht. Ein Gast sah ein Foto ohne Vorschau, bis irgendjemand erneut etwas hochlud.
+
+**Entscheidung.** Wechselt der Zustand einer Vorschau oder der HEIC-Ansicht nach `READY` oder `FAILED`, steigt die `revision` des Space. Das gilt für beide Zustände und für jede Vorschau einzeln, also bei einem HEIC-Foto zweimal. Ein Wechsel nach `PENDING` (Einreihung, Neustart) und ein Schreiben ohne Zustandsänderung (zum Beispiel ein zweiter Lauf auf `READY`) erhöhen nichts.
+
+**Umsetzung.**
+- `PreviewService.write` vergleicht den Zustand vor dem Schreiben und meldet nur den echten Wechsel über `settled`. Der Aufruf geschieht unter dem Commit-Lock und bleibt nicht blockierend.
+- `SpaceVault.onPreviewSettled` leitet das an den Server weiter. `SpaceAccess` setzt es beim Anlegen auf `bumpRevision()`. Die Vault hält keine Server-Logik, der Zähler bleibt in der Sitzung.
+- Die Vault ist prozessweit, der Vorschau-Worker läuft ohne Server weiter. Ohne laufende Sitzung ist der Aufruf ein No-op.
+
+**Absicherung.**
+- `SpaceVaultPreviewTest` (share:space): Ein Wechsel meldet einmal, ein erneutes Rendern nicht. Ein Fehlschlag meldet ebenfalls. Die HEIC-Ansicht meldet zweimal.
+- `SignedMediaApiTest.aPreviewThatSettlesRaisesTheRevisionOnceWithoutANewUpload` (share:server): `GET /api/v1/space` zeigt `revision` vor und nach dem Abschluss der Vorschau, ohne neuen Upload. Ein weiterer Lauf ändert sie nicht.
