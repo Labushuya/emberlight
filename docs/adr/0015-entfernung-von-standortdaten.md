@@ -6,6 +6,8 @@ Nachtrag 19.10.2026 (gleiche Umsetzung): HEIC, HEIF und AVIF sind umgesetzt (Ite
 
 Nachtrag 21.10.2026 (Hotfix 2, Abschnitt „Hotfix 2“ unten): Ein Honor-Kamerafoto hatte den GPS-Block in einem zweiten Exif-Block in APP10 behalten. Jeder APPn-Block mit Exif-Kennung geht jetzt durch den TIFF-Walker. Unbekannte APPn-Segmente und COM werden längenerhaltend genullt. Eine strenge Gegenprobe (`StrictLocationProbe`) läuft in der Nachkontrolle über den Rohstrom und schlägt fail closed an.
 
+Nachtrag 21.10.2026 (Restrisiken, Abschnitt „Restrisiken nach Nachtrag 21.10.2026“ unten): Die binären Restrisiken aus Hotfix 2 sind für HEIF, MP4 und PNG geschlossen, soweit der Abschnitt sie benennt. Binärer Standort wird jetzt erkannt und längenerhaltend entfernt. Eine Teildatei nach einem Absturz im Ordner eines gelöschten Space wird beim Start entfernt (ADR 0021, Nachtrag 3.6d-2).
+
 Die Festlegungen 1 bis 3 und die Reihenfolge der Prüfungen stammen aus der Nutzerentscheidung vom 19.10.2026. Die Fundorte stammen aus der Recherche vom selben Tag. Was in dieser Umsetzung nicht erreicht wurde, steht unter „Abweichungen und offene Punkte“.
 
 ## Kontext
@@ -230,6 +232,37 @@ Verifikation: `JpegSegmentScrubTest` (Honor-Aufbau, unbekannte Segmente, ICC ble
 - HEIF-Items mit unbekanntem Typ und MP4-Boxen unter `udta` oder `meta`, die unbekannt sind, werden nicht genullt. Enthalten sie Standort als Text, lehnt die Gegenprobe ab (fail closed). Binär codierte Standortwerte in unbekannten Boxen erkennt sie nicht.
 - Eine TIFF-Struktur in komprimierten Bilddaten kann zufällig wie ein gültiges IFD0 mit GPS-Zeiger aussehen. Die Wahrscheinlichkeit ist sehr gering, aber nicht null.
 - Verschachtelte Strukturen in unbekannten Segmenten werden nicht rekursiv geprüft, weil sie genullt werden.
+
+## Restrisiken nach Nachtrag 21.10.2026
+
+Der Abschnitt „Restrisiko und offene Punkte (Hotfix 2)“ oben gilt bis hierher. Seine Punkte 1 (Hex-TIFF in PNG-Text mit fremdem Schlüsselwort) und 2 (HEIF-Items und MP4-Boxen mit binärem Standort) sind mit diesem Nachtrag umgesetzt. Die Punkte 3 (TIFF-Zufallstreffer in komprimierten Bilddaten) und 4 (verschachtelte Strukturen in genullten Segmenten) bleiben unverändert offen. Die Restrisiken 1 bis 4 aus dem Fix-Paket werden hier je Format benannt.
+
+**Erkennung in Bereichen ohne bekannte Medien.** Die Gegenprobe und die Walker suchen binären Standort in Bereichen, die nicht als Bild, Video oder Audio bekannt sind: in unbekannten HEIF-Items, unbekannten Boxen und unbekannten Metadaten-Tracks, im PNG-Text. Dort gilt ein TIFF-Kopf (`II*\0`, `MM\0*`) mit einem GPS-IFD, dessen Einträge ungleich null sind, als Befund (`StrictLocationProbe.containsBinaryLocation`). Die Nutzdaten bekannter Bild-, Video- und Audio-Items und `mdat` werden nicht nach TIFF-Kopf abgesucht. Das vermeidet Fehlalarme in komprimierten Daten. Ein Textmuster (ISO 6709) und ein Befund in einem Hex-Profil bleiben Teil der bisherigen Textsuche.
+
+**Entfernung je Format:**
+
+- **HEIF.** Ein Item, das weder Exif, XMP noch ein bekannter Bildtyp ist (`hvc1`, `av01`, `grid`, `iden`, `iovl`, `tmap` und weitere), wird bei Befund mit Nullen über alle Extents geleert (`heif_item_location`). Die Länge bleibt. Ist das Item größer als der Speicherpuffer, gilt `location_not_removable`. Methode 2 (Item-Offset) bei einem solchen Item gilt als `unsupported`.
+- **MP4.** Metadaten-Tracks mit GPS-Befund werden über `stsz`, `stsc` und `stco`/`co64` gelesen und ihre Samples mit 0x00 geleert (`location_track`):
+  - `gpmd` mit dem GPMF-Schlüssel `GPS5` oder `GPS9`,
+  - `camm` mit einem Record, dessen Typ (Little-Endian nach zwei Nullbytes) 5 oder 6 ist,
+  - `djmd` (DJI) immer, weil die Felder nicht sicher lesbar sind.
+  Ein `gpmd`- oder `camm`-Track ohne Befund bleibt unverändert. Fehlt eine Sample-Tabelle, gilt `metadata_track` wie bisher. Unbekannte Boxen mit TIFF-Befund werden geleert (`location_box_binary`). Mediendaten (`mdat`) werden außerhalb der Samples solcher Tracks nicht gelesen. Videostreams sind nie betroffen.
+- **PNG.** `tEXt` und unkomprimiertes `iTXt` mit unbekanntem Schlüsselwort: Liegt ein TIFF mit GPS-Befund darin, roh oder als Hex-Profil, wird der ganze Textwert mit Nullen geleert (`text_location_binary`). Die CRC wird neu berechnet, die Länge bleibt. `zTXt` und komprimiertes `iTXt` mit einem solchen Befund sind `compressed_text` (nicht entfernbar, Einwilligung möglich).
+
+**Grund `location_not_removable`.** Wird ein Befund gefunden, den der Walker nicht längenerhaltend entfernen kann, lehnt der Server mit 422 und `error = location_not_removable` ab. Der Detailgrund steht im Feld `reason`. Ohne Einwilligung („Standort entfernen“) wird der Upload nicht gespeichert. Die Gäste-Seite zeigt dafür die bestehende Rückfrage (`locationDialogText`, de und en, `textContent`). Mit Einwilligung bleibt die Datei unverändert und gilt als „Standort enthalten“.
+
+**Verfahren.** Plan und Apply bleiben wie beschrieben: Die Datei wird erst nach bestandener Prüfung geschrieben. Die Prüfung läuft erneut über den geplanten Stand und findet nach dem Leeren keinen Befund mehr. Eine wiederholte Bereinigung ist ohne Änderung (idempotent).
+
+**Restrisiko verbleibend (nach diesem Nachtrag):**
+
+1. **HEIF.** Bildtypen werden nicht nach TIFF-Befund abgesucht. Ein Standort in einem Item, das eine Bildtyp-Kennung trägt, bleibt damit ungeprüft (Abwägung gegen Fehlalarme in Bilddaten). Ein unbekanntes Item mit Konstruktionsmethode 2 wird abgelehnt, nicht geleert.
+2. **MP4.** Ein Metadaten-Track ohne Sample-Tabelle bleibt `metadata_track` (kein Befund möglich, Einwilligung nötig). Ein GPS-Befund in einer anderen Form als GPMF `GPS5`/`GPS9` oder camm Typ 5/6 bleibt unentdeckt. Der camm-Befund sucht den Record-Kopf an jeder Stelle, ohne Längen je Typ zu kennen. Das kann einen Fehlalarm geben, der nur den Metadaten-Track leert. Ein GPS-Befund in `mdat` außerhalb der Samples bekannter Tracks wird nicht gelesen. Überschneiden sich Metadaten-Samples mit Video-Samples, wird das nicht geprüft.
+3. **PNG.** Hex-TIFF in unkomprimiertem Text mit unbekanntem Schlüsselwort ist erfasst. In komprimiertem Text bleibt ein Befund bei „compressed_text“ (Ablehnung statt Bereinigung), das ist Absicht.
+4. **Teildatei nach Absturz.** Die Bereinigung läuft beim Start und nach jeder Löschung. Bis zum nächsten Start der App bleibt eine Teildatei im Ordner eines gelöschten Space liegen. Dort ist es ein Restrisiko, dass sie Standort enthält, falls der Absturz genau in der Upload-Phase lag.
+
+Geschlossen sind damit: der binäre Standort in HEIF-Items unbekannter Art, in MP4-Metadaten-Tracks (GPMF, camm, djmd) und in unbekannten Boxen, der Hex-TIFF-Befund in PNG-Text mit fremdem Schlüsselwort sowie die Teildatei nach einem Absturz (Start). Gerätetests mit echten Aufnahmen stehen aus (Testkatalog 9.8 bis 9.12).
+
+Verifikation: `BinaryLocationScrubTest` mit synthetischen Dateien (`BinaryLocationFixtures`, im Testcode erzeugt, keine Nutzerdateien). Jeder Fall prüft Befund vorher, Bereinigung, unveränderte Länge, gültige CRC und Wiederholung ohne Befund. Gegenproben mit zufälligen Bytes und TIFF-Kopf in Bild-Items und komprimierten PNG-Daten zeigen keinen Fehlalarm. Ein Video-Sample mit dem Text `GPS5` bleibt unverändert.
 
 ## Quellen
 

@@ -129,4 +129,18 @@ Status: umgesetzt in 3.6c, Gerätetest offen (Testkatalog Abschnitt 10, Punkte 1
 - `UploadAcrossPurgeTest` (share:space): Ein Upload steht mitten im Strom, die Löschung läuft ab, danach ist das Ergebnis `SpaceDeleting`. Es bleibt keine Datei im Space-Ordner und kein Medieneintrag. Zweiter Fall: `retire` allein verhindert die Übernahme.
 - `RetentionFailureLogTest` (share:space): Protokoll je Versuch ohne Fehlermeldung, Zähler beginnt nach einem Erfolg neu, gescheiterte Löschung wird im nächsten Lauf fortgesetzt.
 
-**Restrisiko.** Stürzt der Prozess mitten im Upload nach der Löschung ab, kann eine Teildatei `tmp-*.part` im Ordner des gelöschten Space liegen. Für gelöschte Spaces öffnet sich keine Vault mehr, `recover` läuft also nicht. Die Bereinigung beim Start für `DELETED` ist offen. Der Umfang ist eine Teildatei eines Uploads.
+**Restrisiko.** Stürzt der Prozess mitten im Upload nach der Löschung ab, kann eine Teildatei `tmp-*.part` im Ordner des gelöschten Space liegen. Für gelöschte Spaces öffnet sich keine Vault mehr, `recover` läuft also nicht. Die Bereinigung beim Start für `DELETED` ist offen. Der Umfang ist eine Teildatei eines Uploads. (Stand: mit Nachtrag 3.6d-2 umgesetzt.)
+
+## Nachtrag 3.6d-2 (21.10.2026): Teildatei nach Absturz beseitigen
+
+**Befund.** Im Ordner eines `DELETED`-Space konnte nach einem Absturz mitten im Upload eine `tmp-*.part` zurückbleiben. Für `DELETED` öffnet sich keine Vault, und `recover` läuft nicht. Der Rest blieb liegen, bis der Space aus der Liste entfernt wurde.
+
+**Lösung.**
+- **Start.** `SpacePurge.resumeAll` räumt vor dem Fortsetzen unterbrochener Löschungen den Ordner jedes `DELETED`-Space auf (`SpacesDatabase`-Abfrage `allDeleted`). Der App-Start ruft das über `RetentionReminders.startupCatchUp` auf.
+- **Nach der Löschung.** `SpacePurge.purge` räumt nach dem Übergang nach `DELETED` ebenfalls auf. Damit ist eine Teildatei aus einem Upload, der während der Löschung noch im Strom lag, spätestens beim nächsten Start weg.
+- **Was bleibt.** `SpaceCoverStore.clearLeftovers` ruft `deleteAllButCovers` auf: Alles außer den `cover-`-Dateien geht weg. Der Eintrag (Name, Farbe, Titelbild, Status `DELETED`) bleibt unverändert. Fehlt der Ordner, wird nichts angelegt. Ein Fehler beim Aufräumen wird protokolliert (`EmberlightRetention`, `leftoversFailed`, nur Kennung und Ausnahmeklasse) und hält den Start nicht auf.
+- **Kein neues Schema.** Die Datenbankversion bleibt 10. Die Abfrage `allDeleted` ist eine reine Lesefrage.
+
+**Absicherung.** `SpacePurgeTest`: Eine Teildatei `tmp-*.part` ist beim Start weg, das Titelbild und der Eintrag bleiben (Status, Name, Farbe). Ein `DELETED`-Space ohne Ordner bekommt beim Start keinen Ordner.
+
+**Restrisiko verbleibend.** Die Teildatei bleibt bis zum nächsten Start der App liegen, falls der Absturz vorher geschah. Der Ordner eines gelöschten Space ist in dieser Zeit für Gäste nicht erreichbar, weil der Space keine Vault mehr öffnet und keine Uploads mehr annimmt (3.6c).
