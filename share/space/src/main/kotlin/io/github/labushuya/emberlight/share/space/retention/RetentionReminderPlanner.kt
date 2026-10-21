@@ -20,6 +20,8 @@ data class RetentionReminder(
     val kind: RetentionReminderKind,
     val untilMillis: Long?,
     val plannedAt: Long,
+    /** Der Space ist beendet. Vor dem Ende gibt es nur Ansehen, Verlängern und Löschen gehen erst danach. */
+    val ended: Boolean,
 )
 
 /** Ergebnis einer Planung: die jetzt fälligen Erinnerungen und der nächste Zeitpunkt, zu dem wieder geprüft werden muss. */
@@ -61,7 +63,7 @@ object RetentionReminderPlanner {
                 if (days == 0 && space.retentionUntil == null) {
                     // Sofort-Löschung: die Erinnerung gilt dem Ende. Ein Ende ohne Vorlauf meldet sie sofort.
                     val at = RetentionRules.soforReminderAt(space.expiresAt, endedAt) ?: return null
-                    RetentionReminder(space.id, name, RetentionReminderKind.SOFORT, endedAt, at)
+                    RetentionReminder(space.id, name, RetentionReminderKind.SOFORT, endedAt, at, ended = true)
                 } else {
                     val until = RetentionRules.effectiveUntil(endedAt, days, space.retentionUntil)
                     RetentionReminder(
@@ -70,6 +72,7 @@ object RetentionReminderPlanner {
                         RetentionReminderKind.AFTER_END,
                         until,
                         RetentionRules.reminderAfterEndAt(endedAt, until),
+                        ended = true,
                     )
                 }
             }
@@ -77,7 +80,7 @@ object RetentionReminderPlanner {
             SpaceStatus.ACTIVE -> {
                 if (days != 0) return null
                 val at = RetentionRules.soforReminderAt(space.expiresAt, null) ?: return null
-                RetentionReminder(space.id, space.settings.name, RetentionReminderKind.SOFORT, null, at)
+                RetentionReminder(space.id, space.settings.name, RetentionReminderKind.SOFORT, null, at, ended = false)
             }
 
             SpaceStatus.DRAFT, SpaceStatus.DELETED -> null

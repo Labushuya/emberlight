@@ -4,9 +4,13 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.labushuya.emberlight.feature.space.retention.RetentionReminders
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
+import io.github.labushuya.emberlight.share.space.retention.RetentionChange
+import io.github.labushuya.emberlight.share.space.retention.PurgeResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,7 +36,8 @@ data class SpaceDetailUiState(
 
 /**
  * Detail eines Space. Die Auswahl kommt aus der Route oder, auf großen Displays, aus der Liste daneben ([select]).
- * Löschen entfernt Einträge und Speicher (Paket 3.2).
+ * Löschen entfernt Einträge und Speicher (Paket 3.2). Für beendete Spaces gilt die Aufbewahrung (Paket 3.6b): Frist
+ * ändern und „Jetzt löschen“ nach Bestätigung.
  */
 @HiltViewModel
 class SpaceDetailViewModel
@@ -40,8 +45,20 @@ class SpaceDetailViewModel
     constructor(
         savedStateHandle: SavedStateHandle,
         private val repository: SpaceRepository,
+        private val retention: RetentionReminders,
     ) : ViewModel() {
         private val selected = MutableStateFlow(savedStateHandle.get<String>(ARG_ID)?.let { SpaceId.parse(it) })
+
+        /** Die Bestätigung „Jetzt löschen“ öffnet sich gleich, wenn die Route es verlangt (Benachrichtigung). */
+        val confirmPurgeRequested: Boolean = savedStateHandle.get<Boolean>(ARG_CONFIRM_PURGE) ?: false
+
+        /** Ob Erinnerungen erlaubt sind. Ohne Erlaubnis zeigt das Detail einen Hinweis. */
+        val notificationsAllowed: Boolean = retention.notificationsAllowed()
+
+        private val purgeFailed = MutableStateFlow(false)
+
+        /** Die Löschung ist gescheitert. Sie wird beim nächsten Start fortgesetzt. */
+        val failure: StateFlow<Boolean> = purgeFailed
 
         @OptIn(ExperimentalCoroutinesApi::class)
         val state: StateFlow<SpaceDetailUiState> =
@@ -78,8 +95,43 @@ class SpaceDetailViewModel
             }
         }
 
+        /** Setzt die Frist des gewählten beendeten Space in Tagen (0 für „sofort“). Liefert das Ergebnis an [onResult]. */
+        fun changeRetention(
+            days: Int,
+            onResult: (RetentionChange) -> Unit = {},
+        ) {
+            val id = selected.value ?: return
+            viewModelScope.launch {
+                onResult(retention.changeRetention(id, days, System.currentTimeMillis()))
+            }
+        }
+
+        /** Löscht den gewählten beendeten Space nach der Bestätigung. Danach [onDone]. Bei Fehler bleibt die Anzeige. */
+        fun purge(onDone: () -> Unit) {
+            val id = selected.value ?: return
+            viewModelScope.launch {
+                try {
+                    when (retention.purge(id)) {
+                        PurgeResult.Purged -> {
+                            purgeFailed.value = false
+                            selected.value = null
+                            onDone()
+                        }
+
+                        PurgeResult.NotEnded -> purgeFailed.value = true
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failed: Exception) {
+                    // Jeder andere Fehler lässt den Space stehen. Der Start setzt die Löschung fort.
+                    purgeFailed.value = true
+                }
+            }
+        }
+
         private companion object {
             const val ARG_ID = "id"
+            const val ARG_CONFIRM_PURGE = "confirmPurge"
             const val STOP_TIMEOUT_MILLIS = 5_000L
         }
     }

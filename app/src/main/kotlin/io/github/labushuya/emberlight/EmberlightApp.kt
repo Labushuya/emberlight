@@ -60,6 +60,7 @@ import io.github.labushuya.emberlight.feature.gallery.navigateToGallery
 import io.github.labushuya.emberlight.feature.gallery.viewer.LocalViewerImageSources
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerImageSourceContribution
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceDetail
+import io.github.labushuya.emberlight.feature.space.retention.RetentionRoutes
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceEdit
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceRunning
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceSetup
@@ -221,6 +222,10 @@ private fun NavHostController.openLaunchRoute(route: String) {
     when (route) {
         SpaceServerService.ROUTE_CONFIRM_END -> navigateToSpaceRunning(confirmEnd = true)
         SpaceServerService.ROUTE_OPEN_SPACE, SpaceServerService.ROUTE_CONFIRM_NETWORK -> navigateToSpaceRunning()
+        else ->
+            RetentionRoutes.parse(route)?.let { target ->
+                navigateToSpaceDetail(target.spaceId, confirmPurge = target.confirmPurge)
+            }
     }
 }
 

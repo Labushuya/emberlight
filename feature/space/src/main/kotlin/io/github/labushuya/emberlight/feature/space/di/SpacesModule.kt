@@ -20,6 +20,8 @@ import io.github.labushuya.emberlight.share.space.participants.InviteSecretCiphe
 import io.github.labushuya.emberlight.share.space.run.RunClock
 import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
 import io.github.labushuya.emberlight.share.space.run.SystemRunClock
+import io.github.labushuya.emberlight.share.space.retention.RetentionRepository
+import io.github.labushuya.emberlight.share.space.retention.SpacePurge
 import java.io.File
 import javax.inject.Singleton
 import kotlin.random.Random
@@ -78,6 +80,27 @@ object SpacesModule {
             covers = SpaceCoverStore(spacesDirectory(context)),
             spacesDir = spacesDirectory(context),
             freeSpace = storageProbe,
+        )
+
+    /**
+     * Aufbewahrung und Löschung (Paket 3.6b, ADR 0021). Die Löschung gibt die Vault des Space vorher frei, damit keine
+     * Vorschau nach dem Löschen schreibt.
+     */
+    @Provides
+    @Singleton
+    fun provideRetentionRepository(
+        database: SpacesDatabase,
+        vaults: SpaceVaults,
+        @ApplicationContext context: Context,
+    ): RetentionRepository =
+        RetentionRepository(
+            database = database,
+            purge =
+                SpacePurge(
+                    database = database,
+                    covers = SpaceCoverStore(spacesDirectory(context)),
+                    forgetVault = { id -> vaults.forget(id) },
+                ),
         )
 
     @Provides

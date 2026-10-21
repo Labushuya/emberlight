@@ -42,6 +42,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
+import io.github.labushuya.emberlight.share.space.retention.RetentionRules
 import java.io.File
 
 /** Route des Detail auf dem Handy. Auf großen Displays zeigt die Liste dasselbe Detail neben sich ([SpaceDetailPane]). */
@@ -57,6 +58,7 @@ internal fun SpaceDetailScreen(
     viewModel: SpaceDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val purgeFailed by viewModel.failure.collectAsStateWithLifecycle()
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -78,6 +80,11 @@ internal fun SpaceDetailScreen(
             coverFile = viewModel::coverFile,
             onEdit = onEdit,
             onDelete = { viewModel.delete(onDone = onBack) },
+            onChangeRetention = { days -> viewModel.changeRetention(days) },
+            onPurge = { viewModel.purge(onDone = onBack) },
+            notificationsAllowed = viewModel.notificationsAllowed,
+            purgeFailed = purgeFailed,
+            confirmPurgeOnOpen = viewModel.confirmPurgeRequested,
             onStart = onStart,
             onSetup = onSetup,
             onOpenRunning = onOpenRunning,
@@ -88,6 +95,7 @@ internal fun SpaceDetailScreen(
 
 /**
  * Detail mit Zustand: Auswahl, Laden, nicht mehr vorhanden. Die Liste auf großen Displays und die Route nutzen dasselbe.
+ * Für beendete Spaces kommen Frist ändern, Jetzt löschen und das Medienraster der Aufbewahrung dazu (Paket 3.6b).
  */
 @Composable
 internal fun SpaceDetailPane(
@@ -99,6 +107,11 @@ internal fun SpaceDetailPane(
     onStart: (String) -> Unit = {},
     onSetup: (String) -> Unit = {},
     onOpenRunning: (String) -> Unit = {},
+    onChangeRetention: (Int) -> Unit = {},
+    onPurge: () -> Unit = {},
+    notificationsAllowed: Boolean = true,
+    purgeFailed: Boolean = false,
+    confirmPurgeOnOpen: Boolean = false,
 ) {
     val record = state.record
     when {
@@ -123,13 +136,22 @@ internal fun SpaceDetailPane(
                 onStart = { onStart(record.id.value) },
                 onSetup = { onSetup(record.id.value) },
                 onOpenRunning = { onOpenRunning(record.id.value) },
+                onChangeRetention = onChangeRetention,
+                onPurge = onPurge,
+                notificationsAllowed = notificationsAllowed,
+                purgeFailed = purgeFailed,
+                confirmPurgeOnOpen = confirmPurgeOnOpen,
+                media = { RetentionMediaSection(record.id) },
                 modifier = modifier,
             )
         }
     }
 }
 
-/** Zusammenfassung eines Space. Bearbeiten gibt es nur im Entwurf, Löschen immer, mit Bestätigung. */
+/**
+ * Zusammenfassung eines Space. Bearbeiten gibt es nur im Entwurf. Beendete Spaces zeigen die Aufbewahrung mit dem Löschdatum,
+ * „Frist ändern“ und „Jetzt löschen“ (nur nach Bestätigung). Das Löschen laufender Spaces ist nicht möglich.
+ */
 @Composable
 internal fun SpaceDetailContent(
     record: SpaceRecord,
@@ -140,10 +162,21 @@ internal fun SpaceDetailContent(
     onStart: () -> Unit = {},
     onSetup: () -> Unit = {},
     onOpenRunning: () -> Unit = {},
+    onChangeRetention: (Int) -> Unit = {},
+    onPurge: () -> Unit = {},
+    notificationsAllowed: Boolean = true,
+    purgeFailed: Boolean = false,
+    confirmPurgeOnOpen: Boolean = false,
+    media: @Composable () -> Unit = {},
 ) {
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var changingRetention by rememberSaveable { mutableStateOf(false) }
+    var confirmPurge by rememberSaveable { mutableStateOf(confirmPurgeOnOpen) }
     val settings = record.settings
     val editable = record.status == SpaceStatus.DRAFT
+    val ended = record.status == SpaceStatus.ENDED
+    val untilMillis = record.endedAt?.let { RetentionRules.effectiveUntil(it, settings.retentionDays, record.retentionUntil) }
+    val sofort = settings.retentionDays == 0 && record.retentionUntil == null
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -213,13 +246,31 @@ internal fun SpaceDetailContent(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text =
-                            stringResource(
-                                R.string.space_detail_retention_info,
-                                retentionText(settings.retentionDays),
-                            ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            when {
+                                record.purging -> stringResource(R.string.space_retention_purging)
+                                sofort -> stringResource(R.string.space_retention_until_sofort)
+                                untilMillis != null ->
+                                    stringResource(R.string.space_retention_until, formatDate(untilMillis))
+                                else -> ""
+                            },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
+                    if (!notificationsAllowed) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.space_retention_notifications_off),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (!record.purging) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(onClick = { changingRetention = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.space_retention_change))
+                        }
+                    }
+                    media()
                 }
 
                 SpaceStatus.DELETED -> {}
@@ -237,7 +288,23 @@ internal fun SpaceDetailContent(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            if (record.status != SpaceStatus.ACTIVE) {
+            if (ended && !record.purging) {
+                OutlinedButton(
+                    onClick = { confirmPurge = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.space_retention_purge))
+                }
+                if (purgeFailed) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.space_retention_purge_failed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else if (record.status != SpaceStatus.ACTIVE && !ended) {
                 OutlinedButton(
                     onClick = { confirmDelete = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -246,6 +313,33 @@ internal fun SpaceDetailContent(
                     Text(stringResource(R.string.space_detail_delete))
                 }
             }
+        }
+
+        if (changingRetention) {
+            val currentDays =
+                record.retentionUntil?.let { until ->
+                    val remaining = (until - System.currentTimeMillis()).coerceAtLeast(0L)
+                    (remaining / RetentionRules.DAY_MILLIS).toInt().coerceIn(0, RetentionRules.MAX_DAYS)
+                } ?: settings.retentionDays
+            RetentionChangeDialog(
+                currentDays = currentDays,
+                onConfirm = { days ->
+                    changingRetention = false
+                    onChangeRetention(days)
+                },
+                onDismiss = { changingRetention = false },
+            )
+        }
+
+        if (confirmPurge) {
+            RetentionPurgeDialog(
+                name = settings.name,
+                onConfirm = {
+                    confirmPurge = false
+                    onPurge()
+                },
+                onDismiss = { confirmPurge = false },
+            )
         }
 
         if (confirmDelete) {
