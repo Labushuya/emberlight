@@ -169,4 +169,6 @@ data class SpaceRecord(
     val retentionRemindedFor: Long? = null,
     /** Löschung läuft oder ist unterbrochen (Paket 3.6b). */
     val purging: Boolean = false,
+    /** Zeitpunkt der Löschung, gesetzt beim Übergang nach `DELETED` (Paket 3.6c). */
+    val deletedAt: Long? = null,
 )

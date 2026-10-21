@@ -167,6 +167,26 @@ class SpaceStorage(
             .count { name -> Files.deleteIfExists(directory.resolve(name)) }
     }
 
+    /**
+     * Entfernt alles außer den Titelbildern: Medien, Vorschauen und Unterordner. Das Titelbild bleibt, weil der Eintrag
+     * „Gelöscht“ es in der Liste zeigt (Paket 3.6c, ADR 0021). Idempotent.
+     */
+    fun deleteAllButCovers() {
+        if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return
+        rejectSymlinks(directory)
+        val names = Files.newDirectoryStream(directory).use { stream -> stream.map { it.fileName.toString() } }
+        names
+            .filter { !it.startsWith(COVER_PREFIX) }
+            .forEach { name ->
+                val path = directory.resolve(name)
+                if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+                    Files.walk(path).use { paths ->
+                        paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+                    }
+                }
+            }
+    }
+
     /** Entfernt den gesamten Speicher dieses Space, also alle Medien und Titelbilder samt Verzeichnis. */
     fun deleteEverything() {
         if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return

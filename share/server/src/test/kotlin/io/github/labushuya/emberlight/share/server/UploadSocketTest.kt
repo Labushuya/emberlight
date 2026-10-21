@@ -4,6 +4,7 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.Principal
 import io.github.labushuya.emberlight.share.space.Role
+import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
@@ -208,6 +209,42 @@ class UploadSocketTest {
 
         assertEquals(201, response.status)
         assertTrue("Antwort: ${response.body}", response.body.contains("\"size\":100"))
+    }
+
+    @Test
+    fun uploadWhileTheSpaceIsBeingDeletedIsAnsweredGoneAndStoresNothing() {
+        runBlocking {
+            database.spaces().upsert(
+                SpaceEntity(
+                    id = spaceId.value,
+                    name = "Gelöscht",
+                    colorIndex = 1,
+                    coverSha256 = null,
+                    lifetimePreset = "ONE_DAY",
+                    lifetimeUntil = null,
+                    retentionDays = 1,
+                    storageLimitBytes = 1_000_000L,
+                    status = "ENDED",
+                    createdAt = 1L,
+                    updatedAt = 1L,
+                    purging = true,
+                ),
+            )
+        }
+        val body = MediaFixtures.jpeg(100)
+
+        val response =
+            answered(
+                RawHttp.sendAnsweringEarly(
+                    port,
+                    RawHttp.request("POST", "/api/v1/media", headers("Content-Length" to body.size.toString()), body),
+                ),
+            )
+
+        // Wie nach dem Ende (ADR 0014): 410 mit space_closed. Die Datei entsteht nicht.
+        assertEquals(410, response.status)
+        assertTrue(response.body.contains("space_closed"))
+        assertEquals(0, storedFiles())
     }
 
     /**

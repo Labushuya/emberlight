@@ -156,6 +156,7 @@ private fun rejectedText(
         RejectReason.StorageFull -> stringResource(R.string.space_upload_rejected_storage)
         RejectReason.DeviceStorageLow -> stringResource(R.string.space_upload_rejected_device)
         is RejectReason.LocationNotRemovable -> stringResource(R.string.space_upload_rejected_location)
+        RejectReason.SpaceDeleting -> stringResource(R.string.space_upload_deleting)
     }
 
 /** Größe für die Grenzmeldung. Nur die Größengrenze nennt eine Zahl. */

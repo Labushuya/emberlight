@@ -412,4 +412,16 @@
     <string name="space_extend_error_future">Das neue Ende muss in der Zukunft liegen.</string>
     <string name="space_extend_error_later">Das neue Ende muss nach dem bisherigen Ende liegen.</string>
     <string name="space_extend_error_too_long">Ein Space darf höchstens 30 Tage ab Start laufen.</string>
+    <string name="space_status_deleted">Gelöscht</string>
+    <string name="space_deleted_at">Gelöscht am %1$s</string>
+    <string name="space_deleted_note">Medien, Vorschauen, Teilnehmer und Einladung sind gelöscht. Name, Farbe, Titelbild und Einstellungen bleiben.</string>
+    <string name="space_template_action">Als Vorlage für neuen Space</string>
+    <string name="space_template_hint">Der neue Space übernimmt Einstellungen und Titelbild, aber keine Medien und keine Teilnehmer.</string>
+    <string name="space_template_lifetime_reset">Das Ende des alten Space liegt in der Vergangenheit. Die Laufzeit steht auf der Voreinstellung.</string>
+    <string name="space_template_limit_reset">Das Speicherlimit des alten Space ist auf diesem Gerät nicht mehr verfügbar. Es wurde auf den größten zulässigen Wert gesetzt.</string>
+    <string name="space_list_remove">Aus Liste entfernen</string>
+    <string name="space_list_remove_title">Aus Liste entfernen?</string>
+    <string name="space_list_remove_text">„%1$s“ verschwindet aus der Liste, das Titelbild wird ebenfalls entfernt. Das lässt sich nicht rückgängig machen.</string>
+    <string name="space_list_remove_confirm">Entfernen</string>
+    <string name="space_upload_deleting">Der Space wird gelöscht. Uploads werden nicht mehr angenommen.</string>
 </resources>

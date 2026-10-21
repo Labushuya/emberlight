@@ -658,6 +658,11 @@ private suspend fun ApplicationCall.respondRejected(reason: RejectReason) {
             refuseEarly(HttpStatusCode.InsufficientStorage, "storage_full")
         }
 
+        // Der Space wird gelöscht (Paket 3.6c, ADR 0021). Für Gäste ist er beendet, daher derselbe Code wie nach dem Ende.
+        RejectReason.SpaceDeleting -> {
+            refuseEarly(HttpStatusCode.Gone, "space_closed")
+        }
+
         RejectReason.DeviceStorageLow -> {
             refuseEarly(HttpStatusCode.InsufficientStorage, "device_storage_low")
         }

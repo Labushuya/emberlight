@@ -80,17 +80,18 @@ class RetentionReminderPlannerTest {
             record(
                 id = "AAAAAAAAAAAAAAAAAAAAAA",
                 status = SpaceStatus.ENDED,
-                retentionDays = 1,
+                retentionDays = 3,
                 endedAt =
-                    ended - day,
+                    ended - 2 * day,
             )
         val now = ended + 2 * hour
 
         val plan = RetentionReminderPlanner.plan(listOf(later, due), now)
 
-        // Die Erinnerung des Einen-Tages-Space liegt bei ended - day + 12 h, also in der Vergangenheit: fällig.
+        // Die Erinnerung des Drei-Tage-Space liegt bei ended (Frist minus 24 h), also in der Vergangenheit: fällig.
+        // Die nächste Prüfung ist die Löschung dieses Space bei ended + 1 Tag (Ende vor zwei Tagen, Frist drei Tage).
         assertEquals(listOf(due.id), plan.due.map { it.spaceId })
-        assertEquals(ended + 6 * day, plan.nextCheckAt)
+        assertEquals(ended + day, plan.nextCheckAt)
     }
 
     @Test
@@ -102,16 +103,55 @@ class RetentionReminderPlannerTest {
         val plan = RetentionReminderPlanner.plan(listOf(space), now = planned + hour)
 
         assertTrue(plan.due.isEmpty())
-        assertNull(plan.nextCheckAt)
+        assertEquals(ended + day, plan.nextCheckAt)
     }
 
     @Test
     fun aMissedReminderIsDueAtTheFirstCheckAfterARestart() {
         val space = record(status = SpaceStatus.ENDED, retentionDays = 7, endedAt = ended)
 
-        val plan = RetentionReminderPlanner.plan(listOf(space), now = ended + 20 * day)
+        val plan = RetentionReminderPlanner.plan(listOf(space), now = ended + 6 * day + hour)
 
         assertEquals(1, plan.due.size)
+        assertTrue(plan.purgeDue.isEmpty())
+    }
+
+    @Test
+    fun aSpaceWhoseKeepingHasRunOutIsPurgedAndNotReminded() {
+        val expired = record(status = SpaceStatus.ENDED, retentionDays = 1, endedAt = ended)
+
+        val plan = RetentionReminderPlanner.plan(listOf(expired), now = ended + day)
+
+        assertEquals(listOf(expired.id), plan.purgeDue)
+        assertTrue(plan.due.isEmpty())
+    }
+
+    @Test
+    fun aSpaceThatIsStillKeptIsNotPurgedYetAndTheNextCheckIsItsEnd() {
+        val kept = record(status = SpaceStatus.ENDED, retentionDays = 3, endedAt = ended)
+
+        val plan = RetentionReminderPlanner.plan(listOf(kept), now = ended + day)
+
+        assertTrue(plan.purgeDue.isEmpty())
+        assertEquals(ended + 2 * day, plan.nextCheckAt)
+    }
+
+    @Test
+    fun aSpaceBeingDeletedOrDeletedIsNeverPurgedAgain() {
+        val running = record(status = SpaceStatus.ENDED, retentionDays = 1, endedAt = ended, purging = true)
+        val deleted = record(status = SpaceStatus.DELETED, retentionDays = 1, endedAt = ended)
+
+        val plan = RetentionReminderPlanner.plan(listOf(running, deleted), now = ended + 5 * day)
+
+        assertTrue(plan.purgeDue.isEmpty())
+        assertTrue(plan.due.isEmpty())
+    }
+
+    @Test
+    fun immediateDeletionIsPurgedAtTheEnd() {
+        val immediate = record(status = SpaceStatus.ENDED, retentionDays = 0, endedAt = ended)
+
+        assertEquals(listOf(immediate.id), RetentionReminderPlanner.plan(listOf(immediate), now = ended).purgeDue)
     }
 
     private fun record(

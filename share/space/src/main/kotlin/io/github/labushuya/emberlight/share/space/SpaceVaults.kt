@@ -2,6 +2,7 @@ package io.github.labushuya.emberlight.share.space
 
 import android.annotation.SuppressLint
 import android.content.Context
+import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
 import io.github.labushuya.emberlight.share.space.preview.AndroidPreviewRenderer
 import io.github.labushuya.emberlight.share.space.preview.PreviewRenderer
@@ -39,21 +40,36 @@ class SpaceVaults internal constructor(
         inviteCipher: InviteSecretCipher,
     ): SpaceVault =
         lock.withLock {
-            vaults[spaceId] ?: open(spaceId, limits, inviteCipher).also { vaults[spaceId] = it }
+            vaults[spaceId] ?: run {
+                val row = database.spaces().find(spaceId.value)
+                if (row != null && !openable(row)) throw SpaceNotOpenableException(spaceId)
+                open(spaceId, limits, inviteCipher).also { vaults[spaceId] = it }
+            }
         }
 
     /**
-     * Vault des gespeicherten Space, `null` wenn es ihn nicht gibt. Die Grenzen kommen aus der Tabelle. Die Oberfläche der
-     * App nutzt diesen Weg, auch ohne laufenden Server.
+     * Vault des gespeicherten Space, `null` wenn es ihn nicht gibt oder er gerade gelöscht wird oder gelöscht ist (Paket
+     * 3.6c, ADR 0021). Die Grenzen kommen aus der Tabelle. Die Oberfläche der App nutzt diesen Weg, auch ohne laufenden
+     * Server.
      */
     suspend fun vaultOf(
         spaceId: SpaceId,
         inviteCipher: InviteSecretCipher,
-    ): SpaceVault? {
-        lock.withLock { vaults[spaceId] }?.let { return it }
-        val row = database.spaces().find(spaceId.value) ?: return null
-        return vaultFor(spaceId, SpaceLimits(storageLimitBytes = row.storageLimitBytes), inviteCipher)
-    }
+    ): SpaceVault? =
+        lock.withLock {
+            vaults[spaceId] ?: run {
+                val row = database.spaces().find(spaceId.value) ?: return@run null
+                if (!openable(row)) return@run null
+                open(spaceId, SpaceLimits(storageLimitBytes = row.storageLimitBytes), inviteCipher)
+                    .also { vaults[spaceId] = it }
+            }
+        }
+
+    /**
+     * Eine Vault öffnet sich nicht, solange der Space gelöscht wird oder gelöscht ist (Paket 3.6c, ADR 0021, Restrisiko
+     * „Vault-Doppelung“). So entsteht nach dem Löschen keine zweite Sperre und kein zweiter Vorschau-Worker mehr.
+     */
+    private fun openable(row: SpaceEntity): Boolean = !row.purging && row.status != SpaceStatus.DELETED.name
 
     /**
      * Gibt die Vault eines Space frei, bevor seine Dateien gelöscht werden (Paket 3.6b, ADR 0021). Ein späterer Zugriff
@@ -125,3 +141,8 @@ class SpaceVaults internal constructor(
         ): SpaceVaults = SpaceVaults(database, spacesDir, renderer, PreviewWorkers())
     }
 }
+
+/** Der Space wird gelöscht oder ist gelöscht. Für ihn öffnet sich keine Vault mehr (Paket 3.6c, ADR 0021). */
+class SpaceNotOpenableException(
+    val spaceId: SpaceId,
+) : IllegalStateException("Der Space ${spaceId.value} wird gelöscht oder ist gelöscht.")
