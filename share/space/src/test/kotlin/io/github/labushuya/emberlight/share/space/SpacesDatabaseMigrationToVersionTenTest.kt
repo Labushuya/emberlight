@@ -64,7 +64,32 @@ class SpacesDatabaseMigrationToVersionTenTest {
 
         val opened = open(spacesDir)
 
-        assertEquals(1, runBlocking { opened.media().allOf(ENDED_ID).size })
+        val media = runBlocking { opened.media().allOf(ENDED_ID) }
+        assertEquals(1, media.size)
+        val medium = media.single()
+        assertEquals(MEDIUM_ID, medium.id)
+        assertEquals(SHA256, medium.sha256)
+        assertEquals(12345L, medium.sizeBytes)
+        assertEquals("READY", medium.state)
+        // Die Fehlergründe aus 8 → 9 kennen keine Altzeile: bestehende Medien haben NULL, nichts wird umgeschrieben.
+        assertNull(medium.previewReason)
+        assertNull(medium.viewReason)
+    }
+
+    @Test
+    fun theReasonColumnsAcceptTheCodesOfHotfixTwoAfterTheMigration() {
+        val spacesDir = folder.newFolder("spaces")
+        createVersionEightDatabase(File(spacesDir, SpacesDatabase.FILE_NAME))
+
+        val opened = open(spacesDir)
+        runBlocking {
+            opened.media().setPreviewReason(MEDIUM_ID, "timeout")
+            opened.media().setViewReason(MEDIUM_ID, "service")
+        }
+
+        val medium = runBlocking { opened.media().findById(MEDIUM_ID) }
+        assertEquals("timeout", medium?.previewReason)
+        assertEquals("service", medium?.viewReason)
     }
 
     private fun open(spacesDir: File): SpacesDatabase =
