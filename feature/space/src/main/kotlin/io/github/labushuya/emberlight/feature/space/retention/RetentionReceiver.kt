@@ -28,7 +28,10 @@ class RetentionReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 when (intent.action) {
-                    ACTION_CHECK -> reminders.checkNow(System.currentTimeMillis())
+                    ACTION_CHECK -> {
+                        reminders.checkNow(System.currentTimeMillis())
+                    }
+
                     RetentionNotifier.ACTION_EXTEND -> {
                         val id = intent.getStringExtra(RetentionNotifier.EXTRA_SPACE_ID)?.let { SpaceId.parse(it) }
                         if (id != null) reminders.extendByOneDay(id, System.currentTimeMillis())

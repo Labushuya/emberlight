@@ -14,10 +14,10 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.labushuya.emberlight.feature.space.R
+import io.github.labushuya.emberlight.share.server.SpaceServerService
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.retention.RetentionReminder
 import io.github.labushuya.emberlight.share.space.retention.RetentionReminderKind
-import io.github.labushuya.emberlight.share.server.SpaceServerService
 import java.text.DateFormat
 import java.util.Date
 import javax.inject.Inject
@@ -55,12 +55,16 @@ class RetentionNotifier
             val name = reminder.name
             val text =
                 when (reminder.kind) {
-                    RetentionReminderKind.SOFORT -> context.getString(R.string.space_retention_notice_sofort)
-                    RetentionReminderKind.AFTER_END ->
+                    RetentionReminderKind.SOFORT -> {
+                        context.getString(R.string.space_retention_notice_sofort)
+                    }
+
+                    RetentionReminderKind.AFTER_END -> {
                         context.getString(
                             R.string.space_retention_notice_text,
                             reminder.untilMillis?.let { dateText(it, locale) } ?: "",
                         )
+                    }
                 }
             val builder =
                 NotificationCompat

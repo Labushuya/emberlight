@@ -31,7 +31,14 @@ class RetentionReminderPlannerTest {
 
     @Test
     fun aChangedDeadlineMovesTheReminder() {
-        val space = record(status = SpaceStatus.ENDED, retentionDays = 7, endedAt = ended, retentionUntil = ended + 3 * day)
+        val space =
+            record(
+                status = SpaceStatus.ENDED,
+                retentionDays = 7,
+                endedAt = ended,
+                retentionUntil =
+                    ended + 3 * day,
+            )
 
         assertEquals(ended + 2 * day, RetentionReminderPlanner.reminderOf(space)?.plannedAt)
     }
@@ -48,7 +55,11 @@ class RetentionReminderPlannerTest {
 
     @Test
     fun anActiveSpaceWithARetentionPlansNothingYet() {
-        assertNull(RetentionReminderPlanner.reminderOf(record(status = SpaceStatus.ACTIVE, retentionDays = 7, expiresAt = expiresAt)))
+        assertNull(
+            RetentionReminderPlanner.reminderOf(
+                record(status = SpaceStatus.ACTIVE, retentionDays = 7, expiresAt = expiresAt),
+            ),
+        )
     }
 
     @Test
@@ -63,8 +74,16 @@ class RetentionReminderPlannerTest {
 
     @Test
     fun aDueReminderIsReturnedAndTheNextCheckIsTheEarliestLaterOne() {
-        val later = record(id = "BBBBBBBBBBBBBBBBBBBBBB", status = SpaceStatus.ENDED, retentionDays = 7, endedAt = ended)
-        val due = record(id = "AAAAAAAAAAAAAAAAAAAAAA", status = SpaceStatus.ENDED, retentionDays = 1, endedAt = ended - day)
+        val later =
+            record(id = "BBBBBBBBBBBBBBBBBBBBBB", status = SpaceStatus.ENDED, retentionDays = 7, endedAt = ended)
+        val due =
+            record(
+                id = "AAAAAAAAAAAAAAAAAAAAAA",
+                status = SpaceStatus.ENDED,
+                retentionDays = 1,
+                endedAt =
+                    ended - day,
+            )
         val now = ended + 2 * hour
 
         val plan = RetentionReminderPlanner.plan(listOf(later, due), now)
@@ -77,7 +96,8 @@ class RetentionReminderPlannerTest {
     @Test
     fun aReminderAlreadySentForItsPlannedTimeIsNotDueAgain() {
         val planned = ended + 12 * hour
-        val space = record(status = SpaceStatus.ENDED, retentionDays = 1, endedAt = ended, retentionRemindedFor = planned)
+        val space =
+            record(status = SpaceStatus.ENDED, retentionDays = 1, endedAt = ended, retentionRemindedFor = planned)
 
         val plan = RetentionReminderPlanner.plan(listOf(space), now = planned + hour)
 

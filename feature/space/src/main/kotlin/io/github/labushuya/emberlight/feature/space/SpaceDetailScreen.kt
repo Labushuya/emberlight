@@ -175,7 +175,10 @@ internal fun SpaceDetailContent(
     val settings = record.settings
     val editable = record.status == SpaceStatus.DRAFT
     val ended = record.status == SpaceStatus.ENDED
-    val untilMillis = record.endedAt?.let { RetentionRules.effectiveUntil(it, settings.retentionDays, record.retentionUntil) }
+    val untilMillis =
+        record.endedAt?.let {
+            RetentionRules.effectiveUntil(it, settings.retentionDays, record.retentionUntil)
+        }
     val sofort = settings.retentionDays == 0 && record.retentionUntil == null
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -247,11 +250,21 @@ internal fun SpaceDetailContent(
                     Text(
                         text =
                             when {
-                                record.purging -> stringResource(R.string.space_retention_purging)
-                                sofort -> stringResource(R.string.space_retention_until_sofort)
-                                untilMillis != null ->
+                                record.purging -> {
+                                    stringResource(R.string.space_retention_purging)
+                                }
+
+                                sofort -> {
+                                    stringResource(R.string.space_retention_until_sofort)
+                                }
+
+                                untilMillis != null -> {
                                     stringResource(R.string.space_retention_until, formatDate(untilMillis))
-                                else -> ""
+                                }
+
+                                else -> {
+                                    ""
+                                }
                             },
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface,

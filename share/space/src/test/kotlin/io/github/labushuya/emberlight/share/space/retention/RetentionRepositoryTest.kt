@@ -80,8 +80,14 @@ class RetentionRepositoryTest {
     fun daysOutsideTheRangeAreRefusedWithoutWriting() {
         insertEnded(ID, retentionDays = 1)
 
-        assertEquals(RetentionChange.InvalidDays, runBlocking { repository.changeUntil(SpaceId(ID), days = 91, now = endedAt) })
-        assertEquals(RetentionChange.InvalidDays, runBlocking { repository.changeUntil(SpaceId(ID), days = -1, now = endedAt) })
+        assertEquals(
+            RetentionChange.InvalidDays,
+            runBlocking { repository.changeUntil(SpaceId(ID), days = 91, now = endedAt) },
+        )
+        assertEquals(
+            RetentionChange.InvalidDays,
+            runBlocking { repository.changeUntil(SpaceId(ID), days = -1, now = endedAt) },
+        )
         assertNull(runBlocking { database.spaces().find(ID) }?.retentionUntil)
     }
 
@@ -93,7 +99,12 @@ class RetentionRepositoryTest {
             RetentionChange.NotChangeable,
             runBlocking { repository.changeUntil(SpaceId(ID), days = 3, now = endedAt) },
         )
-        assertEquals(RetentionChange.NotFound, runBlocking { repository.changeUntil(SpaceId(OTHER_ID), days = 3, now = endedAt) })
+        assertEquals(
+            RetentionChange.NotFound,
+            runBlocking {
+                repository.changeUntil(SpaceId(OTHER_ID), days = 3, now = endedAt)
+            },
+        )
     }
 
     @Test
@@ -143,7 +154,12 @@ class RetentionRepositoryTest {
         insertEnded(ID, retentionDays = 1)
 
         assertEquals(0, runBlocking { repository.resumePurges() })
-        assertEquals(io.github.labushuya.emberlight.share.space.retention.PurgeResult.Purged, runBlocking { repository.purge(SpaceId(ID)) })
+        assertEquals(
+            io.github.labushuya.emberlight.share.space.retention.PurgeResult.Purged,
+            runBlocking {
+                repository.purge(SpaceId(ID))
+            },
+        )
         assertNull(runBlocking { database.spaces().find(ID) })
     }
 

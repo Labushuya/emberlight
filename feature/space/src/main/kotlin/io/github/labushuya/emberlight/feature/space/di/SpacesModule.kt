@@ -17,11 +17,11 @@ import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
 import io.github.labushuya.emberlight.share.space.participants.AndroidKeyStoreInviteSecretCipher
 import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
+import io.github.labushuya.emberlight.share.space.retention.RetentionRepository
+import io.github.labushuya.emberlight.share.space.retention.SpacePurge
 import io.github.labushuya.emberlight.share.space.run.RunClock
 import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
 import io.github.labushuya.emberlight.share.space.run.SystemRunClock
-import io.github.labushuya.emberlight.share.space.retention.RetentionRepository
-import io.github.labushuya.emberlight.share.space.retention.SpacePurge
 import java.io.File
 import javax.inject.Singleton
 import kotlin.random.Random

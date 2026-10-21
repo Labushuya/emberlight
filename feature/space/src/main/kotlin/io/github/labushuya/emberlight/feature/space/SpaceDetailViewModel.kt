@@ -8,8 +8,8 @@ import io.github.labushuya.emberlight.feature.space.retention.RetentionReminders
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
-import io.github.labushuya.emberlight.share.space.retention.RetentionChange
 import io.github.labushuya.emberlight.share.space.retention.PurgeResult
+import io.github.labushuya.emberlight.share.space.retention.RetentionChange
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -118,7 +118,9 @@ class SpaceDetailViewModel
                             onDone()
                         }
 
-                        PurgeResult.NotEnded -> purgeFailed.value = true
+                        PurgeResult.NotEnded -> {
+                            purgeFailed.value = true
+                        }
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled

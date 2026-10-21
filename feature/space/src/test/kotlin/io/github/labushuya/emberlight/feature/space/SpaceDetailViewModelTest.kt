@@ -5,12 +5,16 @@ package io.github.labushuya.emberlight.feature.space
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
+import io.github.labushuya.emberlight.feature.space.retention.RetentionNotifier
+import io.github.labushuya.emberlight.feature.space.retention.RetentionReminders
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.management.SpaceDefaults
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
+import io.github.labushuya.emberlight.share.space.retention.RetentionRepository
+import io.github.labushuya.emberlight.share.space.retention.SpacePurge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,16 +28,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import io.github.labushuya.emberlight.feature.space.retention.RetentionNotifier
-import io.github.labushuya.emberlight.feature.space.retention.RetentionReminders
-import io.github.labushuya.emberlight.share.space.retention.RetentionRepository
-import io.github.labushuya.emberlight.share.space.retention.SpacePurge
-import java.io.File
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 

@@ -83,7 +83,9 @@ object RetentionReminderPlanner {
                 RetentionReminder(space.id, space.settings.name, RetentionReminderKind.SOFORT, null, at, ended = false)
             }
 
-            SpaceStatus.DRAFT, SpaceStatus.DELETED -> null
+            SpaceStatus.DRAFT, SpaceStatus.DELETED -> {
+                null
+            }
         }
     }
 }
