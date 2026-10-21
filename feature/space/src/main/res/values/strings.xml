@@ -411,4 +411,16 @@
     <string name="space_extend_error_future">The new end must be in the future.</string>
     <string name="space_extend_error_later">The new end must be after the current end.</string>
     <string name="space_extend_error_too_long">A space can run for at most 30 days from its start.</string>
+    <string name="space_status_deleted">Deleted</string>
+    <string name="space_deleted_at">Deleted on %1$s</string>
+    <string name="space_deleted_note">Media, previews, participants and the invitation are gone. The name, color, cover and settings stay.</string>
+    <string name="space_template_action">Use as template for new space</string>
+    <string name="space_template_hint">The new space takes over the settings and the cover, but no media and no participants.</string>
+    <string name="space_template_lifetime_reset">The end of the old space is in the past. The lifetime is set to the default.</string>
+    <string name="space_template_limit_reset">The storage limit of the old space is more than this device can offer. It was lowered to the largest allowed value.</string>
+    <string name="space_list_remove">Remove from list</string>
+    <string name="space_list_remove_title">Remove from list?</string>
+    <string name="space_list_remove_text">“%1$s” disappears from the list, and its cover is deleted too. This cannot be undone.</string>
+    <string name="space_list_remove_confirm">Remove</string>
+    <string name="space_upload_deleting">The space is being deleted. Uploads are no longer accepted.</string>
 </resources>

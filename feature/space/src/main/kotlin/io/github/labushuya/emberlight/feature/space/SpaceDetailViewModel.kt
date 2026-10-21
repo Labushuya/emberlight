@@ -9,6 +9,7 @@ import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
 import io.github.labushuya.emberlight.share.space.retention.PurgeResult
+import io.github.labushuya.emberlight.share.space.retention.RemoveResult
 import io.github.labushuya.emberlight.share.space.retention.RetentionChange
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -106,6 +107,17 @@ class SpaceDetailViewModel
             }
         }
 
+        /** Entfernt den gelöschten Space aus der Liste, samt Titelbild (Paket 3.6c). Danach [onDone]. */
+        fun removeFromList(onDone: () -> Unit) {
+            val id = selected.value ?: return
+            viewModelScope.launch {
+                if (retention.removeFromList(id) == RemoveResult.Removed) {
+                    selected.value = null
+                    onDone()
+                }
+            }
+        }
+
         /** Löscht den gewählten beendeten Space nach der Bestätigung. Danach [onDone]. Bei Fehler bleibt die Anzeige. */
         fun purge(onDone: () -> Unit) {
             val id = selected.value ?: return
@@ -114,7 +126,7 @@ class SpaceDetailViewModel
                     when (retention.purge(id)) {
                         PurgeResult.Purged -> {
                             purgeFailed.value = false
-                            selected.value = null
+                            // Der Eintrag bleibt als „Gelöscht“ in der Liste und im Detail (Paket 3.6c).
                             onDone()
                         }
 

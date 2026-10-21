@@ -66,10 +66,10 @@ class SpacePurgeTest {
         val result = runBlocking { purger().purge(SpaceId(ID)) }
 
         assertEquals(PurgeResult.Purged, result)
-        assertNull(runBlocking { database.spaces().find(ID) })
+        assertEquals("DELETED", runBlocking { database.spaces().find(ID) }?.status)
         assertTrue(runBlocking { database.media().allOf(ID) }.isEmpty())
         assertTrue(runBlocking { database.participants().activeOf(ID) }.isEmpty())
-        assertFalse(File(spacesDir, ID).exists())
+        assertFalse(File(spacesDir, ID).resolve("abc").exists())
         assertEquals(listOf(SpaceId(ID)), forgotten)
     }
 
@@ -112,8 +112,8 @@ class SpacePurgeTest {
         val resumed = runBlocking { purger().resumeAll() }
 
         assertEquals(1, resumed)
-        assertNull(runBlocking { database.spaces().find(ID) })
-        assertFalse(File(spacesDir, ID).exists())
+        assertEquals("DELETED", runBlocking { database.spaces().find(ID) }?.status)
+        assertFalse(File(spacesDir, ID).resolve("abc").exists())
     }
 
     @Test
@@ -134,7 +134,7 @@ class SpacePurgeTest {
         val resumed = runBlocking { purger().resumeAll() }
 
         assertEquals(1, resumed)
-        assertNull(runBlocking { database.spaces().find(ID) })
+        assertEquals("DELETED", runBlocking { database.spaces().find(ID) }?.status)
         assertTrue(runBlocking { database.spaces().find(OTHER_ID) } != null)
     }
 
@@ -196,6 +196,46 @@ class SpacePurgeTest {
                 ),
             )
         }
+    }
+
+    @Test
+    fun thePurgedSpaceKeepsItsCoverAndGetsItsDeletionTime() {
+        insertSpace(ID, "ENDED", purging = false)
+        File(spacesDir, ID).apply { mkdirs() }.resolve("cover-$SHA256").writeText("bild")
+        File(spacesDir, ID).resolve("abc").writeText("datei")
+        val timed = SpacePurge(database, covers, nowMillis = { 77_000L }) { forgotten += it }
+
+        runBlocking { timed.purge(SpaceId(ID)) }
+
+        val row = runBlocking { database.spaces().find(ID) }
+        assertEquals("DELETED", row?.status)
+        assertEquals(77_000L, row?.deletedAt)
+        assertFalse(row?.purging ?: true)
+        assertTrue(File(spacesDir, ID).resolve("cover-$SHA256").exists())
+    }
+
+    @Test
+    fun removingADeletedSpaceDropsTheEntryAndItsCover() {
+        insertSpace(ID, "ENDED", purging = false)
+        File(spacesDir, ID).apply { mkdirs() }.resolve("cover-$SHA256").writeText("bild")
+        runBlocking { purger().purge(SpaceId(ID)) }
+
+        assertEquals(RemoveResult.Removed, runBlocking { purger().remove(SpaceId(ID)) })
+        assertNull(runBlocking { database.spaces().find(ID) })
+        assertFalse(File(spacesDir, ID).exists())
+    }
+
+    @Test
+    fun removingAnEndedSpaceFromTheListIsRefused() {
+        insertSpace(ID, "ENDED", purging = false)
+
+        assertEquals(RemoveResult.NotDeleted, runBlocking { purger().remove(SpaceId(ID)) })
+        assertEquals("ENDED", runBlocking { database.spaces().find(ID) }?.status)
+    }
+
+    @Test
+    fun removingAMissingSpaceCountsAsRemoved() {
+        assertEquals(RemoveResult.Removed, runBlocking { purger().remove(SpaceId(ID)) })
     }
 
     private companion object {

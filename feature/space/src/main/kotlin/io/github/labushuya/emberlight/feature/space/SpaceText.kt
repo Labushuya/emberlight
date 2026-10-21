@@ -146,7 +146,8 @@ internal fun statusLabel(status: SpaceStatus): String =
     when (status) {
         SpaceStatus.DRAFT -> stringResource(R.string.space_status_draft)
         SpaceStatus.ACTIVE -> stringResource(R.string.space_status_active)
-        SpaceStatus.ENDED, SpaceStatus.DELETED -> stringResource(R.string.space_status_ended)
+        SpaceStatus.ENDED -> stringResource(R.string.space_status_ended)
+        SpaceStatus.DELETED -> stringResource(R.string.space_status_deleted)
     }
 
 /** Datum und Uhrzeit in der Sprache des Geräts (Mittel-Format), wie im Formular (ADR 0016). */

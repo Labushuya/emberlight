@@ -6,6 +6,7 @@ import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import io.github.labushuya.emberlight.share.space.management.toSpaceRecord
+import kotlinx.coroutines.CancellationException
 
 /** Ergebnis einer Änderung der Frist. */
 sealed interface RetentionChange {
@@ -86,6 +87,29 @@ class RetentionRepository(
 
     /** Löscht einen beendeten Space (siehe [SpacePurge]). */
     suspend fun purge(id: SpaceId): PurgeResult = purge.purge(id)
+
+    /**
+     * Löscht alle beendeten Spaces, deren Aufbewahrung zu [now] abgelaufen ist (Paket 3.6c, ADR 0021). Gibt die gelöschten
+     * zurück. Scheitert eine Löschung, bleibt ihr Merkmal `purging` gesetzt. Sie wird beim nächsten Prüfen fortgesetzt, die
+     * übrigen laufen weiter.
+     */
+    suspend fun purgeDue(now: Long): List<SpaceId> {
+        val done = mutableListOf<SpaceId>()
+        for (id in plan(now).purgeDue) {
+            try {
+                purge.purge(id)
+                done += id
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failed: Exception) {
+                // Die Löschung bleibt mit `purging` stehen und wird beim nächsten Prüfen fortgesetzt.
+            }
+        }
+        return done
+    }
+
+    /** Entfernt einen gelöschten Space aus der Liste, samt Titelbild (siehe [SpacePurge.remove]). */
+    suspend fun remove(id: SpaceId): RemoveResult = purge.remove(id)
 
     /** Setzt unterbrochene Löschungen beim Start fort. */
     suspend fun resumePurges(): Int = purge.resumeAll()

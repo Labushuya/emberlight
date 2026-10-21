@@ -40,6 +40,8 @@ kotlinx-serialization = "1.11.0"
 zxing = "3.5.4"
 # Lizenzliste der Laufzeitabhängigkeiten (ADR 0020). Apache-2.0, ohne Play-Services-Bezug. Das Plugin liest nur die Release-Laufzeit.
 aboutlibraries = "15.3.0"
+# Automatisches Löschen nach Fristende (Paket 3.6c, ADR 0021): WorkManager (AndroidX), ohne Play Services. Testbibliothek nur für Tests.
+work = "2.12.0"
 
 [libraries]
 # Build-Logic (Classpath der Convention-Plugins)
@@ -86,6 +88,8 @@ kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+androidx-work-testing = { group = "androidx.work", name = "work-testing", version.ref = "work" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 aboutlibraries-core = { group = "com.mikepenz", name = "aboutlibraries-core", version.ref = "aboutlibraries" }
 

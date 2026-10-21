@@ -10,6 +10,8 @@ dependencies {
     implementation(project(":share:server"))
     // Der Hilt-Einstieg in di/ nennt die Datenbankklasse von Room, daher braucht das Modul die Laufzeit selbst.
     implementation(libs.androidx.room.runtime)
+    // Automatisches Löschen nach Fristende (Paket 3.6c, ADR 0021): periodischer Lauf, ohne Play Services.
+    implementation(libs.androidx.work.runtime)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
@@ -27,6 +29,7 @@ dependencies {
     implementation(libs.androidx.media3.ui.compose)
 
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.work.testing)
 }
 
 // Screenshot-Goldens: Im gemeinsamen Test-Prozess entstehen leere Aufnahmen, die beim Verifizieren gegen sich selbst grün

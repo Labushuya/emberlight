@@ -14,6 +14,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -185,5 +186,42 @@ class SpaceVaultsTest {
     private companion object {
         const val WAIT_MS = 10_000L
         const val POLL_MS = 20L
+    }
+
+    @Test
+    fun aSpaceBeingDeletedOpensNoNewVaultForServerOrApp() {
+        runBlocking {
+            database.spaces().markPurging(space.value)
+            vaults.forget(space)
+        }
+
+        assertNull(runBlocking { vaults.vaultOf(space, cipher) })
+        assertThrows(SpaceNotOpenableException::class.java) {
+            runBlocking { vaults.vaultFor(space, SpaceLimits(), cipher) }
+        }
+    }
+
+    @Test
+    fun aDeletedSpaceOpensNoVault() {
+        runBlocking {
+            vaults.forget(space)
+            database.spaces().markDeleted(space.value, now = 9L)
+        }
+
+        assertNull(runBlocking { vaults.vaultOf(space, cipher) })
+        assertThrows(SpaceNotOpenableException::class.java) {
+            runBlocking { vaults.vaultFor(space, SpaceLimits(), cipher) }
+        }
+    }
+
+    @Test
+    fun anUploadIsRefusedWhileTheSpaceIsBeingDeleted() {
+        val vault = runBlocking { vaults.vaultOf(space, cipher)!! }
+        runBlocking { database.spaces().markPurging(space.value) }
+
+        val result = runBlocking { vault.ingest(guest, "bild.jpg", null, BytesSource(MediaFixtures.jpeg(100))) }
+
+        assertEquals(IngestResult.Rejected(RejectReason.SpaceDeleting), result)
+        assertTrue(runBlocking { database.media().allOf(space.value) }.isEmpty())
     }
 }

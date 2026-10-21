@@ -4,6 +4,7 @@ import android.content.Context
 import io.github.labushuya.emberlight.share.space.location.LocationScrubResult
 import io.github.labushuya.emberlight.share.space.location.LocationScrubber
 import io.github.labushuya.emberlight.share.space.location.NotRemovableReason
+import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import io.github.labushuya.emberlight.share.space.participants.Credential
 import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
 import io.github.labushuya.emberlight.share.space.participants.InviteState
@@ -123,6 +124,12 @@ sealed interface RejectReason {
         val limitBytes: Long,
     ) : RejectReason
 
+    /**
+     * Der Space wird gerade gelöscht oder ist gelöscht (Paket 3.6c, ADR 0021). Die Ktor-Schicht antwortet mit `410`
+     * (`space_closed`), wie nach dem Ende.
+     */
+    data object SpaceDeleting : RejectReason
+
     /** Speicherlimit des Space erreicht (507, `storage_full`). */
     data object StorageFull : RejectReason
 
@@ -202,6 +209,7 @@ class SpaceVault internal constructor(
         source: ChunkSource,
         keepLocation: Boolean = false,
     ): IngestResult {
+        if (deletingNow()) return IngestResult.Rejected(RejectReason.SpaceDeleting)
         val buffer = ByteArray(BUFFER_BYTES)
         val head = fillHead(source, buffer)
         val format =
@@ -617,6 +625,11 @@ class SpaceVault internal constructor(
 
     private suspend fun warningAfterUpload(): StorageWarning? =
         if (limits.isWarning(media.usedBytes(storage.spaceId.value))) StorageWarning.STORAGE_80 else null
+
+    /** Wird der Space gerade gelöscht oder ist er gelöscht? Dann nimmt die Vault keine Uploads mehr an (Paket 3.6c). */
+    private suspend fun deletingNow(): Boolean =
+        database.spaces().find(storage.spaceId.value)?.let { it.purging || it.status == SpaceStatus.DELETED.name } ==
+            true
 
     private suspend fun readyRow(id: MediaId): MediaEntity? =
         media.findById(id.value)?.takeIf { it.state == STATE_READY }

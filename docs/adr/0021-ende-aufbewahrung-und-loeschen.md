@@ -1,6 +1,6 @@
 # ADR 0021: Ende, Aufbewahrung, Erinnerung und Löschen
 
-Status: Angenommen, 21.10.2026 (Paket 3.6b). Umgesetzt mit den Abweichungen unten. Die automatische Löschung nach Fristende, der Status `DELETED` mit Listeneintrag und die Vorlage folgen in Paket 3.6c. Das Verlängern während der Laufzeit und die Vorlage gehören zu 3.6a.
+Status: Angenommen, 21.10.2026 (Paket 3.6b). Umgesetzt mit den Abweichungen unten. Paket 3.6c (automatisches Löschen, Status `DELETED`, Vorlage) ist im Nachtrag am Ende beschrieben und umgesetzt, Gerätetest offen. Die Aussagen „folgen in 3.6c“ und „fehlen noch“ in den Abschnitten zu 3.6b gelten für den Stand von 3.6b.
 
 ## Kontext
 
@@ -52,7 +52,7 @@ Nach dem Ende bleiben die Medien eines Space für eine gewählte Frist im Space-
 - **Löschung und Vorschau-Worker.** Der Worker einer geöffneten Vault läuft im Prozess weiter. `SpaceVaults.forget` ruft darum `retire()` auf der Vault: Der Worker wird abgebrochen, und das Merkmal „zurückgezogen“ wird unter dem Commit-Lock gesetzt. Danach schreibt die Vault keine Vorschau mehr. Vor dem Rendern, vor dem Übernehmen und während `purging` wird nichts geschrieben. Eine Teildatei wird in jedem Fall entfernt. Ein Test prüft den Fall „Löschung startet, während der Worker rendert“. Offen: Öffnet während der Löschung jemand eine neue Vault für denselben Space, hat sie eine eigene Sperre und eigenen Worker. Das ist im Code nicht ausgeschlossen. Ein Restrisiko bleibt bis zur Prüfung am Gerät.
 - **Löschen bei Abbruch im Dateisystem.** Ein Fehler beim Entfernen einer Datei lässt den Space mit `purging` stehen. Die Oberfläche zeigt „Die Löschung ist unterbrochen“, der nächste Start setzt fort. Ein Test prüft den Abbruch nach dem Merkmal, nicht jeden einzelnen Dateischritt.
 - **Frist ändern während einer Drehung.** Der Dialog hält seine Auswahl über `rememberSaveable`. Die Dauer startet bei der heutigen Restfrist, gerundet auf volle Tage.
-- **Gerätetest offen.** Die Erinnerung, die Aktionen und der Wecker nach einem Neustart sind nur mit Robolectric geprüft. Der Testkatalog Abschnitt 10 (Punkte 10.11 bis 10.24) listet den Gerätetest.
+- **Gerätetest offen.** Die Erinnerung, die Aktionen und der Wecker nach einem Neustart sind nur mit Robolectric geprüft. Der Testkatalog Abschnitt 10 (Punkte 10.16 bis 10.29) listet den Gerätetest.
 - **Goldens.** Telefon de und en für Aufbewahrungsansicht, Frist ändern, Jetzt löschen und die Liste. Ein großes Display ist nicht eigens aufgenommen. Die Liste auf dem Tablet zeigt dieselbe Karte wie auf dem Telefon.
 - **Liste: Status.** Die Karte zeigte bisher für jeden Space den Status „Entwurf“. Das ist mit 3.6b auf den tatsächlichen Status umgestellt. Das ist eine Korrektur über den Auftrag hinaus, sie ist nötig, damit das Löschdatum bei beendeten Spaces verständlich ist.
 
@@ -62,3 +62,49 @@ Nach dem Ende bleiben die Medien eines Space für eine gewählte Frist im Space-
 - `feature:space` bekommt den Unterordner `retention` für Wecker, Empfänger, Benachrichtigung und Routen. Der Empfänger ist im Manifest des Moduls eingetragen und nicht exportiert.
 - Die Datenbankversion ist 8. Die Migration `MIGRATION_7_8` hat einen eigenen Test.
 - 3.6c nutzt `SpacePurge` für die automatische Löschung nach Fristende. Der Status `DELETED` und der Listeneintrag fehlen noch.
+
+## Nachtrag Paket 3.6c (21.10.2026): automatisches Löschen, Status `DELETED`, Vorlage
+
+Status: umgesetzt in 3.6c, Gerätetest offen (Testkatalog Abschnitt 10, Punkte 10.30 bis 10.38). Mit diesem Nachtrag sind die offenen Punkte oben erledigt, soweit sie den Prozess betreffen.
+
+### Automatisches Löschen
+
+- **Fällig ist ein Space**, der beendet ist, nicht gerade gelöscht wird und dessen Aufbewahrung zu jetzt abgelaufen ist (`RetentionRules.effectiveUntil` ≤ jetzt). Die Planung (`RetentionReminderPlanner.plan`) liefert dafür `purgeDue`. Bei „Sofort löschen“ fällt die Löschung auf das Ende.
+- **Vorrang vor der Erinnerung.** `RetentionReminders.checkNow` löscht zuerst, dann plant es die Erinnerungen. Ein Space, dessen Löschung fällig ist, bekommt keine Erinnerung mehr. Der Planner überspringt ihn ebenfalls.
+- **Auslöser.** (1) Start der App (`startupCatchUp`, mit Fortsetzen unterbrochener Löschungen). (2) Jede Anzeige der Liste (`SpacesListViewModel`). (3) Der Wecker: Der nächste Zeitpunkt ist jetzt auch das Ende der Aufbewahrung. (4) Ein WorkManager-Lauf `RetentionWorker` (`work-runtime-ktx` 2.12.0, ohne Play Services), stündlich, `ExistingPeriodicWorkPolicy.KEEP`. Eingeplant wird er einmal je Prozessstart in `EmberlightApplication.onCreate`. Die Application liefert auch die WorkManager-Konfiguration (`Configuration.Provider`). WorkManager verlangt mindestens 15 Minuten, das System kann den Lauf verschieben. Der Wecker bleibt das engere Sicherheitsnetz.
+- **Serialisierung.** `checkNow` läuft unter einer Sperre. Wecker, Lauf, Start und Liste können sich nicht überlappen und damit keine Erinnerung doppelt senden.
+- **Fehler.** Scheitert eine Löschung, bleibt ihr Merkmal `purging` gesetzt. Die übrigen Löschungen laufen weiter. Der nächste Auslöser setzt die Löschung fort. Der Fehler wird nicht protokolliert (bekannte Schwäche, kein Logging im Projekt).
+
+### Status `DELETED` mit Listeneintrag
+
+- **Abschluss der Löschung** (`SpacePurge.purge`): Merkmal `purging` gesetzt, Vault freigegeben, Medien und Vorschauen entfernt (`SpaceStorage.deleteAllButCovers`), dann in einer Transaktion Medien, Teilnehmer, Pausen und der Übergang nach `DELETED` (`SpaceDao.markDeleted`). Der Übergang setzt `deleted_at`, löscht Frist, Erinnerungsmerker, Einladung (Hash, Zeitstempel, verschlüsseltes Geheimnis) und Port und setzt `purging` zurück.
+- **Titelbild bleibt.** Der Eintrag zeigt es. Name, Farbe und Einstellungen bleiben ebenfalls.
+- **Schema 9 → 10.** Additiv: `space.deleted_at` (INTEGER, `NULL`). Migration `MIGRATION_9_10` (nach dem Hotfix mit `MIGRATION_8_9`), Test `SpacesDatabaseMigrationToVersionTenTest` (Kette 8 → 10).
+- **Aus Liste entfernen** (`SpacePurge.remove`). Nur für `DELETED` und ohne `purging`. Erst die Zeile (Transaktion), dann das Verzeichnis inklusive Titelbild. Bricht es dazwischen ab, bleibt ein verwaistes Verzeichnis zurück. Das räumt `OrphanSpaceDirectories` beim ersten Zugriff je Prozess weg (ADR 0016).
+- **Keine Bearbeitung und kein Start** bei `ENDED` und `DELETED`. Das war schon so, die Oberfläche zeigt nur noch „Als Vorlage für neuen Space“ und „Aus Liste entfernen“.
+
+### Uploads und Vault
+
+- **Uploads** (`SpaceVault.ingest`) prüfen zu Beginn `purging` und `DELETED`. Dann antworten sie mit `RejectReason.SpaceDeleting`. Der Server übersetzt das in `410` mit `space_closed`, wie nach dem Ende (ADR 0014). Der Gastgeber-Upload zeigt „Der Space wird gelöscht. Uploads werden nicht mehr angenommen.“.
+- **Keine neue Vault** (`SpaceVaults`). `vaultOf` liefert `null`, `vaultFor` wirft `SpaceNotOpenableException`, wenn der Space `purging` ist oder `DELETED`. Die Prüfung läuft unter der Sperre der Vault-Registrierung, also gleichzeitig mit dem Öffnen. Damit öffnet sich nach dem Löschen im Prozess keine zweite Vault mehr. Das Restrisiko „Vault-Doppelung“ aus Paket 3.6b ist für den Prozess geschlossen, nicht für einen zweiten Prozess (es gibt keinen, die App läuft in einem Prozess).
+
+### Vorlage für einen neuen Space
+
+- **Aufruf.** Im Detail eines beendeten oder gelöschten Space: „Als Vorlage für neuen Space“. Das öffnet das Formular über `SpaceEditRoute(template = …)`.
+- **Übernommen:** Name, Farbe, Aufbewahrung, Laufzeit-Regel und Speicherlimit. Das Titelbild kopiert die Formularlogik über `storeCover` in den neuen Entwurf, mit Standort-Entfernung wie bei jedem Titelbild. Medien und Teilnehmer nicht.
+- **Neu geprüft:** Ein festes Ende, das nicht in der Zukunft und nicht höchstens 30 Tage entfernt liegt, wird auf die Voreinstellung (ein Tag) gesetzt. Ein Speicherlimit über der Obergrenze des Geräts wird wie bei einem neuen Space gewählt (`SpaceForm.forNewSpace`). Beide Fälle zeigt das Formular als Hinweis (`TemplateNote`). Die Prüfung beim Speichern bleibt unverändert.
+- **Logik** in `feature:space` (`form/SpaceTemplate`), ohne Android. Ein Test für jede Grenze, für gelöschte und beendete Spaces.
+- **Der Original-Space** bleibt unverändert. Die Vorlage legt nichts an, bevor gespeichert wird.
+
+### Abweichungen und Auslegungen
+
+1. **Sofort löschen** löscht zum Ende, nicht erst zur Erinnerung. Die Erinnerung kommt weiterhin zehn Minuten vorher. Dann ist das Löschen „sofort“ gemeint.
+2. **Nachlauf während „Sofort löschen“.** Die Löschung fällt auf das Ende. Im Nachlauf (60 s) antwortet der Server ohne Medien mit `410`. Ob die Vault während des Nachlaufs schon geschlossen ist, ist am Gerät zu prüfen (Testkatalog 10.37).
+3. **Port.** Der Eintrag `DELETED` hat keinen Port mehr. Ein gelöschter Space startet nie wieder.
+4. **Erinnerung und Löschung zum selben Zeitpunkt.** Die Löschung gewinnt, die Erinnerung entfällt. Eine Erinnerung für einen bereits gelöschten Space geht nicht mehr raus.
+
+### Offen
+
+- **Gerätetest** (Testkatalog 10.30 bis 10.38): Liste, Entfernen, Vorlage, Upload während der Löschung, Wecker und Lauf bei ausgeschalteter App, Doze.
+- **WorkManager und Doze.** Ob der stündliche Lauf im Akkubetrieb zuverlässig greift, ist am Gerät zu beobachten. Der Wecker ist das Sicherheitsnetz, und der Start der App holt alles nach.
+- **Fehler bei der automatischen Löschung** werden still wiederholt. Ein Protokoll oder eine Anzeige fehlt (kein Logging im Projekt).

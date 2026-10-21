@@ -23,10 +23,12 @@ data class SpaceDetailRoute(
     val confirmPurge: Boolean = false,
 )
 
-/** Formular für Anlegen (ohne [id]) oder Bearbeiten eines Entwurfs. */
+/** Formular für Anlegen (ohne [id] und [template]), Bearbeiten eines Entwurfs oder Anlegen aus einer Vorlage (Paket 3.6c). */
 @Serializable
 data class SpaceEditRoute(
     val id: String? = null,
+    /** Kennung eines beendeten oder gelöschten Space, dessen Einstellungen als Vorlage dienen (Paket 3.6c). */
+    val template: String? = null,
 )
 
 /**
@@ -63,10 +65,11 @@ fun NavGraphBuilder.spacesScreens(
     onSetup: (String) -> Unit = {},
     onOpenRunning: (String) -> Unit = {},
     onRunning: (String) -> Unit = {},
+    onTemplate: (String) -> Unit = {},
     onBack: () -> Unit = {},
 ) {
     composable<SpacesRoute> {
-        SpacesScreen(onCreate = onCreate, onOpen = onOpen, onEdit = onEdit)
+        SpacesScreen(onCreate = onCreate, onOpen = onOpen, onEdit = onEdit, onTemplate = onTemplate)
     }
     composable<SpaceDetailRoute> {
         SpaceDetailScreen(
@@ -75,6 +78,7 @@ fun NavGraphBuilder.spacesScreens(
             onStart = onStart,
             onSetup = onSetup,
             onOpenRunning = onOpenRunning,
+            onTemplate = onTemplate,
         )
     }
     composable<SpaceEditRoute> {
@@ -107,6 +111,11 @@ fun NavController.navigateToSpaceDetail(
 
 fun NavController.navigateToSpaceEdit(id: String? = null) {
     navigate(route = SpaceEditRoute(id = id))
+}
+
+/** Öffnet das Formular mit den Einstellungen des Space [templateId] als Vorlage (Paket 3.6c). */
+fun NavController.navigateToSpaceTemplate(templateId: String) {
+    navigate(route = SpaceEditRoute(template = templateId))
 }
 
 fun NavController.navigateToSpaceSetup(
