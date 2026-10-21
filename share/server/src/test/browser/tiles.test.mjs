@@ -239,6 +239,19 @@ test("Bildfehler: genau ein Wiederversuch mit frischer Adresse, dann ein Bild", 
       return "continue";
     });
     await openSpace(page, config, session);
+    const reached = await page.eval(`(async () => {
+      for (let i = 0; i < 600; i++) {
+        const tile = document.querySelector('li[data-id="${target}"]');
+        if (tile) {
+          tile.scrollIntoView({ block: "center" });
+          return true;
+        }
+        window.scrollBy(0, 400);
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
+      return false;
+    })()`);
+    assert.equal(reached, true, "Eintrag nach dem Nachladen in der Liste");
     await page.waitFor(
       `(() => { const img = document.querySelector('li[data-id="${target}"] img.thumb'); return !!img && img.complete && img.naturalWidth > 0; })()`,
       { what: "Vorschau nach dem Wiederversuch", timeout: 30000 },

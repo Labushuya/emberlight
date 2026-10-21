@@ -22,7 +22,15 @@ export async function openSpace(page, config, session) {
       .catch(() => null);
     if (shown !== null) break;
     const me = await apiGet(config, "/api/v1/me", session.token);
-    console.log(`Messung: GET /api/v1/me beim Start ${me.status} (Versuch ${attempt}), die Seite zeigt den Beitritt`);
+    // Befund für die Fehlersuche: Sitzungen im Speicher der Seite, Antwort der Seite auf /api/v1/me, Statuszeile.
+    const seen = await page.eval(`({
+      sessions: Object.keys(localStorage).filter((key) => key.startsWith('emberlight.guest:')).length,
+      me: performance.getEntriesByType('resource').filter((entry) => entry.name.includes('/api/v1/me')).map((entry) => entry.responseStatus),
+      status: document.getElementById('status').textContent,
+    })`);
+    console.log(
+      `Messung: Beitritt statt Space (Versuch ${attempt}): /api/v1/me von Node ${me.status}, von der Seite ${JSON.stringify(seen)}`,
+    );
   }
   await page.waitFor("!document.getElementById('space-section').hidden", { what: "Space-Ansicht", timeout: 30000 });
   await page.waitFor("document.getElementById('space-name').textContent.length > 0", { what: "Name des Space" });
