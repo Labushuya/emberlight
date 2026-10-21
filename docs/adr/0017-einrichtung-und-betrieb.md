@@ -228,3 +228,13 @@ Der Testkatalog für die Nutzerin bzw. den Nutzer steht in der PR-Beschreibung. 
 - Der Nachlauf nach dem Ablauf ist 60 s statt 1 s (`SpaceRunner.CLOSE_GRACE_MILLIS`). In dieser Zeit antworten authentifizierte Anfragen mit `410 space_closed`. Keine Medien, keine Vorschauen, kein Beitritt. Danach stoppt der Server.
 - Begründung: Die Gäste-Seite soll die Ende-Ansicht sicher erreichen, auch wenn der Gast gerade im Browser wartet. Eine Sekunde reichte dafür nicht.
 - Der Test `aRequestToAClosedSpaceAnswersAndThenTheRunStops` prüft den Zeitpunkt mit der Fake-Uhr.
+
+## Nachtrag (21.10.2026, Paket 3.5a-3): Benachrichtigungen zum Ende und Hinweis im Beenden-Dialog
+
+- **Vorwarnung.** Zehn Minuten vor dem festen Ende meldet der Dienst „Space ‚<Name>‘ endet in 10 Minuten.“. Die Prüfung läuft im Herzschlag (alle 30 s, `SpaceRunPolicy.HEARTBEAT_INTERVAL_MS`). Ein eigener Wecker ist nicht nötig, der Herzschlag läuft während des Betriebs im Vordergrunddienst. Die Vorlaufzeit steht in `EndNotices.WARNING_LEAD_MILLIS`.
+- **Meldung beim Ende.** „Space ‚<Name>‘ wurde beendet – Aufbewahrung bis <Datum>“. Das Datum ist das Ende plus die Aufbewahrung in Tagen (`retentionDays`), im Gerätelocale formatiert. Die Meldung kommt bei jedem Ende: Ablauf, Beenden durch den Gastgeber und Ende nach einem Neustart des Dienstes.
+- **Keine Doppelten.** Die gesendeten Meldungen merkt sich `PrefsEndNoticeStore` in einer eigenen Einstellungsdatei (`emberlight.end-notices`). Ein Neustart des Dienstes oder der App sendet sie deshalb nicht erneut. Mit dem Ende wird das Merkmal der Vorwarnung gelöscht.
+- **Ohne Benachrichtigungsrecht** entfällt die Meldung, die Statuszeile im laufenden Space zeigt die Restzeit.
+- **Beenden-Dialog.** Der Dialog nennt jetzt, was Gäste sehen: Wer die Seite offen hat, bekommt den Hinweis sofort. Wer sie gerade nicht offen hat, sieht beim nächsten Versuch nur, dass der Space nicht mehr erreichbar ist. Goldens `SpaceRunEndDialog_phone_de` und `_en`.
+- **Abweichung.** Ohne Benachrichtigungsrecht gibt es im Space keinen eigenen Banner. Die Restzeit in der Statuszeile ist der Hinweis in der App.
+- Tests: `EndNoticesTest` (Zeitpunkte, Aufbewahrung, Gesendetes), `PrefsEndNoticeStoreTest` (überlebt einen Neustart), Golden des Dialogs.

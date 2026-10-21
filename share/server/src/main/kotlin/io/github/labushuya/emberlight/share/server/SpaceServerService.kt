@@ -165,6 +165,11 @@ class SpaceServerService : Service() {
             SpaceRunRepository(SpacesDatabase.shared(applicationContext), SystemRunClock)
         }
 
+        /** Gemerkte Benachrichtigungen zum Ende. Eigene Einstellungsdatei, damit nichts doppelt kommt (ADR 0017). */
+        private val endNotices: EndNoticeStore by lazy {
+            PrefsEndNoticeStore(this@SpaceServerService.getSharedPreferences(END_NOTICE_PREFS, MODE_PRIVATE))
+        }
+
         override suspend fun setupFor(
             spaceId: SpaceId,
             resuming: Boolean,
@@ -233,7 +238,21 @@ class SpaceServerService : Service() {
             spaceId: SpaceId,
             endedAtMillis: Long,
         ) {
+            // Name und Aufbewahrung stehen noch in der Tabelle, bevor das Ende sie abschließt.
+            val info = runs.endingInfoOf(spaceId)
             runs.end(spaceId, endedAtMillis)
+            if (info != null && !endNotices.ended(spaceId.value)) {
+                endNotices.markEnded(spaceId.value)
+                val date =
+                    EndNotices.keptUntilDate(
+                        EndNotices.keptUntilMillis(endedAtMillis, info.retentionDays),
+                    )
+                postAlert(
+                    text = getString(R.string.space_server_ended_text, info.name, date),
+                    title = getString(R.string.space_server_ended_title),
+                    notificationId = END_ENDED_NOTIFICATION_ID,
+                )
+            }
         }
 
         override suspend fun abortStart(spaceId: SpaceId) {
@@ -291,6 +310,16 @@ class SpaceServerService : Service() {
 
         override fun onRunningTick(state: RunState.Running) {
             updateOngoing(ongoingText(state.spaceName, state.expiresAtMillis))
+            // Vorwarnung aus dem Herzschlag (alle 30 s). Gemerkt, damit ein Neustart sie nicht doppelt sendet.
+            val spaceId = state.spaceId.value
+            if (EndNotices.warningDue(System.currentTimeMillis(), state.expiresAtMillis, endNotices.warned(spaceId))) {
+                endNotices.markWarned(spaceId)
+                postAlert(
+                    text = getString(R.string.space_server_warning_text, state.spaceName),
+                    title = getString(R.string.space_server_warning_title),
+                    notificationId = END_WARNING_NOTIFICATION_ID,
+                )
+            }
         }
 
         override fun onIdle() {
@@ -417,17 +446,19 @@ class SpaceServerService : Service() {
     private fun postAlert(
         text: String,
         route: String? = null,
+        title: String = getString(R.string.space_server_running_title),
+        notificationId: Int = ALERT_NOTIFICATION_ID,
     ) {
         if (!canPostNotifications()) return
         val builder =
             NotificationCompat
                 .Builder(this, ALERT_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_warning)
-                .setContentTitle(getString(R.string.space_server_running_title))
+                .setContentTitle(title)
                 .setContentText(text)
                 .setAutoCancel(true)
         launchPendingIntent(route ?: ROUTE_OPEN_SPACE, REQUEST_OPEN_SPACE)?.let(builder::setContentIntent)
-        NotificationManagerCompat.from(this).notify(ALERT_NOTIFICATION_ID, builder.build())
+        NotificationManagerCompat.from(this).notify(notificationId, builder.build())
     }
 
     /** Dauermeldung des Dienstes. Tippen öffnet den Space. „Beenden“ öffnet die App mit Bestätigung, nie direkt. */
@@ -534,6 +565,9 @@ class SpaceServerService : Service() {
         private const val ALERT_CHANNEL_ID = "space_server_alerts"
         private const val NOTIFICATION_ID = 4711
         private const val ALERT_NOTIFICATION_ID = 4712
+        private const val END_WARNING_NOTIFICATION_ID = 4713
+        private const val END_ENDED_NOTIFICATION_ID = 4714
+        private const val END_NOTICE_PREFS = "emberlight.end-notices"
         private const val REQUEST_OPEN_SPACE = 1
         private const val REQUEST_CONFIRM_END = 2
         private const val REQUEST_EXPIRY = 3

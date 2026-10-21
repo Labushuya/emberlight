@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.feature.space.run
 
 import android.text.format.Formatter
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -131,7 +132,7 @@ internal fun SpaceRunningScreen(
         AlertDialog(
             onDismissRequest = { showEndDialog = false },
             title = { Text(stringResource(R.string.space_running_end_title)) },
-            text = { Text(stringResource(R.string.space_running_end_text)) },
+            text = { EndDialogText() },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -476,6 +477,18 @@ private fun statusLine(
             }
         }
     }
+
+/**
+ * Text des Beenden-Dialogs (Paket 3.5a-3): Folgen für Gäste, dazu was Gäste ohne offene Seite sehen. Eigene Funktion,
+ * damit die Goldens dieselben Zeilen zeigen wie die App.
+ */
+@Composable
+internal fun EndDialogText() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.space_running_end_text))
+        Text(stringResource(R.string.space_running_end_notice))
+    }
+}
 
 @Composable
 private fun remainingText(millis: Long): String {

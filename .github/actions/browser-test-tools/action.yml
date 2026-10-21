@@ -1,0 +1,25 @@
+# Richtet die Werkzeuge für die Browser-Tests der Gäste-Seite ein (ADR 0019, Paket 3.5a-3): Node 24 per setup-node und
+# eine Ausgabe der Versionen von Node und Chrome. Chrome ist auf ubuntu-24.04 vorinstalliert, die Ausgabe belegt das im
+# Protokoll. Fehlt Chrome, brechen die Tests mit CI=true ab (GuestBrowserTest). Verwendet von ci.yml und vom Test-Job in
+# release.yml. Braucht einen vorherigen Checkout des Repositorys (lokaler Pfad).
+name: Werkzeuge für die Browser-Tests einrichten
+description: Node 24 einrichten und die Versionen von Node und Chrome protokollieren.
+
+runs:
+  using: composite
+  steps:
+    - name: Node 24 einrichten
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: "24"
+
+    - name: Versionen von Node und Chrome anzeigen
+      shell: bash
+      run: |
+        node --version
+        chrome=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)
+        if [ -n "$chrome" ]; then
+          "$chrome" --version || true
+        else
+          echo "::warning title=Browser-Tests::Kein Chrome gefunden. Die Browser-Tests brechen mit CI=true ab."
+        fi

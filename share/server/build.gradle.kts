@@ -28,3 +28,22 @@ dependencies {
     // Schließt die Datenbank in den Tests, die den Index selbst öffnen (Paket 3.3).
     testImplementation(libs.androidx.room.runtime)
 }
+
+// Browser-Tests der Gäste-Seite (ADR 0019, Paket 3.5a-3). Sie laufen als eigener Test-Task nach den Unit-Tests. In derselben
+// JVM stören sie den Socket-Test „Gegenprobe“ (LingeringCloseSocketTest). Der Browserverkehr hinterlässt Verbindungen auf
+// dem Loopback, die das Timing dieses Tests verändern. Ohne Chrome oder Node 22 überspringt der Test lokal, mit CI=true
+// schlägt er fehl. `check` hängt den Task an.
+afterEvaluate {
+    val unitTests = tasks.named<Test>("testDebugUnitTest")
+    unitTests.configure { exclude("**/GuestBrowserTest*") }
+    val browserTests =
+        tasks.register<Test>("browserTest") {
+            group = "verification"
+            description = "Browser-Tests der Gäste-Seite (Node und Chrome headless). Läuft nach den Unit-Tests."
+            testClassesDirs = unitTests.get().testClassesDirs
+            classpath = unitTests.get().classpath
+            include("**/GuestBrowserTest*")
+            mustRunAfter(unitTests)
+        }
+    tasks.named("check") { dependsOn(browserTests) }
+}

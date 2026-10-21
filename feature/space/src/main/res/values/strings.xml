@@ -331,4 +331,5 @@
     <string name="space_participant_remove_uploads">Also delete all uploads from %1$s</string>
     <string name="space_participant_remove_confirm">Remove</string>
     <string name="space_running_media_uploader_removed">%1$s (removed)</string>
+    <string name="space_running_end_notice">Guests with the page open see the notice at once. Anyone who does not have the page open right now only sees, on their next attempt, that the space is no longer reachable.</string>
 </resources>

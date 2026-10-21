@@ -8,13 +8,14 @@
     <link rel="stylesheet" href="/guest.css">
   </head>
   <body>
-    <main class="card">
-      <h1 id="heading" data-i18n="heading">Join the space</h1>
-      <p id="status" class="status" role="status" aria-live="polite"></p>
+    <main id="page">
+      <p id="status" class="status"></p>
+      <p id="live" class="sr-only" role="status" aria-live="polite"></p>
 
-      <section id="join-section" hidden>
+      <section id="join-section" class="card" hidden>
+        <h1 id="heading" data-i18n="heading">Join the space</h1>
         <p id="preview" class="preview" aria-live="polite" hidden></p>
-        <p class="note" data-i18n="note">Connection runs directly over the Wi-Fi to the host's phone, not over the internet. Encryption will follow in a later version.</p>
+        <p class="note" data-i18n="note">The connection runs directly over the Wi-Fi to the host's phone, not over the internet. Encryption will follow in a later version.</p>
         <form id="join-form" novalidate>
           <label for="name" data-i18n="nameLabel">Your name</label>
           <input id="name" name="name" type="text" maxlength="96" autocomplete="off" autocapitalize="words" required aria-describedby="name-error">
@@ -23,13 +24,113 @@
         </form>
       </section>
 
-      <section id="joined-section" hidden>
-        <p id="welcome" class="welcome"></p>
-        <p id="space-name" class="space-name"></p>
-        <p class="note" data-i18n="joinedNote">Uploads and downloads will be available in the next version of this page.</p>
-        <button type="button" id="leave-button" class="secondary" data-i18n="leave">Leave</button>
+      <section id="space-section" class="space" hidden>
+        <header id="space-head" class="space-head">
+          <div class="space-title">
+            <h1 id="space-name" class="space-name"></h1>
+            <p id="countdown" class="countdown"></p>
+          </div>
+          <button type="button" id="leave-button" class="secondary" data-i18n="leave">Leave</button>
+        </header>
+
+        <section id="banner" class="banner" data-i18n-aria="bannerLabel" aria-label="Notice about the end" hidden>
+          <p data-i18n="endingBanner">The space ends in 10 minutes. Download now what you want to keep.</p>
+        </section>
+
+        <p id="lost" class="lost" hidden data-i18n="connectionLost">No connection to the space.</p>
+
+        <div id="list-view">
+          <div class="storage">
+            <div id="storage-bar" class="bar" role="img" aria-label="">
+              <i id="storage-fill"></i>
+            </div>
+            <p id="storage-text" class="meta"></p>
+            <p id="storage-warning" class="warn" data-i18n="storageWarning" hidden>Storage is 80 % full or more.</p>
+          </div>
+
+          <div class="tools">
+            <div class="seg" role="group" data-i18n-aria="filterLabel" aria-label="Filter">
+              <button type="button" id="filter-all" aria-pressed="true" data-i18n="filterAll">All</button>
+              <button type="button" id="filter-mine" aria-pressed="false" data-i18n="filterMine">Mine</button>
+            </div>
+          </div>
+
+          <p id="list-empty" class="empty" hidden></p>
+          <ul id="grid" class="grid"></ul>
+
+          <div class="more">
+            <button type="button" id="load-more" class="secondary" data-i18n="loadMore" hidden>Load more</button>
+            <div id="sentinel" class="sentinel" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <section id="detail-view" class="detail" aria-labelledby="detail-title" hidden>
+          <div class="detail-top">
+            <button type="button" id="back-button" class="secondary" data-i18n="back">Back</button>
+          </div>
+          <h2 id="detail-title" class="detail-title" tabindex="-1"></h2>
+          <p id="detail-time" class="meta"></p>
+
+          <div class="viewer">
+            <img id="viewer-image" alt="" hidden>
+            <video id="viewer-video" controls preload="metadata" playsinline hidden></video>
+            <p id="viewer-note" class="note" hidden></p>
+          </div>
+
+          <dl class="facts">
+            <div>
+              <dt data-i18n="uploadedBy">Uploaded by</dt>
+              <dd id="fact-uploader"></dd>
+            </div>
+            <div>
+              <dt data-i18n="time">Time</dt>
+              <dd id="fact-time"></dd>
+            </div>
+            <div>
+              <dt data-i18n="sizeType">Size and type</dt>
+              <dd id="fact-size"></dd>
+            </div>
+            <div>
+              <dt data-i18n="location">Location</dt>
+              <dd id="fact-location"></dd>
+            </div>
+          </dl>
+
+          <div class="actions">
+            <a id="download-link" class="button-link" download data-i18n="download" hidden>Download</a>
+            <button type="button" id="withdraw-button" class="danger" data-i18n="withdraw" hidden>Withdraw</button>
+            <p id="withdraw-hint" class="note" data-i18n="withdrawHint" hidden></p>
+          </div>
+        </section>
       </section>
+
+      <section id="ended-section" class="card ended" aria-labelledby="ended-title" hidden>
+        <h1 id="ended-title" tabindex="-1" data-i18n="endedHeading">Space ended</h1>
+        <p id="ended-text" class="welcome"></p>
+        <p class="note" data-i18n="endedClose">You can close this page now.</p>
+      </section>
+
+      <div id="ending-scrim" class="scrim" hidden>
+        <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="ending-title" aria-describedby="ending-text">
+          <h2 id="ending-title" data-i18n="endingDialogTitle">The space ends in one minute</h2>
+          <p id="ending-text" data-i18n="endingDialogText">Download now what you want to keep.</p>
+          <button type="button" id="ending-ok" data-i18n="endingDialogOk">Got it</button>
+        </div>
+      </div>
+
+      <div id="withdraw-scrim" class="scrim" hidden>
+        <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="withdraw-title" aria-describedby="withdraw-text">
+          <h2 id="withdraw-title" data-i18n="withdrawTitle">Withdraw the item?</h2>
+          <p id="withdraw-text" data-i18n="withdrawText">The item disappears for everyone in the space.</p>
+          <div class="dialog-actions">
+            <button type="button" id="withdraw-cancel" class="secondary" data-i18n="cancel">Cancel</button>
+            <button type="button" id="withdraw-confirm" class="danger" data-i18n="withdrawConfirm">Withdraw</button>
+          </div>
+        </div>
+      </div>
     </main>
+    <script src="/guest-core.js"></script>
+    <script src="/guest-space.js"></script>
     <script src="/guest.js"></script>
   </body>
 </html>
