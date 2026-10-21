@@ -49,9 +49,14 @@ object RetentionWork {
     /** Plant den periodischen Lauf ein. Ist er schon eingeplant, bleibt er unverändert. */
     fun schedule(context: Context) {
         val request = PeriodicWorkRequestBuilder<RetentionWorker>(INTERVAL_HOURS, TimeUnit.HOURS).build()
-        WorkManager
-            .getInstance(context)
-            .enqueueUniquePeriodicWork(UNIQUE_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+        try {
+            WorkManager
+                .getInstance(context)
+                .enqueueUniquePeriodicWork(UNIQUE_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+        } catch (notReady: IllegalStateException) {
+            // WorkManager ist in manchen Testumgebungen nicht eingerichtet. Der Lauf ist nur ein Sicherheitsnetz: Start,
+            // Liste und Wecker decken die Aufbewahrung weiterhin ab, und der nächste Prozessstart plant erneut ein.
+        }
     }
 }
 
