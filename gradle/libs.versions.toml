@@ -38,6 +38,8 @@ room = "2.8.5"
 kotlinx-serialization = "1.11.0"
 # QR-Codes erzeugen und lesen (Paket 3.4, ADR 0018). Apache-2.0, keine Play-Services-Abhängigkeit. Nur die Kernbibliothek.
 zxing = "3.5.4"
+# Lizenzliste der Laufzeitabhängigkeiten (ADR 0020). Apache-2.0, ohne Play-Services-Bezug. Das Plugin liest nur die Release-Laufzeit.
+aboutlibraries = "15.3.0"
 
 [libraries]
 # Build-Logic (Classpath der Convention-Plugins)
@@ -49,6 +51,8 @@ ksp-gradle-plugin = { group = "com.google.devtools.ksp", name = "symbol-processi
 hilt-gradle-plugin = { group = "com.google.dagger", name = "hilt-android-gradle-plugin", version.ref = "hilt" }
 kover-gradle-plugin = { group = "org.jetbrains.kotlinx", name = "kover-gradle-plugin", version.ref = "kover" }
 roborazzi-gradle-plugin = { group = "io.github.takahirom.roborazzi", name = "roborazzi-gradle-plugin", version.ref = "roborazzi" }
+# Lizenzliste (ADR 0020). Im Build-Logic-Classpath, damit das Plugin denselben Classloader wie AGP hat.
+aboutlibraries-gradle-plugin = { group = "com.mikepenz.aboutlibraries.plugin", name = "aboutlibraries-plugin", version.ref = "aboutlibraries" }
 
 # Laufzeit und Annotation-Processing
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
@@ -83,6 +87,7 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+aboutlibraries-core = { group = "com.mikepenz", name = "aboutlibraries-core", version.ref = "aboutlibraries" }
 
 # Debug-only (Tooling und Test-Manifest, über die BOM versioniert)
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
