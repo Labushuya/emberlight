@@ -2,6 +2,8 @@
 
 Status: angenommen (21.10.2026, Nutzerentscheidung 1 bis 7 aus dem Auftrag zu Paket 3.5a). Umsetzung im Branch `feature/m3-3.5a-medienansicht` (PR #36, Paket 3.5a-1 „Server-Grundlage“). Vorschauen sind in Paket 3.5a-2 umgesetzt (PR #37), die Gäste-Seite folgt als 3.5a-3. Der Stand dieses ADR zeigt, was schon im Code ist. Offene Teile sind unten ausdrücklich markiert.
 
+Nachtrag 21.10.2026 (Hotfix 2): Die Vorschau meldet einen Fehlergrund als Code (`RenderResult.Failed`, z. B. `bild:bitmap_factory_null`, `video:video_frame`, `timeout`, `budget`, `service`). Der Code steht im Index als `preview_reason` und `view_reason` (Migration 7 nach 8, additiv). Fehler werden mit Tag `EmberlightPreview` protokolliert, ohne Pfad und ohne Meldungstext. Neu ist ein Rückfall auf `BitmapFactory` mit `inSampleSize` und EXIF-Ausrichtung, wenn `ImageDecoder` ein Kamerafoto ablehnt. Ein Pixellimit wird dabei nie umgangen. Ein Nachweis mit einem Gerät steht aus; der Rückfall ist unter Robolectric nicht eigens geprüft.
+
 ## Kontext
 
 Paket 3.5a zeigt die Medien des Space im Browser. Ein Gast öffnet die Seite, sieht Bilder und Videos und lädt einzelne Dateien herunter. Der Browser lädt Bilder, Videos und Downloads direkt von einer URL. Er kann dabei keinen `Authorization`-Header setzen. Damit der Token nicht in die URL wandert, brauchte es eine Alternative.

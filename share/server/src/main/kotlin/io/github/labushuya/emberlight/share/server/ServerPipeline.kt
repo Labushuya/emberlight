@@ -1,5 +1,6 @@
 package io.github.labushuya.emberlight.share.server
 
+import android.util.Log
 import io.github.labushuya.emberlight.share.space.Principal
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -275,14 +276,26 @@ internal suspend fun ApplicationCall.respondJson(
     respondText(body.toString(), ContentType.Application.Json, status)
 }
 
-/** Einheitliches Fehlerformat `{"error":"<code>"}` plus optionale Felder (ADR 0014). */
+/**
+ * Einheitliches Fehlerformat `{"error":"<code>"}` plus optionale Felder (ADR 0014). Jede Fehlerantwort wird mit Status und
+ * Code protokolliert (Hotfix 2, Tag `EmberlightServer`), auch im Release. Protokolliert werden nie Namen, Pfade oder
+ * Dateiinhalte, nur die festen Codes. Lesen: `adb logcat -s EmberlightServer`, siehe `DEBUG-SERVER.md`.
+ */
 internal suspend fun ApplicationCall.respondError(
     status: HttpStatusCode,
     code: String,
     extra: Map<String, JsonElement> = emptyMap(),
 ) {
+    if (status.value >= SERVER_ERROR_MIN) {
+        Log.e(SERVER_LOG_TAG, "Antwort ${status.value}: $code")
+    } else {
+        Log.w(SERVER_LOG_TAG, "Antwort ${status.value}: $code")
+    }
     respondJson(status, JsonObject(mapOf("error" to JsonPrimitive(code)) + extra))
 }
+
+private const val SERVER_LOG_TAG = "EmberlightServer"
+private const val SERVER_ERROR_MIN = 500
 
 /**
  * Frühe Ablehnung mit lingering close (ADR 0014, ADR 0018). Die Antwort trägt `Connection: close`. Danach wird der
