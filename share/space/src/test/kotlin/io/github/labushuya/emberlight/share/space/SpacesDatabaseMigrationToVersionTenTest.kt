@@ -17,11 +17,12 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 
 /**
- * Migration 8 → 9 (Paket 3.6c, ADR 0021): Zeitpunkt der Löschung an `space`. Die Spalte ist neutral (NULL), bestehende
- * Spaces bleiben unverändert. Das Schema der Version 8 wird von Hand angelegt, wie es nach 3.6b auf dem Gerät liegt.
+ * Migrationskette 8 → 10: Hotfix 8 → 9 (Fehlergründe der Vorschau an `media`) und Paket 3.6c, 9 → 10 (Zeitpunkt der
+ * Löschung an `space`). Die Spalten sind neutral (NULL), bestehende Spaces und Medien bleiben unverändert. Das Schema der
+ * Version 8 wird von Hand angelegt, wie es nach 3.6b auf dem Gerät liegt.
  */
 @RunWith(RobolectricTestRunner::class)
-class SpacesDatabaseMigrationToVersionNineTest {
+class SpacesDatabaseMigrationToVersionTenTest {
     @get:Rule
     val folder = TemporaryFolder()
 
@@ -51,6 +52,8 @@ class SpacesDatabaseMigrationToVersionNineTest {
         assertNull(space?.retentionRemindedFor)
         assertFalse(space?.purging ?: true)
         assertNull(space?.deletedAt)
+        assertTrue("Spalte preview_reason fehlt", columns.contains("preview_reason"))
+        assertTrue("Spalte view_reason fehlt", columns.contains("view_reason"))
     }
 
     @Test

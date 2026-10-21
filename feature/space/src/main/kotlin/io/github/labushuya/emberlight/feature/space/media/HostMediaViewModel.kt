@@ -44,6 +44,11 @@ data class HostMediaItem(
     val previewFile: File?,
     val sizeBytes: Long,
     val createdAt: Long,
+    /**
+     * Original für den Rückfall (Hotfix 2): nur bei einem Bild mit fehlgeschlagener Vorschau. Die Kachel verkleinert es
+     * beim Laden. Scheitert auch das, zeigt sie „Keine Vorschau“.
+     */
+    val originalFile: File? = null,
 )
 
 /** Zustand der Medienansicht. [loaded] ist `false`, bis die erste Antwort des Index da ist. */
@@ -112,7 +117,11 @@ class HostMediaViewModel
             val space = spaceId.value ?: return null
             val media = MediaId.parse(mediaId) ?: return null
             val item = state.value.items.firstOrNull { it.id == mediaId } ?: return null
-            val file = store.detailFile(space, media, heic = item.isHeic) ?: return null
+            // Rückfall auf das Original, wenn die Vorschau fehlgeschlagen ist (Hotfix 2). Videos bleiben ohne Rückfall.
+            val file =
+                store.detailFile(space, media, heic = item.isHeic)
+                    ?: item.originalFile?.takeIf { item.previewState == PreviewState.FAILED }
+                    ?: return null
             return DetailMedia(file, isVideo = item.isVideo)
         }
 
@@ -156,7 +165,17 @@ class HostMediaViewModel
                 previewFile = if (ready) MediaId.parse(row.id)?.let { store.previewFile(id, it) } else null,
                 sizeBytes = row.sizeBytes,
                 createdAt = row.createdAt,
+                originalFile = originalFor(id, row),
             )
+        }
+
+        /** Original nur für ein Bild mit fehlgeschlagener Vorschau (Hotfix 2). */
+        private suspend fun originalFor(
+            id: SpaceId,
+            row: MediaRow,
+        ): File? {
+            if (row.previewState != PreviewState.FAILED || PreviewRules.isVideo(row.mime)) return null
+            return MediaId.parse(row.id)?.let { store.originalFile(id, it) }
         }
 
         private companion object {

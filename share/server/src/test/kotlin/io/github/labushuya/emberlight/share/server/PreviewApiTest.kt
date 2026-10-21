@@ -14,6 +14,7 @@ import io.github.labushuya.emberlight.share.space.participants.Credential
 import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
 import io.github.labushuya.emberlight.share.space.participants.Secrets
 import io.github.labushuya.emberlight.share.space.preview.PreviewRenderer
+import io.github.labushuya.emberlight.share.space.preview.RenderResult
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -354,22 +355,22 @@ class PreviewApiTest {
             mime: String,
             longEdge: Int,
             target: File,
-        ): Boolean = write(target, "image-$longEdge")
+        ): RenderResult = write(target, "image-$longEdge")
 
         override fun renderVideoFrame(
             source: File,
             longEdge: Int,
             target: File,
-        ): Boolean = write(target, "video-$longEdge")
+        ): RenderResult = write(target, "video-$longEdge")
 
         override fun videoCodec(source: File): String? = "hvc1"
 
         private fun write(
             target: File,
             text: String,
-        ): Boolean {
+        ): RenderResult {
             target.writeBytes(text.toByteArray(Charsets.US_ASCII))
-            return true
+            return RenderResult.Done
         }
 
         companion object {

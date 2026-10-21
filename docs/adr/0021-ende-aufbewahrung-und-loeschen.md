@@ -79,7 +79,7 @@ Status: umgesetzt in 3.6c, Gerätetest offen (Testkatalog Abschnitt 10, Punkte 1
 
 - **Abschluss der Löschung** (`SpacePurge.purge`): Merkmal `purging` gesetzt, Vault freigegeben, Medien und Vorschauen entfernt (`SpaceStorage.deleteAllButCovers`), dann in einer Transaktion Medien, Teilnehmer, Pausen und der Übergang nach `DELETED` (`SpaceDao.markDeleted`). Der Übergang setzt `deleted_at`, löscht Frist, Erinnerungsmerker, Einladung (Hash, Zeitstempel, verschlüsseltes Geheimnis) und Port und setzt `purging` zurück.
 - **Titelbild bleibt.** Der Eintrag zeigt es. Name, Farbe und Einstellungen bleiben ebenfalls.
-- **Schema 8 → 9.** Additiv: `space.deleted_at` (INTEGER, `NULL`). Migration `MIGRATION_8_9`, Test `SpacesDatabaseMigrationToVersionNineTest`.
+- **Schema 9 → 10.** Additiv: `space.deleted_at` (INTEGER, `NULL`). Migration `MIGRATION_9_10` (nach dem Hotfix mit `MIGRATION_8_9`), Test `SpacesDatabaseMigrationToVersionTenTest` (Kette 8 → 10).
 - **Aus Liste entfernen** (`SpacePurge.remove`). Nur für `DELETED` und ohne `purging`. Erst die Zeile (Transaktion), dann das Verzeichnis inklusive Titelbild. Bricht es dazwischen ab, bleibt ein verwaistes Verzeichnis zurück. Das räumt `OrphanSpaceDirectories` beim ersten Zugriff je Prozess weg (ADR 0016).
 - **Keine Bearbeitung und kein Start** bei `ENDED` und `DELETED`. Das war schon so, die Oberfläche zeigt nur noch „Als Vorlage für neuen Space“ und „Aus Liste entfernen“.
 

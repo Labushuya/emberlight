@@ -10,6 +10,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.exifinterface.media.ExifInterface
 import kotlinx.coroutines.CoroutineScope
@@ -22,8 +23,20 @@ import java.io.IOException
 import java.util.concurrent.Executors
 
 /**
+ * Ergebnis einer Erzeugung (Hotfix 2). [RenderResult.Failed.reason] ist ein kurzer Code aus Stufe und Ausnahmeklasse,
+ * ohne Pfad, ohne Meldungstext und ohne Werte. Er wird im Index gespeichert.
+ */
+sealed interface RenderResult {
+    data object Done : RenderResult
+
+    class Failed(
+        val reason: String,
+    ) : RenderResult
+}
+
+/**
  * Erzeugt die Vorschau-JPEGs und liest den Video-Codec (ADR 0019). Die Funktionen blockieren und laufen deshalb auf dem
- * Hintergrundfaden des Worker. Sie schreiben nur nach [target] und liefern bei jedem Fehler `false` bzw. `null`.
+ * Hintergrundfaden des Worker. Sie schreiben nur nach [target] und liefern bei jedem Fehler [RenderResult.Failed].
  */
 interface PreviewRenderer {
     /** JPEG mit der langen Kante [longEdge] aus einem Bild. [mime] bestimmt, ob die Plattform dekodieren kann. */
@@ -32,14 +45,14 @@ interface PreviewRenderer {
         mime: String,
         longEdge: Int,
         target: File,
-    ): Boolean
+    ): RenderResult
 
     /** JPEG mit der langen Kante [longEdge] aus einem Frame des Videos. */
     fun renderVideoFrame(
         source: File,
         longEdge: Int,
         target: File,
-    ): Boolean
+    ): RenderResult
 
     /** Video-Codec aus dem Kopf der Datei (`avc1`, `hvc1`, …), `null` wenn er nicht erkannt wird. */
     fun videoCodec(source: File): String?
@@ -56,11 +69,11 @@ class AndroidPreviewRenderer : PreviewRenderer {
         mime: String,
         longEdge: Int,
         target: File,
-    ): Boolean {
-        if (!platformCanDecode(mime)) return false
-        return guarded {
-            val bitmap = decodeImage(source, longEdge) ?: return@guarded false
-            writeJpeg(bitmap, longEdge, target)
+    ): RenderResult {
+        if (!platformCanDecode(mime)) return RenderResult.Failed("platform_$mime")
+        return guarded("bild") {
+            val bitmap = decodeImage(source, longEdge)
+            if (!writeJpeg(bitmap, longEdge, target)) throw RenderFailure("encode")
         }
     }
 
@@ -68,25 +81,25 @@ class AndroidPreviewRenderer : PreviewRenderer {
         source: File,
         longEdge: Int,
         target: File,
-    ): Boolean =
-        guarded {
+    ): RenderResult =
+        guarded("video") {
             val retriever = MediaMetadataRetriever()
             try {
                 retriever.setDataSource(source.path)
                 val width = retriever.metadataInt(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
                 val height = retriever.metadataInt(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
                 val rotation = retriever.metadataInt(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
-                if (width <= 0 || height <= 0) return@guarded false
+                if (width <= 0 || height <= 0) throw RenderFailure("video_size")
                 val quarterTurn = rotation == 90 || rotation == 270
                 val orientedWidth = if (quarterTurn) height else width
                 val orientedHeight = if (quarterTurn) width else height
-                if (PreviewRules.exceedsPixelLimit(orientedWidth, orientedHeight)) return@guarded false
+                if (PreviewRules.exceedsPixelLimit(orientedWidth, orientedHeight)) throw RenderFailure("pixel_limit")
                 val duration = retriever.metadataLong(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 val (targetWidth, targetHeight) = PreviewRules.targetSize(orientedWidth, orientedHeight, longEdge)
                 val frame =
                     frameAt(retriever, PreviewRules.seekMicros(duration), targetWidth, targetHeight)
                         ?: frameAt(retriever, 0L, targetWidth, targetHeight)
-                        ?: return@guarded false
+                        ?: throw RenderFailure("video_frame")
                 val upright =
                     if (quarterTurn &&
                         frame.isLandscape() != (orientedWidth > orientedHeight)
@@ -95,7 +108,7 @@ class AndroidPreviewRenderer : PreviewRenderer {
                     } else {
                         frame
                     }
-                writeJpeg(upright, longEdge, target)
+                if (!writeJpeg(upright, longEdge, target)) throw RenderFailure("encode")
             } finally {
                 retriever.release()
             }
@@ -125,15 +138,26 @@ class AndroidPreviewRenderer : PreviewRenderer {
             else -> true
         }
 
+    /**
+     * Dekodiert ein Bild. Ab API 28 zuerst [ImageDecoder]. Schlägt er fehl, versucht es [BitmapFactory] mit
+     * `inSampleSize` und EXIF-Ausrichtung (Hotfix 2: Rückfall, wenn der Plattformdekoder ein Kamerafoto ablehnt).
+     * Ein Pixellimit wird nie durch den Rückfall umgangen. Scheitern beide, liefert die Funktion [RenderFailure].
+     */
     private fun decodeImage(
         source: File,
         longEdge: Int,
-    ): Bitmap? =
+    ): Bitmap {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            decodeWithImageDecoder(source, longEdge)
-        } else {
-            decodeWithBitmapFactory(source, longEdge)
+            try {
+                return decodeWithImageDecoder(source, longEdge) ?: throw RenderFailure("image_decoder_null")
+            } catch (limit: PixelLimitExceededException) {
+                throw RenderFailure("pixel_limit")
+            } catch (failure: Exception) {
+                logStage("image_decoder", failure)
+            }
         }
+        return decodeWithBitmapFactory(source, longEdge) ?: throw RenderFailure("bitmap_factory_null")
+    }
 
     @RequiresApi(Build.VERSION_CODES.P)
     private fun decodeWithImageDecoder(
@@ -271,21 +295,56 @@ class AndroidPreviewRenderer : PreviewRenderer {
 
     private fun MediaMetadataRetriever.metadataLong(key: Int): Long? = extractMetadata(key)?.toLongOrNull()
 
-    /** Fängt jeden Fehler der Erzeugung. Ein Fehler heißt `failed`, kein Wiederholen (ADR 0019). */
-    private inline fun guarded(block: () -> Boolean): Boolean =
+    /**
+     * Fängt jeden Fehler der Erzeugung und protokolliert ihn (Hotfix 2). Ein Fehler heißt `failed`, kein Wiederholen
+     * (ADR 0019). Protokolliert werden Stufe, Ausnahmeklasse und eine bereinigte Meldung: Pfade und Zahlenfolgen werden
+     * ersetzt. Der Grund wird als Code zurückgegeben.
+     */
+    private inline fun guarded(
+        kind: String,
+        block: () -> Unit,
+    ): RenderResult =
         try {
             block()
+            RenderResult.Done
+        } catch (failure: RenderFailure) {
+            logStage("$kind:${failure.reason}", failure)
+            RenderResult.Failed("$kind:${failure.reason}")
         } catch (failure: Exception) {
-            false
+            logStage(kind, failure)
+            RenderResult.Failed("$kind:${failure.javaClass.simpleName}")
         } catch (memory: OutOfMemoryError) {
-            false
+            Log.w(LOG_TAG, "Vorschau $kind: OutOfMemoryError")
+            RenderResult.Failed("$kind:oom")
         }
+
+    /** Protokoll ohne Pfad und ohne Werte: Klasse und eine bereinigte Meldung, Höchstlänge 120 Zeichen. */
+    private fun logStage(
+        stage: String,
+        failure: Exception,
+    ) {
+        val message =
+            failure.message
+                .orEmpty()
+                .replace(PATH_PATTERN, "<Pfad>")
+                .replace(NUMBER_PATTERN, "#")
+                .take(120)
+        Log.w(LOG_TAG, "Vorschau $stage: ${failure.javaClass.simpleName}: $message")
+    }
+
+    /** Fehler mit Grund, den der Renderer selbst feststellt. Der Grund ist ein fester Code. */
+    private class RenderFailure(
+        val reason: String,
+    ) : RuntimeException(reason, null, false, false)
 
     private class PixelLimitExceededException : RuntimeException(null, null, false, false)
 
     private companion object {
         /** Erste Plattformversion mit AVIF-Dekodierung über [ImageDecoder]. */
         const val AVIF_MIN_SDK = 31
+        const val LOG_TAG = "EmberlightPreview"
+        val PATH_PATTERN = Regex("""(?:[A-Za-z]:)?[/\\][^\s'"]*""")
+        val NUMBER_PATTERN = Regex("""\d+""")
     }
 }
 

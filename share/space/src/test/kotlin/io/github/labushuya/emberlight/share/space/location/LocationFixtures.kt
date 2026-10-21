@@ -217,6 +217,45 @@ internal object LocationFixtures {
     fun jpeg(vararg segments: ByteArray): ByteArray =
         concat(byteArrayOf(0xFF.toByte(), 0xD8.toByte()), *segments, byteArrayOf(0xFF.toByte(), 0xD9.toByte()))
 
+    /**
+     * Aufbau eines Honor-Kamerafotos (Diagnose, Struktur ohne Werte): APP1 Exif mit GPS, APP6 bis APP9 als
+     * Herstellerblöcke mit Kennung „VER“, APP10 mit einem zweiten Exif-Block mit GPS. Die Herstellerblöcke sind je
+     * 65 KB groß. Danach ein Textsegment (COM) und ein unbekanntes APP12 mit Standorttext. Das Hauptbild ist ein
+     * echtes, dekodierbares JPEG (siehe [decodableJpeg]).
+     */
+    fun honorStyleJpeg(): ByteArray {
+        val vendor = ascii("VER") + ByteArray(65_000) { (it % 251).toByte() }
+        val main = decodableJpeg()
+        val segments =
+            concat(
+                app1Exif(exifTiff().bytes),
+                segment(0xE6, vendor),
+                segment(0xE7, vendor),
+                segment(0xE8, vendor),
+                segment(0xE9, vendor),
+                segment(0xEA, ascii("Exif\u0000\u0000") + exifTiff().bytes),
+                segment(0xFE, ascii("Aufnahme $LOCATION_TEXT")),
+                segment(0xEC, ascii("Ortsdaten $LOCATION_TEXT")),
+            )
+        // Hinter dem SOI des Hauptbilds einfügen: SOI, Segmente, Rest des Hauptbilds (JFIF-APP0 und Bilddaten).
+        return main.copyOfRange(0, 2) + segments + main.copyOfRange(2, main.size)
+    }
+
+    /** Ein kleines, echtes JPEG, das ImageIO dekodiert. Es hat ein JFIF-APP0-Segment und keine Metadaten. */
+    fun decodableJpeg(): ByteArray {
+        val image = java.awt.image.BufferedImage(16, 16, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        for (x in 0 until 16) for (y in 0 until 16) image.setRGB(x, y, (x * 16) shl 16 or (y * 16))
+        val out = ByteArrayOutputStream()
+        javax.imageio.ImageIO.write(image, "jpg", out)
+        return out.toByteArray()
+    }
+
+    /** Fügt Segmente direkt nach dem SOI eines JPEG ein. */
+    fun withSegmentsAfterSoi(
+        jpeg: ByteArray,
+        vararg segments: ByteArray,
+    ): ByteArray = jpeg.copyOfRange(0, 2) + concat(*segments) + jpeg.copyOfRange(2, jpeg.size)
+
     // ---------- PNG ----------
 
     fun pngChunk(
@@ -244,10 +283,13 @@ internal object LocationFixtures {
     }
 
     /** tEXt mit „Raw profile type exif“ wie ImageMagick: Zeilenumbruch, Profil, Länge, Hex-Text. */
-    fun rawProfileText(tiff: ByteArray): ByteArray {
+    fun rawProfileText(
+        tiff: ByteArray,
+        type: String = "exif",
+    ): ByteArray {
         val hex = tiff.joinToString("") { "%02x".format(it.toInt() and 0xFF) }.chunked(72).joinToString("\n")
-        val body = "\nexif\n" + "%8d".format(tiff.size) + "\n" + hex + "\n"
-        return ascii("Raw profile type exif") + byteArrayOf(0) + ascii(body)
+        val body = "\n$type\n" + "%8d".format(tiff.size) + "\n" + hex + "\n"
+        return ascii("Raw profile type $type") + byteArrayOf(0) + ascii(body)
     }
 
     fun itxtXmp(xmp: String): ByteArray = ascii("XML:com.adobe.xmp") + byteArrayOf(0, 0, 0, 0, 0) + ascii(xmp)

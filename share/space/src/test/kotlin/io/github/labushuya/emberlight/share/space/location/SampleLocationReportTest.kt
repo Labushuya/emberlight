@@ -108,6 +108,7 @@ class SampleLocationReportTest {
         val lines = mutableListOf("#$number [$label] Größe=$size B SHA-256=${sha.take(16)}")
         lines += "  Standort vorher: ${location.summary()}"
         lines += "  Gegenprobe ISO-6709-Muster im Bytestrom: ${iso6709Count(file)}"
+        lines += "  Gegenprobe streng (Rohstrom): ${strictReport(file, format?.mimeType)}"
         if (format == null) {
             lines += "  Format: nicht erkannt (Upload 415)"
             return lines
@@ -179,6 +180,7 @@ class SampleLocationReportTest {
         val lines = mutableListOf("#$number Kopie Größe=$size B SHA-256=${sha.take(16)}")
         lines += "  Standort nachher: ${location.summary()}"
         lines += "  Gegenprobe ISO-6709-Muster im Bytestrom: ${iso6709Count(file)}"
+        lines += "  Gegenprobe streng (Rohstrom): ${strictReport(file, format?.mimeType)}"
         if (format == null) {
             lines += "  Format: nicht erkannt"
             lines += "  Dekodierbar: nein"
@@ -250,6 +252,17 @@ class SampleLocationReportTest {
         }
         return LocationReport(readable = true, present = present, details = details)
     }
+
+    /** Strenge Gegenprobe über den Rohstrom: nur Befundnamen, keine Werte. */
+    private fun strictReport(
+        file: File,
+        mimeType: String?,
+    ): String =
+        RandomAccessFile(file, "r").use { raf ->
+            val scanTiff = mimeType != null && mimeType in LocationScrubber.TIFF_CONTIGUOUS_MIME_TYPES
+            val findings = StrictLocationProbe.findings(FileStore(raf, raf.length()), scanTiff = scanTiff)
+            if (findings.isEmpty()) "kein Befund" else "Befunde: ${findings.joinToString(", ")}"
+        }
 
     /** Gegenprobe über Bytes, nur Anzahl. Ohne Werte, nur für Dateien bis 64 MiB. */
     private fun iso6709Count(file: File): String {

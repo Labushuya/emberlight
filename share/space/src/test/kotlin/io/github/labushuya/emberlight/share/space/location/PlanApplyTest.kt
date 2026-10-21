@@ -224,9 +224,9 @@ class PlanApplyTest {
         val mp4 = box("ftyp", ascii("isom") + ByteArray(4)) + box("mdat", ByteArray(MEGABYTE))
         val pngWithImageData = LocationFixtures.png(LocationFixtures.pngChunk("IDAT", ByteArray(MEGABYTE)))
 
-        assertPasses(jpegWithEntropy, jpeg, expected = 3.0)
-        assertPasses(mp4, DetectedFormat("video/mp4", MediaKind.VIDEO, boxed = true), expected = 1.0)
-        assertPasses(pngWithImageData, png, expected = 1.0)
+        assertPasses(jpegWithEntropy, jpeg, expected = 4.0)
+        assertPasses(mp4, DetectedFormat("video/mp4", MediaKind.VIDEO, boxed = true), expected = 2.0)
+        assertPasses(pngWithImageData, png, expected = 2.0)
     }
 
     private fun assertPasses(
