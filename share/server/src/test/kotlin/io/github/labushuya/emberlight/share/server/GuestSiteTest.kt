@@ -46,7 +46,13 @@ class GuestSiteTest {
 
     private suspend fun HttpResponse.header(name: String): String? = headers[name]
 
-    private fun scripts(): List<File> = assetDir.listFiles().orEmpty().filter { it.isFile && it.extension == "js" }.sortedBy { it.name }
+    private fun scripts(): List<File> =
+        assetDir
+            .listFiles()
+            .orEmpty()
+            .filter {
+                it.isFile && it.extension == "js"
+            }.sortedBy { it.name }
 
     private fun keysOf(name: String) = Json.parseToJsonElement(File(assetDir, name).readText()).jsonObject.keys
 
@@ -126,9 +132,16 @@ class GuestSiteTest {
 
     @Test
     fun everyFileOfTheFolderIsServedByARoute() {
-        val served = GuestSite.FILES.values.map { it.first }.toSet()
+        val served =
+            GuestSite.FILES.values
+                .map { it.first }
+                .toSet()
         val onDisk =
-            assetDir.walkTopDown().filter { it.isFile }.map { it.relativeTo(assetDir).path.replace('\\', '/') }.toSet()
+            assetDir
+                .walkTopDown()
+                .filter { it.isFile }
+                .map { it.relativeTo(assetDir).path.replace('\\', '/') }
+                .toSet()
         assertTrue("Nicht ausgeliefert: ${onDisk - served}", served.containsAll(onDisk))
     }
 
@@ -170,7 +183,10 @@ class GuestSiteTest {
                 assertFalse("Verboten in ${file.name}: $term", source.contains(term))
             }
             // Stile nur über element.style.x, nie als Attribut (CSP, ADR 0018).
-            assertFalse("setAttribute(style) in ${file.name}", Regex("setAttribute\\(\\s*[\"']style[\"']").containsMatchIn(source))
+            assertFalse(
+                "setAttribute(style) in ${file.name}",
+                Regex("setAttribute\\(\\s*[\"']style[\"']").containsMatchIn(source),
+            )
         }
         assertTrue(scripts().any { it.readText().contains("textContent") })
     }
@@ -193,7 +209,9 @@ class GuestSiteTest {
         val used =
             scripts()
                 .flatMap { file ->
-                    Regex("(?:getElementById|byId)\\(\"([^\"]+)\"\\)").findAll(file.readText()).map { it.groupValues[1] }
+                    Regex(
+                        "(?:getElementById|byId)\\(\"([^\"]+)\"\\)",
+                    ).findAll(file.readText()).map { it.groupValues[1] }
                 }.toSet()
         assertTrue("Fehlende IDs im Markup: ${used - ids}", ids.containsAll(used))
     }
