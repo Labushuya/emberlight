@@ -50,17 +50,19 @@ async function galleryChecks(page, width) {
   assert.equal(await page.eval("document.querySelectorAll('.badge.loc').length"), 1, "Kennzeichen Standort");
 
   // Was das Raster zeigt, richtet sich nach der API: Eine Vorschau (previewState ready) erscheint als Bild mit ihrer
-  // Adresse. Bilder ohne Vorschau zeigen das Original (lazy). Alles andere ist ein Platzhalter.
+  // Adresse. Alles andere ist ein Platzhalter. Das Original (viewUrl) lädt das Raster nie (ADR 0019, Nachtrag 3.5a-4).
   const list = await apiGet(config, "/api/v1/media?limit=100", session.token);
   const items = list.body.items;
   const hasPreview = (item) => item.previewUrl !== null && item.previewState === "ready";
-  const isImage = (item) => item.type.startsWith("image/") && !item.type.endsWith("heic") && !item.type.endsWith("heif");
-  const showsOriginal = (item) => !hasPreview(item) && isImage(item) && item.viewUrl !== null;
-  const expectedImages = items.filter((item) => hasPreview(item) || showsOriginal(item)).length;
   assert.equal(
     await page.eval("document.querySelectorAll('.placeholder').length"),
-    items.length - expectedImages,
+    items.filter((item) => !hasPreview(item)).length,
     "Platzhalter entsprechen der API",
+  );
+  assert.equal(
+    await page.eval("document.querySelectorAll('img.thumb[src*=\"/view?\"]').length"),
+    0,
+    "Im Raster kein Original",
   );
   assert.equal(
     await page.eval("document.querySelectorAll('img.thumb[src*=\"/preview?\"]').length"),

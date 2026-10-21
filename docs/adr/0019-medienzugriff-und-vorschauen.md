@@ -221,3 +221,9 @@ Dieser Nachtrag hält fest, wie 3.5c die Entscheidungen oben nutzt. Die Schnitts
 - `GuestBrowserTest.uploadInTheBrowserWithProgressQueueDuplicateRejectionAndLocation`: Nach dem Browser-Lauf prüft der Fall über `BrowserScene.hostRepository()` (App-Repository auf derselben Datenbank wie der Server), dass „Lena“ und „Omar“ als Teilnehmer stehen und als Uploader im Raster erscheinen.
 
 **Offen.** Das „von “ ohne Namen am Gerät ist nicht erklärt. Die Prüfung dafür ist ein Gerätetest mit einem Beitritt und Upload bei laufender Ansicht.
+
+## Nachtrag 3.5a-4: Raster nur mit Vorschau (21.10.2026)
+
+Das Raster lädt keine Originale mehr. Es zeigt `previewUrl` nur bei `previewState` `ready`, sonst den Platzhalter. Ein Bild ohne Vorschau erscheint dort erst mit fertiger Vorschau. Das Original (`viewUrl`) lädt nur die Detailansicht. Grund: Das Original ist mehrere MB groß und belegt das Medien-Gate (vier gleichzeitige Anfragen) sowie die Verbindungen des Browsers, so dass das Polling von `/api/v1/space` verdrängt wurde. Der Abschnitt „Vorschau und Platzhalter“ oben gilt damit nicht mehr für das Raster.
+
+Offen aus diesem Nachtrag (noch nicht umgesetzt): Keyed-DOM bei Revisionswechseln, Wiederversuch bei 503 bzw. 403, Erhöhung der `revision` bei Fertigstellung einer Vorschau, Begrenzung gleichzeitiger Bildladungen im Client, Erneuerung signierter Raster-URLs.

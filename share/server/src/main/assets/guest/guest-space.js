@@ -536,7 +536,7 @@
       }
       renderCountdown(rem);
       var showBanner = rem <= WARN_BANNER_SECONDS;
-      el.banner.hidden = !showBanner;
+      if (el.banner.hidden === showBanner) el.banner.hidden = !showBanner;
       if (showBanner && !state.bannerShown) {
         state.bannerShown = true;
         core.announce(t("endingBanner"));
@@ -630,6 +630,15 @@
     );
   }
 
+  var sentinelObserver = null;
+
+  /** Ein Observer meldet nur Änderungen. Nach dem Anhängen den Sentinel neu beobachten, damit er bei Sichtbarkeit erneut meldet. */
+  function recheckSentinel() {
+    if (!sentinelObserver) return;
+    sentinelObserver.unobserve(el.sentinel);
+    sentinelObserver.observe(el.sentinel);
+  }
+
   /** Weitere Seite anhängen. Mit Filter „Meine“ wird so lange nachgeladen, bis etwas Eigenes sichtbar ist. */
   function loadMore() {
     if (state.listLoading || !state.nextCursor || !state.session || state.ended) return Promise.resolve();
@@ -650,6 +659,7 @@
       state.nextCursor = page.nextCursor;
       appendTiles(fresh);
       updateListState();
+      recheckSentinel();
       if (visibleCount() === 0 && state.nextCursor) return loadMore();
       return undefined;
     });
@@ -709,12 +719,12 @@
     return li;
   }
 
-  /** Vorschau: Bild über `previewUrl`, sobald bereit. Sonst bei Bildern das Original, lazy (ADR 0019, Schnittstelle). */
+  /**
+   * Raster: nur die Vorschau (`previewUrl`), sobald `ready`. Sonst Platzhalter. Das Original (`viewUrl`) lädt
+   * das Raster nie, nur die Detailansicht (ADR 0019, Nachtrag 3.5a-4).
+   */
   function mediaFor(item, label) {
-    var src = null;
-    if (item.previewUrl && item.previewState === "ready") src = item.previewUrl;
-    else if (!isVideo(item) && !isHeic(item) && item.viewUrl) src = item.viewUrl;
-    if (src === null) return placeholder(item, label);
+    if (!item.previewUrl || item.previewState !== "ready") return placeholder(item, label);
     var img = document.createElement("img");
     img.className = "thumb";
     img.setAttribute("alt", label);
@@ -723,7 +733,7 @@
     img.addEventListener("error", function () {
       if (img.parentNode) img.parentNode.replaceChild(placeholder(item, label), img);
     });
-    img.setAttribute("src", src);
+    img.setAttribute("src", item.previewUrl);
     return img;
   }
 
@@ -1051,7 +1061,7 @@
 
     // Liste wird beim Scrollen nachgeladen. Ohne IntersectionObserver bleibt der Knopf „Mehr laden“.
     if ("IntersectionObserver" in window) {
-      var observer = new IntersectionObserver(
+      sentinelObserver = new IntersectionObserver(
         function (entries) {
           if (entries.some(function (entry) {
             return entry.isIntersecting;
@@ -1061,7 +1071,7 @@
         },
         { rootMargin: "240px 0px" }
       );
-      observer.observe(el.sentinel);
+      sentinelObserver.observe(el.sentinel);
     }
 
     // Abfrage nur bei sichtbarer Seite. Kehrt der Tab zurück, sofort aktualisieren.
