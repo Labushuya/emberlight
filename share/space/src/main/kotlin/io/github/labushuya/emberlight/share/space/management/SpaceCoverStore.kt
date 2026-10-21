@@ -15,6 +15,7 @@ import java.io.File
 import java.io.InputStream
 import java.io.RandomAccessFile
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
@@ -93,6 +94,19 @@ class SpaceCoverStore(
     /** Entfernt den gesamten Speicher des Space: Titelbilder, Medien und Verzeichnis. */
     suspend fun deleteSpace(spaceId: SpaceId) {
         withContext(Dispatchers.IO) { storage(spaceId).deleteEverything() }
+    }
+
+    /**
+     * Räumt einen gelöschten Space auf: Außer den Titelbildern bleibt nichts im Ordner. So verschwinden Teildateien eines
+     * Uploads, den ein Absturz nach der Löschung unterbrochen hat (ADR 0021, Nachtrag 3.6d-2). Fehlt der Ordner, geschieht
+     * nichts, auch kein Anlegen.
+     */
+    suspend fun clearLeftovers(spaceId: SpaceId) {
+        withContext(Dispatchers.IO) {
+            if (Files.isDirectory(spacesDir.toPath().resolve(spaceId.value), LinkOption.NOFOLLOW_LINKS)) {
+                storage(spaceId).deleteAllButCovers()
+            }
+        }
     }
 
     private fun storage(spaceId: SpaceId): SpaceStorage = SpaceStorage(spacesDir, spaceId)

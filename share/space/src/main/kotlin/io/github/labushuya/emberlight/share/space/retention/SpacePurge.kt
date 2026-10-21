@@ -62,7 +62,23 @@ class SpacePurge(
             database.pauses().deleteOf(id.value)
             spaces.markDeleted(id.value, nowMillis())
         }
+        // Nach dem Übergang nochmals räumen: Eine Teildatei aus einem Upload, der im Strom lief, bleibt sonst bis zum Start.
+        clearLeftovers(id)
         return PurgeResult.Purged
+    }
+
+    /**
+     * Räumt den Ordner eines gelöschten Space auf (siehe [SpaceCoverStore.clearLeftovers]). Ein Fehler lässt den Rest unberührt,
+     * der nächste Start versucht es erneut.
+     */
+    private suspend fun clearLeftovers(id: SpaceId) {
+        try {
+            covers.clearLeftovers(id)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failed: Exception) {
+            RetentionLog.leftoversFailed(id, failed)
+        }
     }
 
     /** Entfernt einen gelöschten Space ganz aus der Liste, samt Titelbild und Verzeichnis. */
@@ -76,8 +92,13 @@ class SpacePurge(
         return RemoveResult.Removed
     }
 
-    /** Setzt alle unterbrochenen Löschungen fort. Gibt die Zahl der fortgesetzten Spaces zurück. */
+    /**
+     * Setzt alle unterbrochenen Löschungen fort. Gibt die Zahl der fortgesetzten Spaces zurück. Vorher räumt es die Ordner
+     * aller gelöschten Spaces auf: Ein Absturz mitten in einem Upload nach der Löschung kann dort eine Teildatei
+     * `tmp-*.part` hinterlassen (ADR 0021, Nachtrag 3.6d-2). Für gelöschte Spaces öffnet sich keine Vault, die sie aufräumen würde.
+     */
     suspend fun resumeAll(): Int {
+        spaces.allDeleted().forEach { row -> clearLeftovers(SpaceId(row.id)) }
         val pending = spaces.allPurging()
         // Ein Fehler bei einem Space hält die übrigen nicht auf. Er bleibt `purging` und kommt beim nächsten Lauf dran.
         pending.forEach { row ->

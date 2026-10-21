@@ -24,6 +24,14 @@ internal object RetentionLog {
         Log.w(TAG, "Löschung fehlgeschlagen: space=${id.value}, ${failure.javaClass.name}, Versuch $attempt")
     }
 
+    /** Ein Aufräumen nach der Löschung ist gescheitert. Der nächste Start versucht es erneut. */
+    fun leftoversFailed(
+        id: SpaceId,
+        failure: Throwable,
+    ) {
+        Log.w(TAG, "Aufräumen fehlgeschlagen: space=${id.value}, ${failure.javaClass.name}")
+    }
+
     /** Ein erfolgreicher Lauf setzt den Zähler des Space zurück. */
     fun purgeSucceeded(id: SpaceId) {
         attempts.remove(id.value)
