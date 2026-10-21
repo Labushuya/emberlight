@@ -60,7 +60,9 @@ class SpaceServerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val host = ServiceHost()
     private val beats: RunBeatStore by lazy { beatStoreFactory(this) }
-    private val runner: SpaceRunner by lazy { SpaceRunner(scope, SystemRunClock, host, runStateFlow, beats) }
+    private val runner: SpaceRunner by lazy {
+        SpaceRunner(scope, SystemRunClock, host, runStateFlow, beats, closeGraceMillis = closeGraceMillis)
+    }
     private lateinit var runnerJob: Job
 
     /** Kennung des letzten Intents. `stopSelf` mit ihr beendet den Dienst nur, wenn kein neuerer Auftrag wartet. */
@@ -108,9 +110,8 @@ class SpaceServerService : Service() {
             }
 
             ACTION_INVITE_SETTLED -> {
+                // Der Verarbeiter entscheidet, ob der Dienst danach endet. Im Nachlauf läuft er weiter.
                 runner.submit(RunCommand.InviteSettled)
-                // Ohne laufenden Space gibt es nichts zu quittieren. Der Dienst endet dann gleich wieder.
-                if (runState.value is RunState.Idle) stopSelf(startId)
                 return START_STICKY
             }
         }
@@ -303,7 +304,16 @@ class SpaceServerService : Service() {
                         route = ROUTE_CONFIRM_NETWORK,
                     )
                 }
+
+                RunEvent.StartQueued -> {
+                    postAlert(getString(R.string.space_server_start_queued))
+                }
             }
+        }
+
+        override fun onClosing() {
+            // Der Server läuft noch für den Nachlauf. Die Dauermeldung sagt das, „Beenden“ entfällt.
+            updateOngoing(getString(R.string.space_server_closing_text), ending = true)
         }
 
         override fun onRunningTick(state: RunState.Running) {
@@ -397,9 +407,12 @@ class SpaceServerService : Service() {
 
     // Die Berechtigung prüft canPostNotifications() vor dem Aufruf. Lint erkennt die Prüfung über die Methode nicht.
     @SuppressLint("MissingPermission")
-    private fun updateOngoing(text: String) {
+    private fun updateOngoing(
+        text: String,
+        ending: Boolean = false,
+    ) {
         if (!canPostNotifications()) return
-        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, buildOngoing(text))
+        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, buildOngoing(text, ending))
     }
 
     /** Text der Dauermeldung: „Space ‚Name‘ läuft · noch X“. Ohne Ende nur der Name. */
@@ -459,8 +472,14 @@ class SpaceServerService : Service() {
         NotificationManagerCompat.from(this).notify(notificationId, builder.build())
     }
 
-    /** Dauermeldung des Dienstes. Tippen öffnet den Space. „Beenden“ öffnet die App mit Bestätigung, nie direkt. */
-    private fun buildOngoing(text: String): Notification {
+    /**
+     * Dauermeldung des Dienstes. Tippen öffnet den Space. „Beenden“ öffnet die App mit Bestätigung, nie direkt. Im Nachlauf
+     * ([ending]) gibt es nichts mehr zu beenden, dort fehlt die Schaltfläche.
+     */
+    private fun buildOngoing(
+        text: String,
+        ending: Boolean = false,
+    ): Notification {
         val builder =
             NotificationCompat
                 .Builder(this, CHANNEL_ID)
@@ -473,8 +492,10 @@ class SpaceServerService : Service() {
             builder.setContentIntent(pending)
             builder.addAction(0, getString(R.string.space_server_open), pending)
         }
-        launchPendingIntent(ROUTE_CONFIRM_END, REQUEST_CONFIRM_END)?.let { pending ->
-            builder.addAction(0, getString(R.string.space_server_end), pending)
+        if (!ending) {
+            launchPendingIntent(ROUTE_CONFIRM_END, REQUEST_CONFIRM_END)?.let { pending ->
+                builder.addAction(0, getString(R.string.space_server_end), pending)
+            }
         }
         return builder.build()
     }
@@ -606,6 +627,9 @@ class SpaceServerService : Service() {
             ConnectivityWifiNetworkProvider(context)
         }
         internal var locksFactory: (SpaceServerService) -> ServerLocks = { service -> service.createServerLocks() }
+
+        /** Nachlauf nach dem Ende. Tests verkürzen ihn, Produktion nutzt den Standardwert (ADR 0017). */
+        internal var closeGraceMillis: Long = SpaceRunner.CLOSE_GRACE_MILLIS
 
         /** Speicher für den letzten Herzschlag. Tests setzen einen Speicher im Arbeitsspeicher. */
         internal var beatStoreFactory: (Context) -> RunBeatStore = { context -> PrefsRunBeatStore(context) }

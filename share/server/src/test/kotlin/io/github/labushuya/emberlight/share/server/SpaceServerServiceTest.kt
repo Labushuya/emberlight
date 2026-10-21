@@ -47,6 +47,7 @@ class SpaceServerServiceTest {
     private val originalBeats = SpaceServerService.beatStoreFactory
     private val originalBattery = SpaceServerService.batteryExemptFactory
     private val originalCipher = SpaceServerService.inviteCipherFactory
+    private val originalGrace = SpaceServerService.closeGraceMillis
     private var controller: ServiceController<SpaceServerService>? = null
 
     @Before
@@ -66,6 +67,7 @@ class SpaceServerServiceTest {
         SpaceServerService.locksFactory = { _ -> locks }
         SpaceServerService.beatStoreFactory = { MemoryRunBeatStore() }
         SpaceServerService.batteryExemptFactory = { true }
+        SpaceServerService.closeGraceMillis = SHORT_GRACE_MILLIS
     }
 
     @After
@@ -81,6 +83,7 @@ class SpaceServerServiceTest {
         SpaceServerService.networkFactory = originalNetwork
         SpaceServerService.locksFactory = originalLocks
         SpaceServerService.foregroundStarter = originalForeground
+        SpaceServerService.closeGraceMillis = originalGrace
         SpaceServerService.beatStoreFactory = originalBeats
         SpaceServerService.batteryExemptFactory = originalBattery
     }
@@ -97,6 +100,8 @@ class SpaceServerServiceTest {
 
             service.onStartCommand(SpaceServerService.stopIntent(context), 0, 2)
             awaitState<RunState.Idle>()
+            // Der Nachlauf hält die Sperren, bis er vorbei ist (ADR 0017, Nachtrag 21.10.2026).
+            awaitLocksReleased()
             assertTrue(!locks.cpuHeld && !locks.wifiHeld)
         }
 
@@ -275,6 +280,13 @@ class SpaceServerServiceTest {
         return controller.get()
     }
 
+    // Wartet, bis der Nachlauf vorbei ist und die Sperren frei sind.
+    private suspend fun awaitLocksReleased() {
+        withTimeout(TIMEOUT_MS) {
+            while (locks.cpuHeld || locks.wifiHeld) delay(POLL_MS)
+        }
+    }
+
     /** Wartet, bis der Zustand den Typ [T] hat. Die Zeitgrenze fängt einen Fehler ab, statt zu hängen. */
     private suspend inline fun <reified T : RunState> awaitState() {
         withTimeout(TIMEOUT_MS) { SpaceServerService.runState.first { it is T } }
@@ -293,6 +305,7 @@ class SpaceServerServiceTest {
         val WIFI = WifiAddress("192.168.1.20", 24, gateway = "192.168.1.1")
         const val TIMEOUT_MS = 5_000L
         const val POLL_MS = 10L
+        const val SHORT_GRACE_MILLIS = 50L
         const val MINUTE = 60_000L
         const val HOUR = 60 * MINUTE
         const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"

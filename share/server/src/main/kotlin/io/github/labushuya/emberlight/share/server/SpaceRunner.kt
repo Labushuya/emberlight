@@ -41,6 +41,9 @@ internal sealed interface RunCommand {
     /** Die Frist ist erreicht: Wecker oder eine Anfrage an einen abgelaufenen Space. */
     data object Expire : RunCommand
 
+    /** Der Nachlauf nach dem Ende ist um: Der Server stoppt, die Sperren fallen (ADR 0017, Nachtrag 21.10.2026). */
+    data object GraceOver : RunCommand
+
     /** Neustart des Dienstes ohne Auftrag (START_STICKY, Prozess-Tod). Entscheidet über den aktiven Space (ADR 0017). */
     data object Restart : RunCommand
 
@@ -60,15 +63,15 @@ internal sealed interface RunCommand {
 }
 
 internal enum class StopReason {
-    /** Der Gastgeber beendet den Space in der App. Der Space wird `ENDED`, das Ende ist jetzt. */
+    /** Der Gastgeber beendet den Space in der App. Der Space wird sofort `ENDED`, das Ende ist jetzt. Dann folgt der Nachlauf. */
     USER,
 
-    /** Die Frist ist um. Der Space wird `ENDED`, das Ende ist der Zeitpunkt der Frist. */
+    /** Die Frist ist um. Der Space wird sofort `ENDED`, das Ende ist der Zeitpunkt der Frist. Dann folgt der Nachlauf. */
     EXPIRED,
 
     /**
      * Der Dienst wird beendet (System, Prozess-Tod). Der Space bleibt `ACTIVE` und wird nicht beendet. Der letzte Herzschlag
-     * bleibt gespeichert, damit der Neustart oder der Gastgeber den Lauf fortsetzt.
+     * bleibt gespeichert, damit der Neustart oder der Gastgeber den Lauf fortsetzt. Kein Nachlauf.
      */
     DESTROYED,
 }
@@ -102,6 +105,9 @@ internal sealed interface RunEvent {
 
     /** Der Space ist aktiv, aber nicht gestartet (Unterbrechung ohne Server). Die Benachrichtigung öffnet die App. */
     data object Interrupted : RunEvent
+
+    /** Ein Start kam während des Nachlaufs. Er wartet und startet, sobald der Nachlauf vorbei ist. */
+    data object StartQueued : RunEvent
 }
 
 /** Schnittstelle zur Umgebung des Betriebs: Speicher, Netz, Sperren, Wecker und Hinweise. Der Dienst setzt sie um. */
@@ -164,6 +170,9 @@ internal interface RunHost {
     /** Aktualisiert die Dauermeldung des laufenden Space (z. B. „noch 2 Std.“). */
     fun onRunningTick(state: RunState.Running)
 
+    /** Der Space ist beendet, der Server antwortet noch für den Nachlauf. Die Dauermeldung zeigt das. */
+    fun onClosing()
+
     /** Der Betrieb ist beendet, der Dienst darf enden. */
     fun onIdle()
 }
@@ -211,6 +220,19 @@ internal class SpaceRunner(
     @Volatile
     private var deadline: Deadline? = null
 
+    /**
+     * Ende des Space, sobald der Betrieb ihn festgestellt hat (Ablauf oder Gastgeber). Gilt ab dann für jede Anfrage bis zum
+     * Stopp des Servers. Der Wert ist die Stoppzeit für die Antwort `410`.
+     */
+    @Volatile
+    private var closedAt: Long? = null
+
+    /** Ein Start, der während des Nachlaufs eingeht. Er startet, sobald der Nachlauf vorbei ist. Nur der neueste zählt. */
+    private var pendingStart: RunCommand.Start? = null
+
+    /** Wartet die Frist des Nachlaufs ab und meldet dann [RunCommand.GraceOver]. */
+    private var graceJob: Job? = null
+
     /** Startet den Verarbeiter. Einmal aufrufen. */
     fun run(): Job = scope.launch { for (command in commands) handle(command) }
 
@@ -226,6 +248,7 @@ internal class SpaceRunner(
     }
 
     override fun isClosed(): Boolean {
+        if (closedAt != null) return true
         val frame = deadline ?: return false
         return SpaceRunPolicy.isClosed(
             expiresAtMillis = frame.expiresAtMillis,
@@ -240,7 +263,7 @@ internal class SpaceRunner(
         submit(RunCommand.Expire)
     }
 
-    override fun endedAtMillis(): Long? = if (isClosed()) deadline?.expiresAtMillis else null
+    override fun endedAtMillis(): Long? = closedAt ?: if (isClosed()) deadline?.expiresAtMillis else null
 
     private suspend fun handle(command: RunCommand) {
         when (command) {
@@ -248,6 +271,7 @@ internal class SpaceRunner(
             is RunCommand.Stop -> stop(command.reason)
             RunCommand.Heartbeat -> heartbeat()
             RunCommand.Expire -> expire()
+            RunCommand.GraceOver -> graceOver()
             RunCommand.Restart -> restart()
             is RunCommand.Network -> network(command.address)
             RunCommand.ConfirmNetwork -> confirm()
@@ -256,7 +280,16 @@ internal class SpaceRunner(
     }
 
     private suspend fun start(command: RunCommand.Start) {
-        if (phase !is Phase.Idle) return
+        val current = phase
+        if (current is Phase.Closing) {
+            // Der vorherige Space ist noch im Nachlauf. Der Start wartet, statt den Nachlauf abzubrechen. Der Space ist in der
+            // Datenbank schon aktiv, deshalb darf er nicht verworfen werden (ADR 0017, Nachtrag 21.10.2026).
+            pendingStart = command
+            host.onClosing()
+            host.onEvent(RunEvent.StartQueued)
+            return
+        }
+        if (current !is Phase.Idle) return
         val setup = host.setupFor(command.spaceId, resuming = command.resume)
         if (setup == null) {
             host.onEvent(RunEvent.NotStartable)
@@ -343,7 +376,10 @@ internal class SpaceRunner(
      * früher Wecker bleibt folgenlos). Ohne Server entscheidet der Stand nach dem Neustart, ob der Space endet.
      */
     private suspend fun expire() {
-        if (phase !is Phase.Idle) {
+        val current = phase
+        // Im Nachlauf läuft der Ende-Pfad schon. Weitere Anfragen bekommen weiter 410, sonst passiert nichts.
+        if (current is Phase.Closing) return
+        if (current !is Phase.Idle) {
             if (isClosed()) stop(StopReason.EXPIRED)
             return
         }
@@ -435,8 +471,23 @@ internal class SpaceRunner(
         host.onIdle()
     }
 
+    /**
+     * Der einzige Ende-Pfad, für den Gastgeber und für den Ablauf (ADR 0017, Nachtrag 21.10.2026). Der Space wird sofort
+     * `ENDED`. Läuft der Server, bleibt er für den Nachlauf von [closeGraceMillis] offen: Authentifizierte Anfragen bekommen
+     * `410` mit der Stoppzeit, Medien, Uploads und Beitritte gibt es nicht mehr. Danach stoppt der Server, und die Sperren
+     * fallen. Pausiert ist der Server schon aus, dann endet der Betrieb sofort. Nur [StopReason.DESTROYED] lässt den Nachlauf
+     * aus, weil der Dienst dann ohnehin endet.
+     */
     private suspend fun stop(reason: StopReason) {
         val current = phase
+        if (current is Phase.Closing) {
+            // Der Nachlauf läuft schon. Nur das Ende des Dienstes bricht ihn ab, jedes andere Ende ist bereits geschehen.
+            if (reason == StopReason.DESTROYED) {
+                pendingStart = null
+                finishClosing(current)
+            }
+            return
+        }
         if (current is Phase.Idle) {
             host.onIdle()
             return
@@ -444,33 +495,72 @@ internal class SpaceRunner(
         jobs?.cancel()
         jobs = null
         host.cancelExpiry()
-        // Bei Ablauf bleibt die Frist kurz gesetzt. Die Antwort 410 muss beim Gast ankommen, bevor der Server schließt.
-        if (reason == StopReason.EXPIRED) delay(closeGraceMillis)
         val setup = setupOf(current)
-        closeServer(current)
-        host.releaseLocks()
+        if (reason == StopReason.DESTROYED) {
+            closeServer(current)
+            host.releaseLocks()
+            deadline = null
+            pendingStart = null
+            phase = Phase.Idle
+            publish(RunState.Idle)
+            host.onIdle()
+            return
+        }
+        val now = clock.wallMillis()
+        val endedAt = if (reason == StopReason.EXPIRED) minOf(now, setup.expiresAtMillis ?: now) else now
+        // Ab hier gilt das Ende für jede Anfrage, auch während die Datenbank den Space schreibt.
+        if (current is Phase.Running) closedAt = endedAt
+        if (setup.persisted) host.endSpace(setup.spaceId, endedAt)
+        // Ein beendeter Space hat keinen Lauf mehr zum Fortsetzen.
+        beats.clear()
+        runBeat = null
         deadline = null
-        if (setup.persisted) {
-            val now = clock.wallMillis()
-            when (reason) {
-                StopReason.USER -> host.endSpace(setup.spaceId, now)
-                StopReason.EXPIRED -> host.endSpace(setup.spaceId, minOf(now, setup.expiresAtMillis ?: now))
-                StopReason.DESTROYED -> Unit
-            }
+        if (current is Phase.Running) {
+            phase = Phase.Closing(setup, current.opened)
+            publish(RunState.Idle)
+            host.onClosing()
+            graceJob =
+                scope.launch {
+                    delay(closeGraceMillis)
+                    submit(RunCommand.GraceOver)
+                }
+        } else {
+            // Pausiert: Der Server ist seit der Pause aus und nimmt nichts an. Ein Nachlauf würde nichts bringen.
+            closeServer(current)
+            closedAt = null
+            host.releaseLocks()
+            phase = Phase.Idle
+            publish(RunState.Idle)
+            host.onIdle()
         }
-        // Ein beendeter Space hat keinen Lauf mehr zum Fortsetzen. Bei DESTROYED bleibt der letzte Herzschlag erhalten.
-        if (reason != StopReason.DESTROYED) {
-            beats.clear()
-            runBeat = null
-        }
+    }
+
+    /** Die Frist des Nachlaufs ist um. Der Server stoppt. Ein Befehl, der nach dem Ende kommt, bleibt folgenlos. */
+    private suspend fun graceOver() {
+        val closing = phase as? Phase.Closing ?: return
+        finishClosing(closing)
+    }
+
+    /**
+     * Schließt den Nachlauf ab: Server stoppen, Sperren freigeben, Betrieb auf Leerlauf. Ein wartender Start läuft danach an,
+     * sonst endet der Dienst.
+     */
+    private suspend fun finishClosing(closing: Phase.Closing) {
+        graceJob?.cancel()
+        graceJob = null
+        closeQuietly(closing.opened)
+        host.releaseLocks()
+        closedAt = null
         phase = Phase.Idle
         publish(RunState.Idle)
-        host.onIdle()
+        val next = pendingStart
+        pendingStart = null
+        if (next != null) start(next) else host.onIdle()
     }
 
     private suspend fun heartbeat() {
         val current = phase
-        if (current is Phase.Idle) return
+        if (current is Phase.Idle || current is Phase.Closing) return
         val wall = clock.wallMillis()
         val elapsed = clock.elapsedMillis()
         val beat = pauses.beat(wall, elapsed, clock.uptimeMillis())
@@ -498,7 +588,7 @@ internal class SpaceRunner(
 
     private suspend fun network(address: WifiAddress?) {
         when (val current = phase) {
-            is Phase.Idle -> {}
+            is Phase.Idle, is Phase.Closing -> {}
 
             is Phase.Running -> {
                 when (val action = NetworkPolicy.whileRunning(current.address, address)) {
@@ -549,6 +639,11 @@ internal class SpaceRunner(
 
     /** Der Gastgeber hat den Hinweis zur erneuerten Einladung beantwortet. Der Lauf selbst bleibt unverändert. */
     private fun settleInvite() {
+        // Ohne laufenden Space gibt es nichts zu quittieren. Der Dienst endet dann gleich wieder. Im Nachlauf bleibt er.
+        if (phase is Phase.Idle) {
+            host.onIdle()
+            return
+        }
         if (!inviteRenewed) return
         inviteRenewed = false
         val running = phase as? Phase.Running ?: return
@@ -664,6 +759,7 @@ internal class SpaceRunner(
                 is Phase.Idle -> return
                 is Phase.Running -> current.opened
                 is Phase.Paused -> current.opened
+                is Phase.Closing -> current.opened
             }
         closeQuietly(opened)
     }
@@ -682,6 +778,7 @@ internal class SpaceRunner(
             is Phase.Idle -> error("Kein Space aktiv.")
             is Phase.Running -> current.setup
             is Phase.Paused -> current.setup
+            is Phase.Closing -> current.setup
         }
 
     private fun serverConfig(
@@ -713,6 +810,12 @@ internal class SpaceRunner(
                 pending: WifiAddress?,
             ): Paused = Paused(setup, opened, lastAddress, port, cause, pending)
         }
+
+        /** Der Space ist beendet. Der Server läuft noch für den Nachlauf, Anfragen bekommen `410`. */
+        class Closing(
+            val setup: ServerSetup,
+            val opened: OpenedServer,
+        ) : Phase
     }
 
     private class Deadline(
@@ -733,8 +836,9 @@ internal class SpaceRunner(
 
     companion object {
         /**
-         * Nachlauf nach dem Ablauf (ADR 0017, Nachtrag 3.5a): Authentifizierte Anfragen bekommen 410, Medien und Vorschauen
-         * gibt es nicht mehr. Danach stoppt der Server. 60 s, damit die Gäste-Seite die Ende-Ansicht sicher erreicht.
+         * Nachlauf nach jedem Ende, durch den Gastgeber oder durch den Ablauf (ADR 0017, Nachtrag 21.10.2026): Authentifizierte
+         * Anfragen bekommen 410, Medien, Vorschauen, Uploads und Beitritte gibt es nicht mehr. Danach stoppt der Server. 60 s,
+         * damit die Gäste-Seite die Ende-Ansicht sicher erreicht.
          */
         const val CLOSE_GRACE_MILLIS = 60_000L
     }

@@ -119,6 +119,30 @@ class SpaceRunnerTest {
         }
 
     @Test
+    fun aSettleDuringTheGraceKeepsTheServiceAlive() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            env.submit(RunCommand.InviteSettled)
+            runCurrent()
+
+            assertEquals(0, env.host.idles)
+            assertEquals(0, env.servers.single().stops)
+        }
+
+    @Test
+    fun aSettleWithoutAnySpaceEndsTheService() =
+        runTest {
+            val env = Env(this)
+            env.submit(RunCommand.InviteSettled)
+            runCurrent()
+
+            assertEquals(1, env.host.idles)
+        }
+
+    @Test
     fun aFirstStartWithoutAFixedPortSavesTheBoundPort() =
         runTest {
             val env = Env(this)
@@ -197,23 +221,121 @@ class SpaceRunnerTest {
         }
 
     @Test
-    fun aUserStopEndsTheSpaceNowAndReleasesEverything() =
+    fun aUserStopEndsTheSpaceNowAndKeepsTheServerForTheGrace() =
         runTest {
-            val env = Env(this)
-            env.setup = persistedSetup()
-            env.submit(RunCommand.Start(spaceId, port = 0))
-            runCurrent()
+            val env = runningEnv()
             clock.advance(5 * MINUTE)
 
             env.submit(RunCommand.Stop(StopReason.USER))
             runCurrent()
 
-            assertEquals(RunState.Idle, env.state.value)
-            assertEquals(listOf(spaceId to START + 5 * MINUTE), env.host.ended)
-            assertEquals(1, env.host.locksReleased)
-            assertEquals(1, env.servers.single().stops)
-            assertEquals(1, env.host.idles)
             assertFalse(env.host.expiryCancelled.isEmpty())
+            assertGraceAfter(env, endedAt = START + 5 * MINUTE)
+        }
+
+    @Test
+    fun anExpiryByHeartbeatKeepsTheServerForTheGrace() =
+        runTest {
+            val env = runningEnv()
+            clock.advance(HOUR + 5 * MINUTE)
+            advanceTimeBy(SpaceRunPolicy.HEARTBEAT_INTERVAL_MS)
+            runCurrent()
+
+            assertGraceAfter(env, endedAt = expires)
+        }
+
+    @Test
+    fun anExpiryByTheAlarmKeepsTheServerForTheGrace() =
+        runTest {
+            val env = runningEnv()
+            clock.advance(HOUR + 1)
+
+            env.submit(RunCommand.Expire)
+            runCurrent()
+
+            assertGraceAfter(env, endedAt = expires)
+        }
+
+    @Test
+    fun anExpiryByARequestKeepsTheServerForTheGrace() =
+        runTest {
+            val env = runningEnv()
+            clock.advance(HOUR + 1)
+
+            env.runner.onClosedRequest()
+            runCurrent()
+
+            assertGraceAfter(env, endedAt = expires)
+        }
+
+    @Test
+    fun aUserEndWhilePausedNeedsNoGraceBecauseTheServerIsOff() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Network(null))
+            runCurrent()
+
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            // Die Pause hat den Server schon gestoppt. Hier geht es um den Betrieb: kein Nachlauf, sofort Leerlauf.
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(1, env.host.locksReleased)
+            assertEquals(1, env.host.idles)
+            assertEquals(0, env.host.closings)
+            assertNull(env.runner.endedAtMillis())
+        }
+
+    @Test
+    fun aDestroyedServiceEndsTheGraceAtOnce() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.submit(RunCommand.Stop(StopReason.DESTROYED))
+            runCurrent()
+
+            assertEquals(1, env.servers.single().stops)
+            assertEquals(1, env.host.locksReleased)
+            assertEquals(1, env.host.idles)
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS + 1)
+            runCurrent()
+            assertEquals(1, env.servers.size)
+            assertEquals(RunState.Idle, env.state.value)
+        }
+
+    @Test
+    fun repeatedEndsDuringTheGraceChangeNothing() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            env.runner.onClosedRequest()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            env.submit(RunCommand.Expire)
+            runCurrent()
+
+            assertEquals(1, env.host.ended.size)
+            assertEquals(0, env.servers.single().stops)
+            assertEquals(1, env.host.closings)
+        }
+
+    @Test
+    fun theGraceIsNotCutShortByAnOldAlarmOrAHeartbeat() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS / 2)
+            env.submit(RunCommand.Heartbeat)
+            env.submit(RunCommand.Expire)
+            runCurrent()
+
+            assertEquals(0, env.servers.single().stops)
+            assertEquals(0, env.host.idles)
         }
 
     @Test
@@ -384,41 +506,74 @@ class SpaceRunnerTest {
         }
 
     @Test
-    fun quickSequencesOfStartAndStopLeaveNoLockAndNoLostStart() =
+    fun quickSequencesDuringTheGraceQueueTheLastStartAndLeaveNoLockBehind() =
         runTest {
             val env = Env(this)
             env.setup = persistedSetup()
 
             env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
             env.submit(RunCommand.Stop(StopReason.USER))
             env.submit(RunCommand.Start(spaceId, port = 0))
             env.submit(RunCommand.Stop(StopReason.USER))
             env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            // Während des Nachlaufs läuft kein zweiter Start. Die Sperren bleiben bis zum Ende des Nachlaufs.
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(1, env.host.locksHeldNow)
+            assertEquals(1, env.servers.size)
+
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS + 1)
             runCurrent()
 
             assertTrue("zuletzt gestartet", env.state.value is RunState.Running)
-            assertEquals(3, env.host.locksAcquired)
-            assertEquals(2, env.host.locksReleased)
+            assertEquals(2, env.host.locksAcquired)
+            assertEquals(1, env.host.locksReleased)
             assertEquals(1, env.host.locksHeldNow)
-            assertEquals(3, env.servers.size)
+            assertEquals(2, env.servers.size)
             assertEquals(1, env.servers.last().starts)
-            assertEquals(2, env.host.ended.size)
+            assertEquals(1, env.host.ended.size)
         }
 
     @Test
-    fun aStartAfterAStopIsNotDroppedBecauseItCamesTooSoon() =
+    fun aStartDuringTheGraceIsQueuedWithAMessageAndRunsAfterIt() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertEquals(RunState.Idle, env.state.value)
+            assertTrue(RunEvent.StartQueued in env.host.events)
+            assertEquals(1, env.servers.size)
+
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS + 1)
+            runCurrent()
+
+            assertTrue(env.state.value is RunState.Running)
+            assertEquals(2, env.servers.size)
+            assertEquals(0, env.host.idles)
+        }
+
+    @Test
+    fun aStartAfterTheGraceStartsAtOnce() =
         runTest {
             val env = Env(this)
             env.setup = persistedSetup()
             env.submit(RunCommand.Start(spaceId, port = 0))
             runCurrent()
             env.submit(RunCommand.Stop(StopReason.USER))
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS + 1)
+            runCurrent()
             env.submit(RunCommand.Start(spaceId, port = 0))
             runCurrent()
 
             assertTrue(env.state.value is RunState.Running)
-            assertEquals(1, env.host.locksHeldNow)
             assertEquals(2, env.servers.size)
+            assertEquals(1, env.host.locksHeldNow)
         }
 
     @Test
@@ -646,6 +801,42 @@ class SpaceRunnerTest {
             assertTrue(env.host.pauses.isEmpty())
         }
 
+    /** Ein laufender, gespeicherter Space. Die Zeit steht am Start. */
+    private fun TestScope.runningEnv(): Env {
+        val env = Env(this)
+        env.setup = persistedSetup()
+        env.submit(RunCommand.Start(spaceId, port = 0))
+        runCurrent()
+        return env
+    }
+
+    /**
+     * Prüft den Nachlauf nach einem Ende (ADR 0017, Nachtrag 21.10.2026): Der Space ist sofort beendet, die Stoppzeit gilt
+     * für jede Anfrage, der Server läuft bis zum Ablauf der Frist und stoppt dann, die Sperren fallen erst danach.
+     */
+    private fun TestScope.assertGraceAfter(
+        env: Env,
+        endedAt: Long,
+    ) {
+        assertEquals(listOf(spaceId to endedAt), env.host.ended)
+        assertEquals(RunState.Idle, env.state.value)
+        assertEquals(1, env.host.closings)
+        assertTrue(env.runner.isClosed())
+        assertEquals(endedAt, env.runner.endedAtMillis())
+        assertEquals(0, env.servers.single().stops)
+        assertEquals(0, env.host.locksReleased)
+
+        advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS - 1)
+        runCurrent()
+        assertEquals(0, env.servers.single().stops)
+
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(1, env.servers.single().stops)
+        assertEquals(1, env.host.locksReleased)
+        assertEquals(1, env.host.idles)
+    }
+
     private fun persistedSetup(expiresAt: Long = expires) =
         ServerSetup(
             spaceId = spaceId,
@@ -800,6 +991,12 @@ class SpaceRunnerTest {
         }
 
         override fun onRunningTick(state: RunState.Running) = Unit
+
+        var closings = 0
+
+        override fun onClosing() {
+            closings++
+        }
 
         override fun onIdle() {
             idles++

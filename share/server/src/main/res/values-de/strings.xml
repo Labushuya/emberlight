@@ -6,6 +6,8 @@
     <string name="space_server_starting">Startet …</string>
     <string name="space_server_ongoing_text">Space „%1$s“ läuft · noch %2$s</string>
     <string name="space_server_no_end_text">Space „%1$s“ läuft</string>
+    <string name="space_server_closing_text">Space beendet – Gäste werden informiert</string>
+    <string name="space_server_start_queued">Der vorherige Space ist noch kurz im Nachlauf. Der neue Space startet, sobald er vorbei ist.</string>
     <string name="space_server_remaining_under_minute">unter 1 Min.</string>
     <string name="space_server_remaining_m">%1$d Min.</string>
     <string name="space_server_remaining_hm">%1$d Std. %2$d Min.</string>

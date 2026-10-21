@@ -49,7 +49,7 @@ Eigene Grenze für Medien-Streams und Downloads: vier gleichzeitig (`ServerGates
 
 ### 6. Ende des Space (teilweise umgesetzt)
 
-- **Umgesetzt:** Nachlauf nach dem Ablauf von 1 s auf 60 s (`SpaceRunner.CLOSE_GRACE_MILLIS`, siehe Nachtrag in [ADR 0017](0017-einrichtung-und-betrieb.md)). In dieser Zeit antworten authentifizierte Anfragen mit `410 space_closed`. Medien und Vorschauen gibt es nicht mehr.
+- **Umgesetzt:** Nachlauf nach jedem Ende (Ablauf und Gastgeber) von 1 s auf 60 s (`SpaceRunner.CLOSE_GRACE_MILLIS`, siehe Nachtrag in [ADR 0017](0017-einrichtung-und-betrieb.md)). In dieser Zeit antworten authentifizierte Anfragen mit `410 space_closed`. Medien, Vorschauen, Uploads und Beitritte gibt es nicht mehr.
 - **Umgesetzt in 3.5a-3:** Die Seite mit Restzeit, Banner (10 Minuten), Dialog (1 Minute), Ende-Ansicht und Verbindungsverlust (Nachtrag unten). Die Benachrichtigungen des Gastgebers und der Hinweis im Beenden-Dialog (Nachtrag 3.5a-3 in [ADR 0017](0017-einrichtung-und-betrieb.md)).
 
 ### 7. Gäste-Seite (umgesetzt in 3.5a-3)
@@ -111,7 +111,7 @@ Der Vertrag oben bleibt unverändert. Dieser Nachtrag hält fest, wie die Seite 
 **Codec.** Ist `videoCodec` `null`, versucht die Seite die Wiedergabe. Bei `avc1` oder `hvc1` prüft sie `canPlayType` mit einer festen Codec-Angabe. Unbekannte Werte gelten als nicht abspielbar.
 
 **Abweichungen.**
-- Die Ende-Uhrzeit: Die API meldet das Ende nicht gesondert (410 trägt nur `space_closed`). Bei Ablauf zeigt die Seite das geplante Ende. Beendet der Gastgeber früher, zeigt sie den Zeitpunkt, zu dem sie das Ende bemerkt hat.
+- Die Ende-Uhrzeit: Die 410-Antwort trägt `endedAt` (ADR 0014, Nachtrag). Bei Ablauf zeigt die Seite das geplante Ende. Beendet der Gastgeber früher, zeigt sie die Stoppzeit. Nur wenn das Ende über einen Verbindungsverlust bemerkt wird, ist es der Zeitpunkt der Bemerkung. Seit dem Fix „Nachlauf auch beim manuellen Beenden“ (21.10.2026) kommt die Stoppzeit auch bei manuellem Beenden an (ADR 0017, Nachtrag).
 - Das Anschauen der Medien über die Ansicht (`viewUrl` für Bilder) zählt gegen die Gate-Grenze der Medienrouten (vier gleichzeitig, ADR 0019, Abschnitt 5). Bei vielen Bildern im Raster kann der Server mit `503` antworten, die Seite zeigt dann den Platzhalter. 3.5a-2 mit echten Vorschauen beseitigt das.
 - Der Dialog „Der Space endet in einer Minute“ verlangt die Bestätigung über den Knopf. Esc schließt ihn nicht, weil die Warnung eine Bestätigung braucht.
 - Die stille Erneuerung nach 30 Minuten prüfen die Browser-Tests nicht, das dauert zu lange. Sie ist im Testkatalog als Entwickler-Prüfung vorgesehen (Punkt 6.6).
