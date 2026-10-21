@@ -232,6 +232,13 @@ class GuestBrowserTest {
     }
 
     @Test
+    fun resumeDropsAnotherSpaceAndOffersRejoinWhenTheHostStaysUnreachable() {
+        runScenario(file = "resume-host.test.mjs", spaceName = SPACE_NAME, endsInSeconds = null) { scene ->
+            mapOf("session" to session(scene, scene.join("Lena")))
+        }
+    }
+
+    @Test
     fun formatSignaturesAreJudgedTheSameWayInTheBrowser() {
         runScenario(file = "formats.test.mjs", spaceName = SPACE_NAME, endsInSeconds = null) { emptyMap() }
     }

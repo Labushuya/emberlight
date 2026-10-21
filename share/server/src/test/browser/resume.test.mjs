@@ -42,9 +42,10 @@ async function resumeAfter(kind, failures) {
   try {
     await page.enableNetwork();
     // Ausgangslage: keine Sitzung aus einem früheren Test (der Speicher des Browsers ist für alle Tests einer Datei gleich).
-    await page.goto(`${config.base}/`);
+    // Die Sitzung wird auf einer statischen Datei abgelegt, damit keine App-Seite sie vor dem Abfangen liest (siehe seedSession).
+    await page.goto(`${config.base}/i18n/en.json`);
     await page.eval("localStorage.clear()");
-    await seedSession(page, config, config.session);
+    await seedSession(page, config, config.session, { at: "/i18n/en.json" });
     let calls = 0;
     await page.intercept("*/api/v1/me", () => {
       calls += 1;

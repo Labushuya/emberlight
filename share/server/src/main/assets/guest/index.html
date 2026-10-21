@@ -12,6 +12,11 @@
       <p id="status" class="status"></p>
       <p id="live" class="sr-only" role="status" aria-live="polite"></p>
 
+      <div id="unreachable" hidden>
+        <p class="note" data-i18n="unreachableHint">Host not reachable. Are you on the same Wi-Fi? Is the host's app open?</p>
+        <button type="button" id="rejoin-button" class="secondary" data-i18n="rejoin">Join again</button>
+      </div>
+
       <section id="join-section" class="card" hidden>
         <h1 id="heading" data-i18n="heading">Join the space</h1>
         <p id="preview" class="preview" aria-live="polite" hidden></p>

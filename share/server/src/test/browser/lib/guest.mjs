@@ -3,10 +3,14 @@
 /**
  * Legt eine Sitzung im Browser ab, so wie der Beitritt sie speichert (ADR 0018). Danach lädt die Seite den Space mit
  * `GET /api/v1/me` und zeigt ihn. Die Seite muss vorher einmal auf dem Ursprung geladen sein.
+ *
+ * `at` ist die Seite, auf der die Sitzung abgelegt wird. Vorgabe ist die App-Seite. Ein Test, der danach Anfragen
+ * abfängt, nimmt eine statische Datei (etwa `/i18n/en.json`). Die App-Seite würde sonst noch laufen, wenn die Sitzung
+ * schon gesetzt ist, und ihre Anfrage an `/api/v1/me` ginge am Abfangen vorbei.
  */
-export async function seedSession(page, config, session) {
+export async function seedSession(page, config, session, { at = "/" } = {}) {
   const key = `emberlight.guest:${config.base}:${session.spaceId}`;
-  await page.goto(`${config.base}/`);
+  await page.goto(`${config.base}${at}`);
   await page.eval(`localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify(session))})`);
 }
 

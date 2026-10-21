@@ -22,7 +22,9 @@
     name: document.getElementById("name"),
     nameError: document.getElementById("name-error"),
     joinButton: document.getElementById("join-button"),
-    preview: document.getElementById("preview")
+    preview: document.getElementById("preview"),
+    unreachable: document.getElementById("unreachable"),
+    rejoinButton: document.getElementById("rejoin-button")
   };
 
   function setNameError(message) {
@@ -70,11 +72,17 @@
   // Wartezeiten zwischen den Versuchen der Sitzungsprüfung in Millisekunden: erst kurz, dann alle fünf Sekunden.
   var RESUME_BACKOFF_MS = [500, 1000, 2000, 4000];
   var RESUME_STEADY_MS = 5000;
+  // Nach so vielen Millisekunden ohne Erfolg zeigt die Seite den Hinweis zum Gastgeber und den Knopf „Neu beitreten“.
+  var UNREACHABLE_AFTER_MS = 30000;
+  // Die laufende Sitzungsprüfung. „Neu beitreten“ bricht sie ab (`cancelled`).
+  var activeRun = null;
 
   /**
-   * Prüft gespeicherte Sitzungen mit `GET /api/v1/me`. Gibt `true` zurück, wenn die Seite den Space oder das Ende zeigt.
-   * Eine Sitzung wird nur bei 401 verworfen (ADR 0018). Vorübergehende Fehler (503, 429, 5xx, Netzfehler, unlesbare
-   * Antwort) wiederholt die Seite mit Wartezeit. Dabei zeigt sie nie den QR-Hinweis, solange die Sitzung besteht.
+   * Prüft gespeicherte Sitzungen mit `GET /api/v1/me`. Gibt `true` zurück, wenn die Seite den Space oder das Ende zeigt
+   * (oder die Prüfung abgebrochen ist), `false`, wenn der Beitritt an der Reihe ist.
+   * Eine Sitzung wird nur bei 401 oder bei einem eindeutig fremden Space verworfen (ADR 0018). Vorübergehende Fehler
+   * (503, 429, 5xx, Netzfehler, unlesbare Antwort) wiederholt die Seite mit Wartezeit. Dabei zeigt sie nie den QR-Hinweis,
+   * solange die Sitzung besteht. Nach 30 Sekunden ohne Erfolg kommt der Hinweis zum Gastgeber mit „Neu beitreten“.
    */
   function resumeStored() {
     var entries = core.storedSessions();
@@ -86,16 +94,51 @@
       core.space.showEnded(ended);
       return Promise.resolve(true);
     }
-    return checkStored(stored, 0);
+    var run = { stored: stored, cancelled: false, clock: null };
+    activeRun = run;
+    run.clock = setTimeout(function () {
+      if (activeRun === run && !run.cancelled) showUnreachable();
+    }, UNREACHABLE_AFTER_MS);
+    return checkStored(run, 0).then(function (handled) {
+      finishRun(run);
+      return handled;
+    });
   }
 
-  function checkStored(stored, attempt) {
+  /** Beendet die Prüfung: Frist und Hinweis weg. */
+  function finishRun(run) {
+    clearTimeout(run.clock);
+    if (activeRun === run) {
+      activeRun = null;
+      hideUnreachable();
+    }
+  }
+
+  function showUnreachable() {
+    el.unreachable.hidden = false;
+    core.announce(text("unreachableHint"));
+  }
+
+  function hideUnreachable() {
+    el.unreachable.hidden = true;
+  }
+
+  function checkStored(run, attempt) {
+    if (run.cancelled) return Promise.resolve(true);
+    var stored = run.stored;
     return core.api("GET", "/api/v1/me", stored.token).then(
       function (result) {
+        if (run.cancelled) return true;
         var status = result.status;
-        if (status === 200 && !result.unreadable && result.data && result.data.spaceId === stored.spaceId) {
-          openStored(stored, result.data);
-          return true;
+        var data = result.data;
+        if (status === 200 && !result.unreadable && data && typeof data.spaceId === "string") {
+          if (data.spaceId === stored.spaceId) {
+            openStored(stored, data);
+            return true;
+          }
+          // Ein anderer Space ist eindeutig und kein vorübergehender Fehler. Die Sitzung geht, die Seite zeigt den Beitritt.
+          core.forgetSession(stored.spaceId);
+          return false;
         }
         if (status === 410) {
           endedFromStored(stored);
@@ -105,32 +148,57 @@
           core.forgetSession(stored.spaceId);
           return false;
         }
-        if (status === 429 || status >= 500 || (status === 200 && result.unreadable)) {
-          return retryStored(stored, attempt, "connecting");
+        if (status === 429 || status >= 500 || status === 200) {
+          // Auch ein 200 ohne lesbare Space-ID ist vorübergehend: Die Antwort ist unbrauchbar, die Sitzung bleibt.
+          return retryStored(run, attempt, "connecting");
         }
         if (status === 403) {
           // Der Server lehnt Ort oder Adresse ab (falsches WLAN, andere Adresse). Die Sitzung bleibt.
-          return retryStored(stored, attempt, "network");
+          return retryStored(run, attempt, "network");
         }
-        // Alles andere ist unerwartet (etwa ein 200 für einen anderen Space). Die Sitzung bleibt, die Seite prüft weiter.
-        return retryStored(stored, attempt, "generic");
+        // Alles andere ist unerwartet. Die Sitzung bleibt, die Seite prüft weiter.
+        return retryStored(run, attempt, "generic");
       },
       function () {
-        return retryStored(stored, attempt, "connecting");
+        return retryStored(run, attempt, "connecting");
       }
     );
   }
 
   /** Zeigt den Grund in der Statuszeile (nur wenn er sich ändert) und prüft nach der Wartezeit erneut. */
-  function retryStored(stored, attempt, reason) {
+  function retryStored(run, attempt, reason) {
+    if (run.cancelled) return Promise.resolve(true);
     var message = reason === "network" ? text("network") : reason === "generic" ? text("genericError") : text("connecting");
     if (core.el.status.textContent !== message) core.setStatus(message);
     var delay = attempt < RESUME_BACKOFF_MS.length ? RESUME_BACKOFF_MS[attempt] : RESUME_STEADY_MS;
     return new Promise(function (resolve) {
       setTimeout(resolve, delay);
     }).then(function () {
-      return checkStored(stored, attempt + 1);
+      return checkStored(run, attempt + 1);
     });
+  }
+
+  /**
+   * „Neu beitreten“: verwirft nach Bestätigung nur die lokal gespeicherte Sitzung, ohne Serveraufruf. Danach zeigt die
+   * Seite den Beitritt (mit Einladung im Fragment) oder den QR-Hinweis.
+   */
+  function rejoin() {
+    var run = activeRun;
+    if (!run) return;
+    if (!window.confirm(text("rejoinConfirm"))) return;
+    if (activeRun !== run) return;
+    run.cancelled = true;
+    finishRun(run);
+    core.forgetSession(run.stored.spaceId);
+    core.setStatus("");
+    if (invite) {
+      core.showSection("join");
+      el.name.focus();
+      previewInvite();
+    } else {
+      core.showSection("none");
+      core.setStatus(text("noInvite"));
+    }
   }
 
   /**
@@ -229,6 +297,8 @@
     if (match) invite = match[1];
     // Das Geheimnis verlässt die Adresse sofort. Es bleibt nicht in Verlauf oder Lesezeichen (ADR 0018).
     if (fragment) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+
+    el.rejoinButton.addEventListener("click", rejoin);
 
     el.joinForm.addEventListener("submit", function (event) {
       event.preventDefault();
