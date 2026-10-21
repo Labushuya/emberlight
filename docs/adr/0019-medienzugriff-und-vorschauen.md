@@ -104,7 +104,7 @@ Der Vertrag oben bleibt unverändert. Dieser Nachtrag hält fest, wie die Seite 
 
 **Aufbau der Seite.** Drei Skripte ohne Build (`guest-core.js` mit dem gemeinsamen Kern, `guest-space.js` mit Raster, Detail, Abfrage und Ende, `guest.js` mit Beitritt und Einstieg). Einstieg ist `index.html`. Alle Texte per `textContent`, Attribute nur aus geprüften Werten. Medien-Adressen erkennt die Seite nur als relativen Pfad der Form `/api/v1/media/{id}/{route}?pid=…&exp=…&sig=…` erkennen; sonst gelten sie als fehlend.
 
-**Vorschau und Platzhalter.** Ein Bild zeigt `previewUrl`, sobald `previewState` `ready` ist. Sonst zeigt die Seite bei Bildern (außer HEIC) das Original `viewUrl` mit `loading="lazy"`. Bei Video und HEIC bleibt es beim Platzhalter. Solange 3.5a-2 fehlt, sind `previewUrl` und `viewUrl` für Videos und HEIC `null`. Das ist der Zustand, den die Browser-Tests prüfen.
+**Vorschau und Platzhalter.** Ein Bild zeigt `previewUrl`, sobald `previewState` `ready` ist. Sonst zeigt die Seite bei Bildern (außer HEIC) das Original `viewUrl` mit `loading="lazy"`. Bei Video und HEIC bleibt es beim Platzhalter. Mit den Vorschauen aus 3.5a-2 zeigt die Seite Fotos über `previewUrl`, Videos und HEIC bleiben beim Platzhalter, solange der Renderer kein Bild liefert.
 
 **Erneuerung der Adressen.** Die Seite rechnet die Gültigkeit lokal ab dem Abruf (`urlsExpireInSeconds`, Video 30 Minuten). Kurz vor Ablauf holt sie den Eintrag über `GET /api/v1/media/{id}` neu. Die Video-Adresse wird still getauscht, die Wiedergabe setzt an `currentTime` fort. Schlägt die Wiedergabe fehl, versucht die Seite es einmal mit neuer Adresse und zeigt danach „Nur Download“. Der Browser meldet bei einem HTTP-Fehler am Medienelement nur „nicht unterstützt“. Darum wird ein Fehler immer zuerst als Erneuerung behandelt, nicht sofort als fehlendes Format.
 
@@ -118,7 +118,9 @@ Der Vertrag oben bleibt unverändert. Dieser Nachtrag hält fest, wie die Seite 
 
 **Browser-Tests.** Node 22 oder neuer, ohne npm-Abhängigkeiten. Node steuert Chrome headless per CDP. Chrome startet mit `--headless=new`, `--remote-debugging-port=0` und einem eigenen Profil im Temp-Ordner. Der JVM-Test `GuestBrowserTest` startet den echten Server auf 127.0.0.1 (CIO, feste Host-Prüfung), legt Space, Gäste und Medien über die Schnittstelle an und übergibt Port, Einladung und Sitzung an Node. Braucht ein Fall eine Änderung am Server (Ende, Abschalten), meldet Node es über stderr (`EMBERLIGHT-CONTROL <name>`). Der JVM-Test führt die Aktion aus und antwortet auf stdin mit `ok`. Probleme der Seite (JavaScript-Fehler, CSP-Verstöße) sind Testfehler. Fehlen Node oder Chrome, werden die Tests übersprungen. Mit `CI=true` schlagen sie fehl. CI richtet Node 24 über die Composite-Action `browser-test-tools` ein. Das Video-Fixture `clip.mp4` entstand einmalig in Chrome über `MediaRecorder` (Skript `fixtures/make-clip.mjs`), weil auf dem Entwicklungsrechner kein ffmpeg liegt.
 
-**Offen.** Die Gerätetests (Handy und PC) stehen im Testkatalog. Nach 3.5a-2 prüft der Browser-Test die echten Vorschauen. Der Platzhalter-Fall für Video und HEIC ändert sich dann.
+**Vorschauen in den Browser-Tests.** Die Galerie-Szenarien laufen mit Vorschauen aus 3.5a-2. Ein Foto bekommt eine Vorschau (`previewState` `ready`, Adresse `…/preview?…`), ein Video ohne Frame bleibt `failed` und zeigt den Platzhalter. Die Erwartungen leitet der Test aus der API ab. Der Vorschau-Renderer der Tests ist die JDK (`ImageIO`), weil der Android-Dekodierer unter Robolectric nicht zuverlässig läuft. Die Vorschau mit dem Android-Dekodierer am Gerät prüft der Testkatalog (6.16 bis 6.20).
+
+**Offen.** Die Gerätetests (Handy und PC) stehen im Testkatalog.
 
 ## Offen
 

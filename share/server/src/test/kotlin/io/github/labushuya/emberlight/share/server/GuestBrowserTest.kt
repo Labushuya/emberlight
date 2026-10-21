@@ -48,11 +48,20 @@ class GuestBrowserTest {
             val jonas = scene.join("Jonas")
             val omar = scene.join("Omar")
             val ben = scene.join("Ben")
-            scene.upload(lena.token, "lena.jpg", BrowserScene.jpeg(0x3366CC))
-            scene.upload(jonas.token, "jonas.jpg", BrowserScene.jpeg(0xCC6633))
-            scene.upload(jonas.token, "jonas.mp4", BrowserScene.clip())
-            scene.upload(omar.token, "omar.heic", MediaFixtures.unremovableHeic(), keepLocation = true)
-            scene.upload(ben.token, "ben.jpg", BrowserScene.jpeg(0x339966))
+            val uploads =
+                listOf(
+                    scene.upload(lena.token, "lena.jpg", BrowserScene.jpeg(0x3366CC)),
+                    scene.upload(jonas.token, "jonas.jpg", BrowserScene.jpeg(0xCC6633)),
+                    scene.upload(jonas.token, "jonas.mp4", BrowserScene.clip()),
+                    scene.upload(omar.token, "omar.heic", MediaFixtures.unremovableHeic(), keepLocation = true),
+                    scene.upload(ben.token, "ben.jpg", BrowserScene.jpeg(0x339966)),
+                )
+            // Mit Vorschauen wie im Betrieb. Ob eine Vorschau gelingt, entscheidet der Renderer. Der Browser-Test
+            // richtet seine Erwartungen danach aus der API aus (gallery.test.mjs).
+            val previews = scene.renderPreviews(uploads)
+            // Das Foto aus dem Raster muss eine Vorschau bekommen. Sonst prüft der Test nur die Platzhalter.
+            assertEquals("Vorschau des Fotos", "READY", previews.getValue(uploads.first()))
+            assertEquals("Vorschau des Videos ohne Frame", "FAILED", previews.getValue(uploads[2]))
             scene.removeGuest(ben.id)
             mapOf(
                 "session" to session(scene, jonas),

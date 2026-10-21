@@ -16,7 +16,7 @@ const clickTile = (caption, kind) =>
   `(() => {
     const cell = [...document.querySelectorAll('#grid .cell')].find((node) =>
       node.querySelector('.caption').textContent === ${JSON.stringify(caption)} &&
-      ${kind === "image" ? "node.querySelector('img')" : "node.querySelector('.placeholder')"});
+      ${kind === "image" ? "node.querySelector('img')" : "node.querySelector('.badge.vid')"});
     if (!cell) return false;
     cell.querySelector('button.tile').click();
     return true;
@@ -48,11 +48,29 @@ async function galleryChecks(page, width) {
     assert.ok(names.includes(expected), `Beschriftung fehlt: ${expected} in ${JSON.stringify(names)}`);
   }
   assert.equal(await page.eval("document.querySelectorAll('.badge.loc').length"), 1, "Kennzeichen Standort");
-  assert.equal(await page.eval("document.querySelectorAll('.placeholder').length"), 2, "Platzhalter für Video und HEIC");
+
+  // Was das Raster zeigt, richtet sich nach der API: Eine Vorschau (previewState ready) erscheint als Bild mit ihrer
+  // Adresse. Bilder ohne Vorschau zeigen das Original (lazy). Alles andere ist ein Platzhalter.
+  const list = await apiGet(config, "/api/v1/media?limit=100", session.token);
+  const items = list.body.items;
+  const hasPreview = (item) => item.previewUrl !== null && item.previewState === "ready";
+  const isImage = (item) => item.type.startsWith("image/") && !item.type.endsWith("heic") && !item.type.endsWith("heif");
+  const showsOriginal = (item) => !hasPreview(item) && isImage(item) && item.viewUrl !== null;
+  const expectedImages = items.filter((item) => hasPreview(item) || showsOriginal(item)).length;
+  assert.equal(
+    await page.eval("document.querySelectorAll('.placeholder').length"),
+    items.length - expectedImages,
+    "Platzhalter entsprechen der API",
+  );
+  assert.equal(
+    await page.eval("document.querySelectorAll('img.thumb[src*=\"/preview?\"]').length"),
+    items.filter(hasPreview).length,
+    "Vorschaubilder entsprechen der API",
+  );
 
   // Die Bilder laden über die signierten Adressen, echte Bilder haben eine Breite.
   await page.waitFor(
-    "[...document.querySelectorAll('img.thumb')].length === 3 && [...document.querySelectorAll('img.thumb')].every((img) => img.complete && img.naturalWidth > 0)",
+    "document.querySelectorAll('img.thumb').length === " + expectedImages + " && [...document.querySelectorAll('img.thumb')].every((img) => img.complete && img.naturalWidth > 0)",
     { what: "geladene Vorschaubilder" },
   );
 
@@ -95,7 +113,7 @@ async function detailChecks(page) {
   await page.waitFor("!document.getElementById('list-view').hidden", { what: "Zurück zur Liste" });
 
   // Video: Wiedergabe über die Stream-Adresse, Metadaten geladen.
-  assert.equal(await page.eval(clickTile("von dir", "placeholder")), true);
+  assert.equal(await page.eval(clickTile("von dir", "video")), true);
   await page.waitFor("!document.getElementById('viewer-video').hidden", { what: "Videoansicht" });
   await page.waitFor("document.getElementById('viewer-video').readyState >= 1", { what: "Videometadaten", timeout: 30000 });
   assert.match(await page.eval("document.getElementById('viewer-video').getAttribute('src')"), /\/stream\?pid=/);

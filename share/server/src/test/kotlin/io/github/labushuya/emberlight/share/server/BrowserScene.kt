@@ -2,6 +2,7 @@ package io.github.labushuya.emberlight.share.server
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import io.github.labushuya.emberlight.share.space.MediaId
 import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
@@ -12,6 +13,7 @@ import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.github.labushuya.emberlight.share.space.participants.InviteState
 import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
 import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
+import io.github.labushuya.emberlight.share.space.preview.PreviewRenderer
 import kotlinx.coroutines.runBlocking
 import java.awt.Color
 import java.awt.image.BufferedImage
@@ -47,6 +49,7 @@ internal class BrowserScene(
             limits,
             StorageProbe { Long.MAX_VALUE / 4 },
             InviteSecretCipherFake(),
+            previewRenderer = ImageIoPreviewRenderer(),
         )
     val gates = ServerGates()
     val closure = FlagClosure()
@@ -169,6 +172,13 @@ internal class BrowserScene(
         }
     }
 
+    /** Erzeugt die Vorschauen der Medien, wie der Hintergrunddienst es täte (ADR 0019, Paket 3.5a-2). */
+    fun renderPreviews(ids: List<String>): Map<String, String?> =
+        runBlocking {
+            ids.forEach { vault.renderPreviews(MediaId(it)) }
+            ids.associateWith { vault.entry(MediaId(it))?.previewState }
+        }
+
     /** Markiert den Space als beendet. Der nächste Aufruf eines Gastes bekommt `410`. */
     fun markClosed() = closure.markClosed()
 
@@ -223,4 +233,38 @@ internal class FlagClosure : SpaceClosure {
     override fun isClosed(): Boolean = closed.get()
 
     override fun onClosedRequest() {}
+}
+
+/**
+ * Vorschauen mit der JDK (ImageIO), damit die Browser-Tests echte Vorschau-Bilder sehen. Der Android-Dekodierer läuft unter
+ * Robolectric nicht zuverlässig. Bilder werden auf die lange Kante verkleinert. Videobilder und HEIC gelten als nicht
+ * erzeugbar, dort zeigt die Seite den Platzhalter.
+ */
+internal class ImageIoPreviewRenderer : PreviewRenderer {
+    override fun renderImage(
+        source: File,
+        mime: String,
+        longEdge: Int,
+        target: File,
+    ): Boolean {
+        if (mime != "image/jpeg" && mime != "image/png") return false
+        val original = ImageIO.read(source) ?: return false
+        val scale = minOf(1.0, longEdge.toDouble() / maxOf(original.width, original.height))
+        val width = (original.width * scale).toInt().coerceAtLeast(1)
+        val height = (original.height * scale).toInt().coerceAtLeast(1)
+        val scaled = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        scaled.createGraphics().apply {
+            drawImage(original, 0, 0, width, height, null)
+            dispose()
+        }
+        return ImageIO.write(scaled, "jpg", target)
+    }
+
+    override fun renderVideoFrame(
+        source: File,
+        longEdge: Int,
+        target: File,
+    ): Boolean = false
+
+    override fun videoCodec(source: File): String? = null
 }
