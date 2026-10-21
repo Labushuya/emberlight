@@ -4,11 +4,7 @@ import android.Manifest
 import android.app.AlarmManager
 import android.content.Context
 import android.os.Build
-import android.util.Log
 import androidx.test.core.app.ApplicationProvider
-import androidx.work.Configuration
-import androidx.work.testing.SynchronousExecutor
-import androidx.work.testing.WorkManagerTestInitHelper
 import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
@@ -57,14 +53,6 @@ class RetentionRemindersTest {
 
     @Before
     fun setUp() {
-        WorkManagerTestInitHelper.initializeTestWorkManager(
-            context,
-            Configuration
-                .Builder()
-                .setMinimumLoggingLevel(Log.DEBUG)
-                .setExecutor(SynchronousExecutor())
-                .build(),
-        )
         spacesDir = folder.newFolder("spaces")
         database = SpacesDatabase.open(context, spacesDir)
         repository = RetentionRepository(database, SpacePurge(database, SpaceCoverStore(spacesDir)) {})

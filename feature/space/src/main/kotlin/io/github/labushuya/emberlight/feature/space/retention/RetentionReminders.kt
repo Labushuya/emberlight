@@ -36,13 +36,12 @@ class RetentionReminders
         private val checkLock = Mutex()
 
         /**
-         * Start der App: unterbrochene Löschungen fortsetzen, fällige Löschungen ausführen, verpasste Erinnerungen nachholen,
-         * den Wecker neu setzen und den periodischen Lauf einplanen.
+         * Start der App: unterbrochene Löschungen fortsetzen, fällige Löschungen ausführen, verpasste Erinnerungen nachholen
+         * und den Wecker neu setzen. Der periodische Lauf wird beim Start des Prozesses eingeplant (siehe [RetentionWork]).
          */
         suspend fun startupCatchUp() {
             repository.resumePurges()
             checkNow(System.currentTimeMillis())
-            RetentionWork.schedule(context)
         }
 
         /**
