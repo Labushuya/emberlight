@@ -202,3 +202,20 @@ Dieser Nachtrag hält fest, wie 3.5c die Entscheidungen oben nutzt. Die Schnitts
 - Verlässt der Gastgeber den Bildschirm, endet die Reihe (das ViewModel endet). Die laufende Datei wird verworfen, schon gespeicherte Dateien bleiben. Ein Hintergrund-Upload gibt es nicht.
 - Der Galerie-Viewer wird nicht wiederverwendet. Die Extraktion nach `core:viewer` bleibt offen.
 - Gerätetests (Fotoauswahl, Fortschritt, Abbrechen, Standort, Video, Zoom, Entfernen) stehen im Testkatalog, Abschnitt 8.
+
+## Nachtrag Hotfix v0.3.0-alpha.1 (21.10.2026): Teilnehmer und Uploader live im Gastgeber-Pfad
+
+**Anlass.** Im Endtest des Vorab-Releases `v0.3.0-alpha.1` blieb die Teilnehmerzahl auf dem Gastgeber-Gerät bei 0, obwohl zwei Gäste im Browser beigetreten waren. Im Medienraster stand bei einem Upload nur „von “ ohne Namen.
+
+**Befund.**
+- Eine Datenbank je Prozess ist gegeben. Hilt (`SpacesModule.provideSpacesDatabase`), der Dienst (`SpaceRunRepository` in `SpaceServerService`) und die Vault (`SpaceVaults.shared`) nutzen `SpacesDatabase.shared`. Im Produktionscode gibt es keinen zweiten Aufbau von `spaces.db`, und das Manifest kennt keinen eigenen Prozess für den Server. Die Hypothese „zwei Instanzen“ trifft also nicht zu.
+- Ursache für die Teilnehmerliste: `SpaceRunningViewModel` lud die Teilnehmer nur neu, wenn `SpaceHostActions.changes()` feuerte. Das geschah beim Entfernen und Erneuern der Einladung, nicht beim Beitritt. Der Stand vom Start blieb stehen. Die Liste kommt jetzt als Room-Flow aus dem Index (`ParticipantDao.observeActiveOf`, `SpaceRunRepository.observeParticipants`). Die Einladung folgt weiter `changes()`.
+- Das Medienraster bezog die Teilnehmer ebenfalls aus einem Snapshot (`SpaceHostActions.participants`). Es liest jetzt denselben Flow wie die Liste, die „Meine“-Zuordnung eingeschlossen. Der Uploader-Name kommt wie vorher aus dem LEFT JOIN auf `participant` (`SpacesDatabase.kt`, `MediaDao.observeFirstPage`). Das Raster und das Detail lesen dasselbe Feld.
+- Beim „von “ ohne Namen konnte kein Pfad im Test reproduziert werden: Der Upload über die Vault mit laufender Ansicht zeigt „Anna“. Ob auf dem Gerät ein leerer Name vorlag, ist ungeklärt. Als Absicherung zählt ein leerer Name jetzt als unbekannt („Unbekannt“ statt „von “). Der Gerätetest bleibt offen.
+
+**Absicherung.**
+- `HostLiveUpdatesTest` (feature:space): Ein Gast tritt über die Vault bei, während die Laufansicht offen ist. Der Test war vor dem Fix rot (Liste blieb bei 1). Dazu zwei Fälle zum Medienraster, mit Beitritt und Upload über die Vault.
+- `SingleDatabaseInstanceTest` (share:space): Architekturprüfung. Außerhalb von `SpacesDatabase.shared` darf im Produktionsquelltext kein `SpacesDatabase.open(` und kein `databaseBuilder(` stehen.
+- `GuestBrowserTest.uploadInTheBrowserWithProgressQueueDuplicateRejectionAndLocation`: Nach dem Browser-Lauf prüft der Fall über `BrowserScene.hostRepository()` (App-Repository auf derselben Datenbank wie der Server), dass „Lena“ und „Omar“ als Teilnehmer stehen und als Uploader im Raster erscheinen.
+
+**Offen.** Das „von “ ohne Namen am Gerät ist nicht erklärt. Die Prüfung dafür ist ein Gerätetest mit einem Beitritt und Upload bei laufender Ansicht.

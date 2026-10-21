@@ -1,12 +1,15 @@
 package io.github.labushuya.emberlight.share.server
 
 import io.github.labushuya.emberlight.share.space.SpaceLimits
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assume
 import org.junit.Rule
 import org.junit.Test
@@ -114,7 +117,13 @@ class GuestBrowserTest {
     @Test
     fun uploadInTheBrowserWithProgressQueueDuplicateRejectionAndLocation() {
         val files = folder.newFolder("upload-files")
-        runScenario(file = "upload.test.mjs", spaceName = SPACE_NAME, endsInSeconds = null) { scene ->
+        // Nach dem Browser-Lauf prüft der Fall den Gastgeber-Pfad der App: Beitritte und Uploader-Namen erscheinen dort.
+        runScenario(
+            file = "upload.test.mjs",
+            spaceName = SPACE_NAME,
+            endsInSeconds = null,
+            verify = { scene -> assertHostSees(scene, "Lena", "Omar") },
+        ) { scene ->
             val lena = scene.join("Lena")
             val omar = scene.join("Omar")
             scene.primaryGuest = lena.id
@@ -213,12 +222,33 @@ class GuestBrowserTest {
             it[2] = 0xFF.toByte()
         }
 
+    /**
+     * Prüft nach dem Browser-Lauf den Gastgeber-Pfad der App (Repository auf derselben Datenbank wie der Server). Jeder
+     * genannte Name muss als aktiver Teilnehmer stehen und als Uploader eines Mediums erscheinen.
+     */
+    private fun assertHostSees(
+        scene: BrowserScene,
+        vararg names: String,
+    ) {
+        val repository = scene.hostRepository()
+        val participants = runBlocking { repository.observeParticipants(scene.spaceId).first() }.map { it.displayName }
+        val uploaders =
+            runBlocking {
+                repository.observeMedia(scene.spaceId, LIST_LIMIT).first()
+            }.mapNotNull { it.uploaderName }
+        names.forEach { name ->
+            assertTrue("Teilnehmer $name fehlt im Gastgeber-Pfad: $participants", name in participants)
+            assertTrue("Uploader $name fehlt im Gastgeber-Raster: $uploaders", name in uploaders)
+        }
+    }
+
     /** Ein Durchlauf: Space vorbereiten, Server starten, Node mit der Datei laufen lassen, Ergebnis prüfen. */
     private fun runScenario(
         file: String,
         spaceName: String,
         endsInSeconds: Long?,
         limits: SpaceLimits = SpaceLimits(),
+        verify: (BrowserScene) -> Unit = {},
         prepare: (BrowserScene) -> Map<String, JsonElement>,
     ) {
         val chrome = requireBrowserTools()
@@ -237,6 +267,7 @@ class GuestBrowserTest {
             val run = NodeBrowserRun(scene, chrome)
             val exitCode = run.execute(file, config)
             assertEquals("Browser-Test $file (Ausgabe unten)\n${run.output()}", 0, exitCode)
+            verify(scene)
         }
     }
 
@@ -256,6 +287,7 @@ class GuestBrowserTest {
 
     companion object {
         const val SPACE_NAME = "Sommerfest im Garten"
+        private const val LIST_LIMIT = 200
     }
 }
 

@@ -222,15 +222,10 @@ class ParticipantRoster internal constructor(
             Credential(row.tokenHash, ParticipantId(row.id), Role.valueOf(row.role))
         }
 
-    suspend fun active(): List<ParticipantInfo> =
-        dao.activeOf(spaceId.value).map {
-            ParticipantInfo(ParticipantId(it.id), it.displayName, Role.valueOf(it.role), it.createdAt)
-        }
+    suspend fun active(): List<ParticipantInfo> = dao.activeOf(spaceId.value).map { it.toInfo() }
 
     suspend fun find(id: ParticipantId): ParticipantInfo? =
-        dao.findById(id.value)?.takeIf { it.spaceId == spaceId.value && it.revokedAt == null }?.let {
-            ParticipantInfo(ParticipantId(it.id), it.displayName, Role.valueOf(it.role), it.createdAt)
-        }
+        dao.findById(id.value)?.takeIf { it.spaceId == spaceId.value && it.revokedAt == null }?.toInfo()
 
     companion object {
         /** Obergrenze aktiver Teilnehmer inklusive Gastgeber (ADR 0018, Grenzen). */
@@ -249,3 +244,7 @@ data class Credential(
     val participantId: ParticipantId,
     val role: Role,
 )
+
+/** Anzeige eines Teilnehmers aus dem Index. Ohne Token und ohne Hash. */
+internal fun ParticipantEntity.toInfo(): ParticipantInfo =
+    ParticipantInfo(ParticipantId(id), displayName, Role.valueOf(role), createdAt)

@@ -14,6 +14,8 @@ import io.github.labushuya.emberlight.share.space.participants.InviteState
 import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
 import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
 import io.github.labushuya.emberlight.share.space.preview.PreviewRenderer
+import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
+import io.github.labushuya.emberlight.share.space.run.SystemRunClock
 import kotlinx.coroutines.runBlocking
 import java.awt.Color
 import java.awt.image.BufferedImage
@@ -188,6 +190,12 @@ internal class BrowserScene(
         val current = access.endsAtMillis ?: System.currentTimeMillis()
         access.extendEnd(current + millis)
     }
+
+    /**
+     * Der Gastgeber-Pfad der App: dasselbe Repository wie die Oberfläche, auf derselben Datenbank wie der Server
+     * (ADR 0016). Damit prüft ein Browser-Fall, was der Gastgeber nach Beitritt und Upload tatsächlich sieht.
+     */
+    fun hostRepository(): SpaceRunRepository = SpaceRunRepository(database, SystemRunClock)
 
     /** Gast, dessen Upload-Plätze die Steuerung der Browser-Tests belegt. */
     var primaryGuest: ParticipantId? = null
