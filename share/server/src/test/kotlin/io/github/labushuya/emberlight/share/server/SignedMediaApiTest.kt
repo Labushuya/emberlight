@@ -27,8 +27,12 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -101,7 +105,7 @@ class SignedMediaApiTest {
                 Credential(Secrets.hashHex(HOST_TOKEN), host.participantId, host.role),
                 Credential(Secrets.hashHex(GUEST_TOKEN), guest.participantId, guest.role),
             )
-        access = testAccess(vault, spaceId, credentials, "Test-Space", mediaSigner = signer)
+        access = testAccess(vault, spaceId, credentials, "Test-Space", mediaSigner = signer, limits = limits)
         val env =
             ServerEnvironment(
                 authorizer = access.live,
@@ -324,6 +328,87 @@ class SignedMediaApiTest {
             assertFalse(joined.contains(grant.signature))
             assertFalse(joined.contains("sig="))
             assertFalse(joined.contains("pid="))
+        }
+
+    @Test
+    fun listItemsCarrySignedUrlsAndMineFlagThatWorkForTheRequester() =
+        testApplication {
+            install()
+            client.upload(MediaFixtures.jpeg(300), "bild.jpg")
+            client.upload(MediaFixtures.mp4(), "clip.mp4")
+
+            val list =
+                client.get("/api/v1/media") {
+                    header(HttpHeaders.Host, "localhost")
+                    header(HttpHeaders.Authorization, "Bearer $GUEST_TOKEN")
+                }
+            assertEquals(HttpStatusCode.OK, list.status)
+            val items = Json.parseToJsonElement(list.bodyAsText()).jsonObject.getValue("items").jsonArray
+            assertEquals(2, items.size)
+            val video = items.map { it.jsonObject }.single { it.getValue("type").jsonPrimitive.content == "video/mp4" }
+            val image = items.map { it.jsonObject }.single { it.getValue("type").jsonPrimitive.content == "image/jpeg" }
+            assertTrue(video.getValue("mine").jsonPrimitive.boolean)
+            assertEquals(600L, video.getValue("urlsExpireInSeconds").jsonPrimitive.long)
+            assertTrue(video.containsKey("streamUrl"))
+            assertFalse(image.containsKey("streamUrl"))
+            // Die Adresse aus der Liste funktioniert ohne Authorization.
+            val viewPath = image.getValue("viewUrl").jsonPrimitive.content
+            assertEquals(HttpStatusCode.OK, client.signedGet(viewPath).status)
+            assertEquals(HttpStatusCode.OK, client.signedGet(video.getValue("streamUrl").jsonPrimitive.content).status)
+        }
+
+    @Test
+    fun mineIsFalseForTheHostForAGuestsUpload() =
+        testApplication {
+            install()
+            client.upload(MediaFixtures.jpeg(300), "bild.jpg")
+
+            val list =
+                client.get("/api/v1/media") {
+                    header(HttpHeaders.Host, "localhost")
+                    header(HttpHeaders.Authorization, "Bearer $HOST_TOKEN")
+                }
+            val item = Json.parseToJsonElement(list.bodyAsText()).jsonObject.getValue("items").jsonArray.single().jsonObject
+            assertFalse(item.getValue("mine").jsonPrimitive.boolean)
+        }
+
+    @Test
+    fun singleItemRouteNeedsTheHeaderAndAnswersNotFoundForUnknownIds() =
+        testApplication {
+            install()
+            val id = client.upload(MediaFixtures.jpeg(300), "bild.jpg")
+
+            val without = client.signedGet("/api/v1/media/$id")
+            assertEquals(HttpStatusCode.Unauthorized, without.status)
+
+            val with = client.signedGet("/api/v1/media/$id", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN")
+            assertEquals(HttpStatusCode.OK, with.status)
+            assertEquals(id, Json.parseToJsonElement(with.bodyAsText()).jsonObject.getValue("id").jsonPrimitive.content)
+
+            val unknown =
+                client.signedGet("/api/v1/media/mediaZZZZZZZZZZZZZZZZZZZZ", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN")
+            assertEquals(HttpStatusCode.NotFound, unknown.status)
+        }
+
+    @Test
+    fun spaceInfoCarriesRevisionLimitsAndNoEndWithoutOne() =
+        testApplication {
+            install()
+            val before = Json.parseToJsonElement(
+                client.signedGet("/api/v1/space", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN").bodyAsText(),
+            ).jsonObject
+            client.upload(MediaFixtures.jpeg(300), "bild.jpg")
+
+            val after =
+                client.signedGet("/api/v1/space", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN").bodyAsText().let {
+                    Json.parseToJsonElement(it).jsonObject
+                }
+            assertTrue(after.getValue("revision").jsonPrimitive.long > before.getValue("revision").jsonPrimitive.long)
+            assertEquals(JsonNull, after.getValue("remainingSeconds"))
+            assertEquals(JsonNull, after.getValue("endsAt"))
+            val limits = after.getValue("limits").jsonObject
+            assertEquals(2_000L, limits.getValue("imageMaxBytes").jsonPrimitive.long)
+            assertEquals(6_000L, limits.getValue("videoMaxBytes").jsonPrimitive.long)
         }
 
     private suspend fun HttpResponse.bodyAsBytesSize(): Int = bodyAsBytes().size

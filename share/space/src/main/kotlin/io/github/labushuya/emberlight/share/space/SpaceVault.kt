@@ -47,6 +47,8 @@ data class MediaListEntry(
     val locationKept: Boolean = false,
     /** `true`, wenn der Uploader entfernt wurde. Die Anzeige nennt das (ADR 0018). */
     val uploaderRemoved: Boolean = false,
+    /** Uploader-ID, damit die Oberfläche „Meine“ bestimmen kann (ADR 0019). `null` nur bei unlesbaren Altdaten. */
+    val uploaderId: ParticipantId? = null,
 )
 
 data class MediaPage(
@@ -266,6 +268,7 @@ class SpaceVault internal constructor(
                     it.uploaderName,
                     it.locationKept,
                     it.uploaderRevoked,
+                    ParticipantId.parse(it.uploaderId),
                 )
             }
         val next =
@@ -279,6 +282,21 @@ class SpaceVault internal constructor(
 
     /** Medium mit dem Datensatz, sofern es bereit ist. */
     suspend fun find(id: MediaId): MediaRecord? = readyRecord(id)
+
+    /** Eintrag der Medienliste für ein bereites Medium, `null` wenn es fehlt (ADR 0019, `GET /media/{id}`). */
+    suspend fun entry(id: MediaId): MediaListEntry? {
+        val row = media.findRow(storage.spaceId.value, id.value) ?: return null
+        return MediaListEntry(
+            MediaId(row.id),
+            row.mime,
+            row.sizeBytes,
+            row.createdAt,
+            row.uploaderName,
+            row.locationKept,
+            row.uploaderRevoked,
+            ParticipantId.parse(row.uploaderId),
+        )
+    }
 
     /** Datei für die Auslieferung. `null`, wenn das Medium fehlt oder die Datei nicht mehr da ist. */
     suspend fun contentOf(id: MediaId): ContentFile? {

@@ -28,6 +28,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.utils.io.readBuffer
+import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -94,6 +95,17 @@ fun spaceRoutes(
                             "storageLimitBytes" to JsonPrimitive(usage.limitBytes),
                             "usedBytes" to JsonPrimitive(usage.usedBytes),
                             "warning" to JsonPrimitive(usage.warning),
+                            "remainingSeconds" to (access.remainingSeconds()?.let { JsonPrimitive(it) } ?: JsonNull),
+                            "endsAt" to
+                                (access.endsAtMillis?.let { JsonPrimitive(Instant.ofEpochMilli(it).toString()) } ?: JsonNull),
+                            "revision" to JsonPrimitive(access.revision),
+                            "limits" to
+                                JsonObject(
+                                    mapOf(
+                                        "imageMaxBytes" to JsonPrimitive(access.limits.imageMaxBytes),
+                                        "videoMaxBytes" to JsonPrimitive(access.limits.videoMaxBytes),
+                                    ),
+                                ),
                         ),
                     ),
                 )
@@ -206,7 +218,7 @@ fun spaceRoutes(
                     HttpStatusCode.OK,
                     JsonObject(
                         mapOf(
-                            "items" to JsonArray(page.items.map(::listItemJson)),
+                            "items" to JsonArray(page.items.map { access.mediaItemJson(it, call.principal()) }),
                             "nextCursor" to (page.nextCursor?.encode()?.let { JsonPrimitive(it) } ?: JsonNull),
                         ),
                     ),
@@ -226,6 +238,16 @@ fun spaceRoutes(
                 } finally {
                     gates.leaveUpload(principal.participantId)
                 }
+            }
+
+            get("/media/{id}") {
+                call.routeTemplate("/api/v1/media/{id}")
+                val entry = MediaId.parse(call.parameters["id"].orEmpty())?.let { access.vault.entry(it) }
+                if (entry == null) {
+                    call.respondError(HttpStatusCode.NotFound, "not_found")
+                    return@get
+                }
+                call.respondJson(HttpStatusCode.OK, access.mediaItemJson(entry, call.principal()))
             }
 
             get("/media/{id}/content") {
@@ -253,7 +275,10 @@ fun spaceRoutes(
                     return@delete
                 }
                 when (vault.delete(call.principal(), id)) {
-                    DeleteOutcome.Deleted -> call.respond(HttpStatusCode.NoContent)
+                    DeleteOutcome.Deleted -> {
+                        access.bumpRevision()
+                        call.respond(HttpStatusCode.NoContent)
+                    }
                     DeleteOutcome.NotFound -> call.respondError(HttpStatusCode.NotFound, "not_found")
                     DeleteOutcome.Forbidden -> call.respondError(HttpStatusCode.Forbidden, "forbidden")
                 }
@@ -445,6 +470,7 @@ private suspend fun ApplicationCall.runUpload(
                 work.cancel(CancellationException("Entfernt."))
             }
             work.await()
+            access.bumpRevision()
         } catch (cancelled: CancellationException) {
             if (!currentCoroutineContext().isActive) throw cancelled
             refuseEarly(HttpStatusCode.Unauthorized, "unauthorized")
@@ -569,18 +595,47 @@ private suspend fun ApplicationCall.respondRejected(reason: RejectReason) {
     }
 }
 
-private fun listItemJson(entry: MediaListEntry): JsonElement =
-    JsonObject(
+/**
+ * Eintrag der Medienliste für einen Teilnehmer (ADR 0019). Enthält signierte, kurzlebige Adressen für Ansicht und Download,
+ * bei Videos zusätzlich für den Stream. `mine` ist `true` für die eigenen Uploads. Die Adressen sind pro Teilnehmer.
+ */
+private fun SpaceAccess.mediaItemJson(
+    entry: MediaListEntry,
+    who: Principal,
+): JsonObject {
+    val id = entry.id.value
+    val urls = linkedMapOf<String, JsonElement>()
+    urls["viewUrl"] = JsonPrimitive(signedMediaPath(id, "view", MediaPurpose.VIEW, who.participantId))
+    urls["downloadUrl"] = JsonPrimitive(signedMediaPath(id, "content", MediaPurpose.DOWNLOAD, who.participantId))
+    if (entry.mime.startsWith("video/")) {
+        urls["streamUrl"] = JsonPrimitive(signedMediaPath(id, "stream", MediaPurpose.STREAM, who.participantId))
+    }
+    return JsonObject(
         mapOf(
-            "id" to JsonPrimitive(entry.id.value),
+            "id" to JsonPrimitive(id),
             "uploader" to (entry.uploaderName?.let { JsonPrimitive(it) } ?: JsonNull),
             "uploaderRemoved" to JsonPrimitive(entry.uploaderRemoved),
+            "mine" to JsonPrimitive(entry.uploaderId == who.participantId),
             "type" to JsonPrimitive(entry.mime),
             "size" to JsonPrimitive(entry.sizeBytes),
             "createdAt" to JsonPrimitive(entry.createdAt),
             "locationKept" to JsonPrimitive(entry.locationKept),
-        ),
+            // Die kürzeste Gültigkeit der Adressen. Die Stream-Adresse lebt länger (ADR 0019).
+            "urlsExpireInSeconds" to JsonPrimitive(MediaPurpose.VIEW.ttlSeconds),
+        ) + urls,
     )
+}
+
+/** Relativer Pfad mit Signatur für [purpose]: `pid`, `exp` und `sig` in der Abfrage (ADR 0019). */
+private fun SpaceAccess.signedMediaPath(
+    mediaId: String,
+    route: String,
+    purpose: MediaPurpose,
+    participant: ParticipantId,
+): String {
+    val grant = mediaSigner.grant(mediaId, purpose, participant)
+    return "/api/v1/media/$mediaId/$route?pid=${participant.value}&exp=${grant.expiresAt}&sig=${grant.signature}"
+}
 
 private fun participantJson(
     info: ParticipantInfo,
