@@ -51,6 +51,8 @@
   "altVideo": "Video {caption}",
   "placeholderPhoto": "Photo, preview to follow",
   "placeholderVideo": "Video, preview to follow",
+  "placeholderPhotoFailed": "Photo, no preview",
+  "placeholderVideoFailed": "Video, no preview",
   "previewFollows": "Preview to follow.",
   "previewUnavailable": "Preview not available – download instead",
   "videoUnsupported": "This browser cannot play this video. Download is the only option.",

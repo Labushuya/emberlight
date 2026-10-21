@@ -37,7 +37,7 @@ async function checkLayout(page, { tapTargets }) {
 
 async function galleryChecks(page, width) {
   await openSpace(page, config, session);
-  await page.waitFor(`document.querySelectorAll('#grid .tile').length === ${config.expect.total}`, {
+  await page.waitFor(`document.querySelectorAll('#grid .cell:not([hidden]) .tile').length === ${config.expect.total}`, {
     what: "fünf Kacheln",
   });
 
@@ -64,16 +64,17 @@ async function galleryChecks(page, width) {
     0,
     "Im Raster kein Original",
   );
+
+  // Die Bilder laden über die signierten Adressen, sobald sie in Sichtnähe sind (Warteschlange, Paket 3.5a-4). Echte
+  // Bilder haben danach eine Breite.
+  await page.waitFor(
+    `document.querySelectorAll('img.thumb').length === ${items.filter(hasPreview).length} && [...document.querySelectorAll('img.thumb')].every((img) => img.complete && img.naturalWidth > 0)`,
+    { what: "geladene Vorschaubilder" },
+  );
   assert.equal(
     await page.eval("document.querySelectorAll('img.thumb[src*=\"/preview?\"]').length"),
     items.filter(hasPreview).length,
     "Vorschaubilder entsprechen der API",
-  );
-
-  // Die Bilder laden über die signierten Adressen, echte Bilder haben eine Breite.
-  await page.waitFor(
-    "document.querySelectorAll('img.thumb').length === " + expectedImages + " && [...document.querySelectorAll('img.thumb')].every((img) => img.complete && img.naturalWidth > 0)",
-    { what: "geladene Vorschaubilder" },
   );
 
   // Restzeit sichtbar, Speicher mit Anzeige.
@@ -84,11 +85,11 @@ async function galleryChecks(page, width) {
 
   // Filter „Meine“ und zurück.
   await page.eval("document.getElementById('filter-mine').click()");
-  await page.waitFor(`document.querySelectorAll('#grid .tile').length === ${config.expect.mine}`, { what: "Filter Meine" });
+  await page.waitFor(`document.querySelectorAll('#grid .cell:not([hidden]) .tile').length === ${config.expect.mine}`, { what: "Filter Meine" });
   assert.equal(await page.eval("document.getElementById('filter-mine').getAttribute('aria-pressed')"), "true");
   assert.ok((await captions(page)).every((name) => name === "von dir"), "Filter Meine zeigt Fremdes");
   await page.eval("document.getElementById('filter-all').click()");
-  await page.waitFor(`document.querySelectorAll('#grid .tile').length === ${config.expect.total}`, { what: "Filter Alle" });
+  await page.waitFor(`document.querySelectorAll('#grid .cell:not([hidden]) .tile').length === ${config.expect.total}`, { what: "Filter Alle" });
   expectNoProblems(page, `Galerie ${width}`);
 }
 
@@ -167,7 +168,7 @@ test("Galerie am PC: Raster, Detail und Zurückziehen mit Bestätigung", async (
     await page.waitFor("!document.getElementById('list-view').hidden && document.getElementById('detail-view').hidden", {
       what: "Rückkehr zur Liste nach dem Zurückziehen",
     });
-    await page.waitFor(`document.querySelectorAll('#grid .tile').length === ${config.expect.total - 1}`, {
+    await page.waitFor(`document.querySelectorAll('#grid .cell:not([hidden]) .tile').length === ${config.expect.total - 1}`, {
       what: "Eine Kachel weniger",
     });
     assert.equal(await page.eval("document.getElementById('status').textContent"), "Medium zurückgezogen.");

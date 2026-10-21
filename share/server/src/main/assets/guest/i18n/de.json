@@ -51,6 +51,8 @@
   "altVideo": "Video {caption}",
   "placeholderPhoto": "Foto, Vorschau folgt",
   "placeholderVideo": "Video, Vorschau folgt",
+  "placeholderPhotoFailed": "Foto, keine Vorschau",
+  "placeholderVideoFailed": "Video, keine Vorschau",
   "previewFollows": "Vorschau folgt.",
   "previewUnavailable": "Vorschau nicht verfügbar – herunterladen",
   "videoUnsupported": "Dieses Video lässt sich in diesem Browser nicht abspielen. Nur Download ist möglich.",

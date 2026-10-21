@@ -80,6 +80,36 @@ class GuestBrowserTest {
     }
 
     @Test
+    fun gridKeepsItsTilesAndLimitsImageLoads() {
+        runScenario(file = "tiles.test.mjs", spaceName = SPACE_NAME, endsInSeconds = 5_400) { scene ->
+            val lena = scene.join("Lena")
+            val omar = scene.join("Omar")
+            scene.controlToken = lena.token
+            // 40 Einträge: 38 Fotos mit Vorschau, ein Video ohne Frame (keine Vorschau), ein Foto ohne Vorschau (folgt).
+            val photos =
+                (1..38).map { n ->
+                    scene.upload(
+                        if (n % 2 ==
+                            0
+                        ) {
+                            lena.token
+                        } else {
+                            omar.token
+                        },
+                        "bild$n.jpg",
+                        BrowserScene.photo(n.toLong(), 160, 120),
+                    )
+                }
+            val video = scene.upload(omar.token, "clip.mp4", BrowserScene.clip())
+            scene.upload(lena.token, "wartet.jpg", BrowserScene.photo(99, 160, 120))
+            val previews = scene.renderPreviews(photos + video)
+            assertEquals("Vorschau des Fotos", "READY", previews.getValue(photos.first()))
+            assertEquals("Vorschau des Videos ohne Frame", "FAILED", previews.getValue(video))
+            mapOf("session" to session(scene, lena))
+        }
+    }
+
+    @Test
     fun bannerTenMinutesBeforeTheEnd() {
         runScenario(file = "banner.test.mjs", spaceName = SPACE_NAME, endsInSeconds = 590) { scene ->
             mapOf("session" to session(scene, scene.join("Lena")))
@@ -267,6 +297,12 @@ class GuestBrowserTest {
             val run = NodeBrowserRun(scene, chrome)
             val exitCode = run.execute(file, config)
             assertEquals("Browser-Test $file (Ausgabe unten)\n${run.output()}", 0, exitCode)
+            // Messwerte der Browser-Tests (Zeilen mit „Messung“) landen im Protokoll des Laufs.
+            run
+                .output()
+                .lines()
+                .filter { it.startsWith("Messung") }
+                .forEach(::println)
             verify(scene)
         }
     }
@@ -365,6 +401,7 @@ internal class NodeBrowserRun(
                     "release-uploads" -> scene.releaseUploadSlots()
                     "fill-storage" -> scene.fillStorage()
                     "stop-server" -> scene.stopServer()
+                    "add-photo" -> scene.addPhoto()
                     else -> error("unbekannte Steuerung: $name")
                 }
             }

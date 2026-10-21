@@ -20,12 +20,12 @@ export async function openSpace(page, config, session) {
 
 /** Anzahl sichtbarer Kacheln in der Liste. */
 export function tileCount(page) {
-  return page.eval("document.querySelectorAll('#grid .tile').length");
+  return page.eval("document.querySelectorAll('#grid .cell:not([hidden]) .tile').length");
 }
 
 /** Beschriftungen aller Kacheln, in Reihenfolge. */
 export function captions(page) {
-  return page.eval("[...document.querySelectorAll('#grid .caption')].map((node) => node.textContent)");
+  return page.eval("[...document.querySelectorAll('#grid .cell:not([hidden]) .caption')].map((node) => node.textContent)");
 }
 
 /** Liest eine Adresse der API mit dem Token der Gastsitzung (nur für Prüfungen von außen). */

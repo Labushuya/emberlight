@@ -226,4 +226,20 @@ Dieser Nachtrag hält fest, wie 3.5c die Entscheidungen oben nutzt. Die Schnitts
 
 Das Raster lädt keine Originale mehr. Es zeigt `previewUrl` nur bei `previewState` `ready`, sonst den Platzhalter. Ein Bild ohne Vorschau erscheint dort erst mit fertiger Vorschau. Das Original (`viewUrl`) lädt nur die Detailansicht. Grund: Das Original ist mehrere MB groß und belegt das Medien-Gate (vier gleichzeitige Anfragen) sowie die Verbindungen des Browsers, so dass das Polling von `/api/v1/space` verdrängt wurde. Der Abschnitt „Vorschau und Platzhalter“ oben gilt damit nicht mehr für das Raster.
 
-Offen aus diesem Nachtrag (noch nicht umgesetzt): Keyed-DOM bei Revisionswechseln, Wiederversuch bei 503 bzw. 403, Erhöhung der `revision` bei Fertigstellung einer Vorschau, Begrenzung gleichzeitiger Bildladungen im Client, Erneuerung signierter Raster-URLs.
+**Umgesetzt (Paket 3.5a-4, Fortsetzung auf Branch `fix/gaesteseite-performance`):**
+
+- Keyed-DOM: Kacheln hängen über die Medien-ID in einer Tabelle. Bei einem neuen Stand entstehen nur neue Kacheln an ihrer Sortierposition, entfernte gehen, geänderte (Vorschau fertig, Name, „(entfernt)“, Standort) werden gezielt aktualisiert. Der Aufbau des Rasters gilt nur noch beim Öffnen des Space. Der Filter „Meine“ blendet Kacheln nur aus.
+- Ein erfolgreich geladenes Bild wird nie neu gesetzt. Neue Signaturen allein sind keine Änderung. Nur eine andere Route ersetzt das Bild.
+- Warteschlange: höchstens vier gleichzeitige Bildladungen, nur für Kacheln im Sichtbereich mit 300 px Vorlauf (IntersectionObserver). Das Abfragen des Space bleibt so frei.
+- Wiederversuch: Ein Ladefehler lädt einmal mit frischer Adresse (`GET /api/v1/media/{id}`) neu, 1 bis 2 Sekunden nach dem Fehler. Schlägt auch das fehl, zeigt die Kachel „Keine Vorschau“. Die Seite sieht den Antwortcode eines `img` nicht. Darum gilt der Wiederversuch für jeden Fehler, nicht gesondert für 503 oder 403.
+- Abgelaufene Adressen: Eine noch nicht geladene Kachel erneuert ihre Adresse vor dem Laden, wenn sie in der letzten Minute gültig ist. Geladene Bilder bleiben unberührt.
+- Platzhalter: „Vorschau folgt“ (wartet auf die Vorschau) und „Keine Vorschau“ (fehlgeschlagen oder nach dem Wiederversuch). Das Kennzeichen des Videos bleibt.
+- Testhaken `window.emberlightGuest.space.pollNow()`: löst einen Abfragezyklus aus, sonst nichts.
+- Nebenbei behoben: Der Sentinel meldete nach dem ersten Laden keine Änderung mehr, wenn er schon im Rand lag. Dann lud die zweite Seite nicht, bis zum Scrollen. Jetzt beobachtet die Seite den Sentinel nach jedem Stand der Liste neu.
+
+**Offen aus diesem Nachtrag:**
+
+- Erhöhung der `revision` bei Fertigstellung einer Vorschau (serverseitig, eigenes Paket). Bis dahin erscheint eine fertige Vorschau erst beim nächsten Revisionswechsel.
+- Die Bildwarteschlange zählt nur die Raster-Bilder. Die Detailansicht und Videos laufen außerhalb davon.
+
+**Messungen (Browser-Tests `tiles.test.mjs`, Chrome headless, 21.10.2026):** Mit 40 Einträgen höchstens vier gleichzeitige Vorschauanfragen, alle mit Antwort 200, keine Originale. Bei einem neuen Eintrag eine neue Vorschauanfrage, keine für unveränderte Einträge. Layout-Verschiebung beim Scrollen und Abfragen 0,0000 (Grenze 0,01). Keine Long Task über 50 ms im Abfragezyklus. Ein Bildfehler führt zu zwei Vorschauanfragen und einer Erneuerung der Adresse.
