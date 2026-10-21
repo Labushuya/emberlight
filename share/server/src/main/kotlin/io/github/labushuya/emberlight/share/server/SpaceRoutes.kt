@@ -230,17 +230,19 @@ fun spaceRoutes(
 
             get("/media/{id}/content") {
                 call.routeTemplate("/api/v1/media/{id}/content")
-                val id = MediaId.parse(call.parameters["id"].orEmpty())
-                val file = id?.let { vault.contentOf(it) }
-                if (file == null) {
-                    call.respondError(HttpStatusCode.NotFound, "not_found")
-                    return@get
-                }
-                call.respondContent(
-                    file = file.path.toFile(),
-                    contentType = ContentType.parse(file.record.mime),
-                    disposition = ContentDispositionHeader.attachment(file.record.originalName),
-                )
+                call.respondMedia(vault, call.parameters["id"], inline = false)
+            }
+
+            // Ansicht im Browser: Original inline (ADR 0019). Die HEIC-JPEG-Ansicht folgt mit den Vorschauen.
+            get("/media/{id}/view") {
+                call.routeTemplate("/api/v1/media/{id}/view")
+                call.respondMedia(vault, call.parameters["id"], inline = true)
+            }
+
+            // Video mit Range (ADR 0019). Nur Videos, sonst 404.
+            get("/media/{id}/stream") {
+                call.routeTemplate("/api/v1/media/{id}/stream")
+                call.respondMedia(vault, call.parameters["id"], inline = true, onlyVideo = true)
             }
 
             delete("/media/{id}") {
@@ -258,6 +260,33 @@ fun spaceRoutes(
             }
         }
     }
+
+/**
+ * Medienantwort für Download ([inline] = `false`, Anhang) und Ansicht bzw. Stream ([inline] = `true`). Fehlt das Medium,
+ * ist es kein Video bei [onlyVideo] oder ist die Datei weg, antwortet die Route mit `404`. Mehrere Bereiche ergeben `416`.
+ */
+private suspend fun ApplicationCall.respondMedia(
+    vault: SpaceVault,
+    rawId: String?,
+    inline: Boolean,
+    onlyVideo: Boolean = false,
+) {
+    val id = rawId?.let { MediaId.parse(it) }
+    val file = id?.let { vault.contentOf(it) }
+    if (file == null || (onlyVideo && !file.record.mime.startsWith("video/"))) {
+        respondError(HttpStatusCode.NotFound, "not_found")
+        return
+    }
+    if (rejectMultipleRanges(file.record.sizeBytes)) {
+        respondError(HttpStatusCode.RequestedRangeNotSatisfiable, "range_not_satisfiable")
+        return
+    }
+    respondContent(
+        file = file.path.toFile(),
+        contentType = ContentType.parse(file.record.mime),
+        disposition = if (inline) "inline" else ContentDispositionHeader.attachment(file.record.originalName),
+    )
+}
 
 /** Antwort 403 für Nicht-Gastgeber. Liefert `false`, wenn die Anfrage abgewiesen wurde. */
 private suspend fun ApplicationCall.requireHost(): Boolean {

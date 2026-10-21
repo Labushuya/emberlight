@@ -76,6 +76,7 @@ internal fun testAccess(
     spaceId: io.github.labushuya.emberlight.share.space.SpaceId,
     credentials: List<io.github.labushuya.emberlight.share.space.participants.Credential> = emptyList(),
     name: String = "Test",
+    mediaSigner: MediaUrlSigner = MediaUrlSigner.random(),
 ): SpaceAccess =
     SpaceAccess(
         vault = vault,
@@ -89,4 +90,5 @@ internal fun testAccess(
         hostToken =
             io.github.labushuya.emberlight.share.space.participants.Secrets
                 .generate(),
+        mediaSigner = mediaSigner,
     )

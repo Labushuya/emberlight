@@ -78,6 +78,8 @@ internal class ServerEnvironment(
     val joinLimiter: JoinLimiter = JoinLimiter(),
     /** Höchstzahl verworfener Körper-Bytes nach einer frühen Ablehnung. Nur Tests ändern sie. */
     val drainMaxBytes: Long = DRAIN_MAX_BYTES,
+    /** Signierte Medien-URLs (ADR 0019). `null` schaltet sie ab, dann gilt nur der Header. */
+    val signedMedia: SignedMediaAuthorizer? = null,
 )
 
 /**
@@ -141,18 +143,32 @@ internal fun Application.installEmberlightModule(
     }
     intercept(ApplicationCallPipeline.Setup) {
         if (!context.isPublicSite() && !context.isInviteRequest()) {
-            val values =
-                context.request.headers
-                    .getAll(HttpHeaders.Authorization)
-                    .orEmpty()
-            // Mehrere Authorization-Header sind ein Fehler. Der erste Wert wird nicht genommen (ADR 0013).
-            val principal = if (values.size == 1) env.authorizer.authorize(values.single()) else null
-            if (principal == null) {
-                context.response.headers.append(HttpHeaders.WWWAuthenticate, "Bearer")
-                context.refuseEarly(HttpStatusCode.Unauthorized, "unauthorized")
-                finish()
-            } else {
-                context.attributes.put(PrincipalKey, principal)
+            // Signierte Medien-URL (ADR 0019): nur GET der Medienrouten, nur mit Signatur-Parametern in der Anfrage.
+            when (val signed = context.signedMediaAccess(env.signedMedia)) {
+                is SignedMediaAccess.Granted -> {
+                    context.attributes.put(PrincipalKey, signed.principal)
+                }
+
+                is SignedMediaAccess.Denied -> {
+                    context.refuseEarly(HttpStatusCode.Forbidden, signed.code)
+                    finish()
+                }
+
+                SignedMediaAccess.Absent -> {
+                    val values =
+                        context.request.headers
+                            .getAll(HttpHeaders.Authorization)
+                            .orEmpty()
+                    // Mehrere Authorization-Header sind ein Fehler. Der erste Wert wird nicht genommen (ADR 0013).
+                    val principal = if (values.size == 1) env.authorizer.authorize(values.single()) else null
+                    if (principal == null) {
+                        context.response.headers.append(HttpHeaders.WWWAuthenticate, "Bearer")
+                        context.refuseEarly(HttpStatusCode.Unauthorized, "unauthorized")
+                        finish()
+                    } else {
+                        context.attributes.put(PrincipalKey, principal)
+                    }
+                }
             }
         }
     }
@@ -205,6 +221,39 @@ private val INVITE_PATHS = setOf(JOIN_PATH, JOIN_PREVIEW_PATH)
 /** Gäste-Seite und ihre Dateien. Ohne Zugriffsprüfung, weil die Dateien keine Daten des Space enthalten (ADR 0018). */
 internal fun ApplicationCall.isPublicSite(): Boolean =
     request.local.method == HttpMethod.Get && GuestSite.isPublicPath(request.path())
+
+/** Medienroute mit ID und Zweck. Nur GET-Routen dieser Liste nehmen signierte URLs an (ADR 0019). */
+internal class MediaRoute(
+    val id: String,
+    val purpose: MediaPurpose,
+)
+
+private val MEDIA_ROUTE = Regex("^/api/v1/media/([^/]+)/(preview|view|content|stream)$")
+
+/** Ordnet einen Pfad einer Medienroute zu. `null` für alle anderen Pfade. */
+internal fun mediaRouteOf(path: String): MediaRoute? {
+    val match = MEDIA_ROUTE.matchEntire(path) ?: return null
+    val purpose =
+        when (match.groupValues[2]) {
+            "preview" -> MediaPurpose.PREVIEW
+            "view" -> MediaPurpose.VIEW
+            "content" -> MediaPurpose.DOWNLOAD
+            else -> MediaPurpose.STREAM
+        }
+    return MediaRoute(match.groupValues[1], purpose)
+}
+
+/**
+ * Prüfung per signierter URL für diese Anfrage. [SignedMediaAccess.Absent], wenn die Anfrage keine Medienroute per GET ist
+ * oder keine Signatur-Parameter trägt. Mehrfach gesendete Parameter gelten als ungültig.
+ */
+internal fun ApplicationCall.signedMediaAccess(authorizer: SignedMediaAuthorizer?): SignedMediaAccess {
+    if (authorizer == null || request.local.method != HttpMethod.Get) return SignedMediaAccess.Absent
+    val route = mediaRouteOf(request.path()) ?: return SignedMediaAccess.Absent
+    val query = request.queryParameters
+    fun one(name: String): String? = query.getAll(name)?.let { values -> if (values.size == 1) values.single() else "" }
+    return authorizer.authorize(route.id, route.purpose, one("pid"), one("exp"), one("sig"))
+}
 
 /** Teilnehmer der Anfrage. Nur nach erfolgreicher Zugriffsprüfung aufrufbar. */
 internal fun ApplicationCall.principal(): Principal =
@@ -272,11 +321,34 @@ internal suspend fun ApplicationCall.respondContent(
     response.headers.append(HttpHeaders.ContentDisposition, disposition)
     response.headers.append(NOSNIFF_HEADER, "nosniff")
     response.headers.append(HttpHeaders.CacheControl, "no-store")
+    applyMediaHeaders()
     // Accept-Ranges setzt PartialContent selbst. Ein eigener Header führte zu zwei Werten (ADR 0014, Umsetzung 3.1a).
     respond(
         io.ktor.server.http.content
             .LocalFileContent(file, contentType),
     )
+}
+
+/**
+ * Zusätzliche Header für Medienantworten (ADR 0019): kein Referrer, nur gleiche Herkunft, keine Einbettung und keine
+ * Ausführung. Die URL trägt eine Signatur, die nicht in fremde Seiten wandern soll.
+ */
+internal fun ApplicationCall.applyMediaHeaders() {
+    response.headers.append("Referrer-Policy", "no-referrer")
+    response.headers.append("Cross-Origin-Resource-Policy", "same-origin")
+    response.headers.append("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+}
+
+/**
+ * Mehrere Bereiche in einem `Range`-Header (ADR 0019): Der Server antwortet nicht mit `multipart/byteranges`, sondern mit
+ * `416`. Ein einzelner Bereich bleibt beim Plugin [PartialContent].
+ */
+internal fun ApplicationCall.rejectMultipleRanges(size: Long): Boolean {
+    val range = request.headers[HttpHeaders.Range] ?: return false
+    if (!range.contains(',')) return false
+    applyMediaHeaders()
+    response.headers.append("Content-Range", "bytes */$size")
+    return true
 }
 
 internal fun ApplicationCall.applyApiHeaders() {
