@@ -12,6 +12,13 @@ import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
 import io.github.labushuya.emberlight.share.space.participants.ParticipantName
 import io.github.labushuya.emberlight.share.space.participants.ParticipantRoster
 import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
+import io.github.labushuya.emberlight.share.space.preview.AndroidPreviewRenderer
+import io.github.labushuya.emberlight.share.space.preview.PreviewLookup
+import io.github.labushuya.emberlight.share.space.preview.PreviewRenderer
+import io.github.labushuya.emberlight.share.space.preview.PreviewRules
+import io.github.labushuya.emberlight.share.space.preview.PreviewService
+import io.github.labushuya.emberlight.share.space.preview.PreviewState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -49,6 +56,12 @@ data class MediaListEntry(
     val uploaderRemoved: Boolean = false,
     /** Uploader-ID, damit die Oberfläche „Meine“ bestimmen kann (ADR 0019). `null` nur bei unlesbaren Altdaten. */
     val uploaderId: ParticipantId? = null,
+    /** Zustand der 320-px-Vorschau. `null`, solange das Medium nicht eingereiht ist (ADR 0019). */
+    val previewState: String? = null,
+    /** Zustand der HEIC-Ansicht. Nur bei HEIC/HEIF gesetzt. */
+    val viewState: String? = null,
+    /** Video-Codec. Leer heißt: geprüft, nicht erkannt. Die Schnittstelle zeigt das als `null`. */
+    val videoCodec: String? = null,
 )
 
 data class MediaPage(
@@ -162,12 +175,14 @@ class SpaceVault internal constructor(
     private val limits: SpaceLimits,
     private val probe: StorageProbe,
     private val inviteCipher: InviteSecretCipher,
+    private val renderer: PreviewRenderer = AndroidPreviewRenderer(),
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     private val media = database.media()
     private val participants = database.participants()
     private val roster = ParticipantRoster(database, storage.spaceId, inviteCipher, nowMillis)
     private val commitLock = Mutex()
+    private val previews = PreviewService(media, storage, limits, probe, commitLock, renderer)
 
     /**
      * Nimmt einen Upload entgegen. Die Reihenfolge entspricht ADR 0013 und ADR 0015: Kopf lesen und erkennen, Größe und
@@ -204,7 +219,12 @@ class SpaceVault internal constructor(
             val outcome = removeLocationOrKeep(temp, format, keepLocation, streamedSha256)
             // Nach dem Abschneiden von Anhängen zählt die Länge auf dem Speicher, nicht die des Stroms (ADR 0015).
             val storedSize = withContext(Dispatchers.IO) { Files.size(temp) }
-            return commit(uploader, rawFileName, format, outcome.sha256, storedSize, temp, outcome.locationKept)
+            // Codec aus dem Kopf, nur bei Videos (ADR 0019). Leer heißt: nicht erkannt.
+            val codec = if (PreviewRules.isVideo(format.mimeType)) previews.codecOf(temp) else null
+            val result = commit(uploader, rawFileName, format, outcome.sha256, storedSize, temp, outcome.locationKept, codec)
+            // Die Vorschau entsteht im Hintergrund. Der Upload wartet nicht darauf (ADR 0019).
+            if (result is IngestResult.Created) previews.enqueue(result.record.id)
+            return result
         } catch (rejection: Rejection) {
             Files.deleteIfExists(temp)
             return IngestResult.Rejected(rejection.reason)
@@ -269,6 +289,9 @@ class SpaceVault internal constructor(
                     it.locationKept,
                     it.uploaderRevoked,
                     ParticipantId.parse(it.uploaderId),
+                    it.previewState,
+                    it.viewState,
+                    it.videoCodec,
                 )
             }
         val next =
@@ -295,6 +318,9 @@ class SpaceVault internal constructor(
             row.locationKept,
             row.uploaderRevoked,
             ParticipantId.parse(row.uploaderId),
+            row.previewState,
+            row.viewState,
+            row.videoCodec,
         )
     }
 
@@ -326,7 +352,7 @@ class SpaceVault internal constructor(
 
                 else -> {
                     media.markDeleting(id.value)
-                    withContext(Dispatchers.IO) { Files.deleteIfExists(storage.contentPath(row.sha256)) }
+                    removeFiles(row)
                     media.deleteById(id.value)
                     DeleteOutcome.Deleted
                 }
@@ -339,6 +365,21 @@ class SpaceVault internal constructor(
         return StorageUsage(used, limits.storageLimitBytes, limits.isWarning(used))
     }
 
+    /** Startet den Worker der Vorschauen auf [scope]. Nach [recover] aufrufen (ADR 0019). */
+    fun startPreviews(scope: CoroutineScope) = previews.start(scope)
+
+    /** Beendet den Worker. Angefangene Vorschauen holt der nächste Start nach. */
+    fun stopPreviews() = previews.stop()
+
+    /** Erzeugt die Vorschauen eines Mediums im Aufrufer. Der Worker tut dasselbe, Tests nutzen es ebenfalls. */
+    suspend fun renderPreviews(id: MediaId) = previews.process(id.value)
+
+    /** Vorschau (320 px) eines Mediums für die Auslieferung. Ohne Medien-Gate (ADR 0019). */
+    suspend fun previewOf(id: MediaId): PreviewLookup = previews.lookup(id, view = false)
+
+    /** HEIC/HEIF-Ansicht (1600 px). Bei anderen Medien liefert sie `Unavailable`. */
+    suspend fun viewOf(id: MediaId): PreviewLookup = previews.lookup(id, view = true)
+
     /**
      * Bereinigung beim Start, bevor der Server Anfragen annimmt (ADR 0013, Löschen). Entfernt Medien im Zustand
      * `DELETING` samt Datei und alle Dateien ohne Index-Eintrag, etwa Temp-Reste.
@@ -348,11 +389,14 @@ class SpaceVault internal constructor(
             val spaceId = storage.spaceId.value
             val rows = media.allOf(spaceId)
             rows.filter { it.state == STATE_DELETING }.forEach { row ->
-                Files.deleteIfExists(storage.contentPath(row.sha256))
+                removeFiles(row)
                 media.deleteById(row.id)
             }
-            val keep = rows.filter { it.state == STATE_READY }.map { it.sha256 }.toSet()
+            val ready = rows.filter { it.state == STATE_READY }
+            val keep = ready.map { it.sha256 }.toSet()
             storage.deleteUnlisted(keep)
+            // Vorschauen: offene Medien neu einreihen, Waisen löschen (ADR 0019).
+            previews.reconcile(ready)
         }
     }
 
@@ -398,12 +442,20 @@ class SpaceVault internal constructor(
     /** Ein aktiver Teilnehmer, sonst `null`. */
     suspend fun participant(id: ParticipantId): ParticipantInfo? = roster.find(id)
 
+    /** Datei und Vorschauen eines Mediums entfernen. Den Index-Eintrag löscht der Aufrufer. */
+    private suspend fun removeFiles(row: MediaEntity) {
+        withContext(Dispatchers.IO) {
+            Files.deleteIfExists(storage.contentPath(row.sha256))
+            storage.deletePreviews(row.sha256)
+        }
+    }
+
     /** Löscht alle Medien eines Teilnehmers samt Datei (ADR 0018, „Auch alle Uploads löschen“). */
     private suspend fun deleteMediaUploadedBy(id: ParticipantId) {
         val rows = media.allOf(storage.spaceId.value).filter { it.uploaderId == id.value && it.state == STATE_READY }
         rows.forEach { row ->
             media.markDeleting(row.id)
-            withContext(Dispatchers.IO) { Files.deleteIfExists(storage.contentPath(row.sha256)) }
+            removeFiles(row)
             media.deleteById(row.id)
         }
     }
@@ -497,6 +549,7 @@ class SpaceVault internal constructor(
         size: Long,
         temp: Path,
         locationKept: Boolean,
+        codec: String?,
     ): IngestResult =
         commitLock.withLock {
             val spaceId = storage.spaceId.value
@@ -521,6 +574,9 @@ class SpaceVault internal constructor(
                         state = STATE_READY,
                         locationKept = locationKept,
                         processingVersion = LocationScrubber.PROCESSING_VERSION,
+                        previewState = PreviewState.PENDING,
+                        viewState = if (PreviewRules.hasHeicView(format.mimeType)) PreviewState.PENDING else null,
+                        videoCodec = codec,
                     )
                 try {
                     media.insert(entity)
@@ -611,7 +667,8 @@ class SpaceVault internal constructor(
             limits: SpaceLimits,
             probe: StorageProbe,
             inviteCipher: InviteSecretCipher,
-        ): SpaceVault = SpaceVault(database, SpaceStorage(spacesDir, spaceId), limits, probe, inviteCipher)
+            previewRenderer: PreviewRenderer = AndroidPreviewRenderer(),
+        ): SpaceVault = SpaceVault(database, SpaceStorage(spacesDir, spaceId), limits, probe, inviteCipher, previewRenderer)
 
         const val MAX_PAGE = 100
         const val DEFAULT_PAGE = 50

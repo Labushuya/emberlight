@@ -61,6 +61,16 @@ data class MediaEntity(
     @ColumnInfo(name = "location_kept", defaultValue = "0") val locationKept: Boolean = false,
     /** Version der Verarbeitung. `0` heißt vor Paket 3.1b (unverarbeitet), ab 3.1b gilt `LocationScrubber.PROCESSING_VERSION`. */
     @ColumnInfo(name = "processing_version", defaultValue = "0") val processingVersion: Int = 0,
+    /** Zustand der 320-px-Vorschau: `PENDING`, `READY` oder `FAILED` (Paket 3.5a-2, ADR 0019). `null`: noch nicht eingereiht. */
+    @ColumnInfo(name = "preview_state") val previewState: String? = null,
+    /** Zustand der 1600-px-Ansicht. Nur bei HEIC/HEIF gesetzt (Paket 3.5a-2, ADR 0019). */
+    @ColumnInfo(name = "view_state") val viewState: String? = null,
+    /** Erkannter Video-Codec, z. B. `avc1`. Leer heißt: geprüft, nicht erkannt. `null`: noch nicht geprüft (Paket 3.5a-2). */
+    @ColumnInfo(name = "video_codec") val videoCodec: String? = null,
+    /** Bytes der 320-px-Vorschau auf dem Speicher. Zählen gegen das Speicherlimit (Paket 3.5a-2). */
+    @ColumnInfo(name = "preview_bytes", defaultValue = "0") val previewBytes: Long = 0L,
+    /** Bytes der 1600-px-Ansicht auf dem Speicher. Zählen gegen das Speicherlimit (Paket 3.5a-2). */
+    @ColumnInfo(name = "view_bytes", defaultValue = "0") val viewBytes: Long = 0L,
 )
 
 /** Zeile der Medienliste, mit dem Anzeigenamen des Uploaders. */
@@ -75,6 +85,9 @@ data class MediaRow(
     val uploaderRevoked: Boolean = false,
     /** ID des Uploaders. Die Oberfläche braucht sie für „Meine“ (ADR 0019). */
     val uploaderId: String = "",
+    val previewState: String? = null,
+    val viewState: String? = null,
+    val videoCodec: String? = null,
 )
 
 @Dao
@@ -94,7 +107,8 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId,
+               m.preview_state AS previewState, m.view_state AS viewState, m.video_codec AS videoCodec
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
         ORDER BY m.created_at DESC, m.id DESC
@@ -109,7 +123,8 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId,
+               m.preview_state AS previewState, m.view_state AS viewState, m.video_codec AS videoCodec
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
           AND (m.created_at < :afterCreatedAt OR (m.created_at = :afterCreatedAt AND m.id < :afterId))
@@ -128,7 +143,8 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId,
+               m.preview_state AS previewState, m.view_state AS viewState, m.video_codec AS videoCodec
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.id = :id AND m.state = 'READY'
         """,
@@ -138,17 +154,18 @@ interface MediaDao {
         id: String,
     ): MediaRow?
 
-    @Query("SELECT COALESCE(SUM(size_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'")
+    @Query("SELECT COALESCE(SUM(size_bytes + preview_bytes + view_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'")
     suspend fun usedBytes(spaceId: String): Long
 
-    @Query("SELECT COALESCE(SUM(size_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'")
+    @Query("SELECT COALESCE(SUM(size_bytes + preview_bytes + view_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'")
     fun observeUsedBytes(spaceId: String): Flow<Long>
 
     /** Erste Seite der Medienliste als Flow, für die Anzeige im laufenden Space. */
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId,
+               m.preview_state AS previewState, m.view_state AS viewState, m.video_codec AS videoCodec
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
         ORDER BY m.created_at DESC, m.id DESC
@@ -168,6 +185,29 @@ interface MediaDao {
 
     @Query("DELETE FROM media WHERE id = :id")
     suspend fun deleteById(id: String): Int
+
+    /** Zustand der 320-px-Vorschau mit ihrer Größe. Wirkt nur auf bereite Medien (ADR 0019). */
+    @Query("UPDATE media SET preview_state = :state, preview_bytes = :bytes WHERE id = :id AND state = 'READY'")
+    suspend fun setPreviewState(
+        id: String,
+        state: String,
+        bytes: Long,
+    ): Int
+
+    /** Zustand der 1600-px-Ansicht (HEIC/HEIF) mit ihrer Größe. */
+    @Query("UPDATE media SET view_state = :state, view_bytes = :bytes WHERE id = :id AND state = 'READY'")
+    suspend fun setViewState(
+        id: String,
+        state: String,
+        bytes: Long,
+    ): Int
+
+    /** Erkannter Video-Codec, leer bei nicht erkannt (ADR 0019). */
+    @Query("UPDATE media SET video_codec = :codec WHERE id = :id AND state = 'READY'")
+    suspend fun setVideoCodec(
+        id: String,
+        codec: String,
+    ): Int
 }
 
 @Dao
@@ -338,7 +378,7 @@ interface SpaceDao {
  */
 @Database(
     entities = [MediaEntity::class, ParticipantEntity::class, SpaceEntity::class, PauseEventEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class SpacesDatabase : RoomDatabase() {
@@ -396,6 +436,22 @@ abstract class SpacesDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_created_at` INTEGER")
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `invite_rotated_at` INTEGER")
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `port` INTEGER")
+                }
+            }
+
+        /**
+         * Version 6 → 7 (Paket 3.5a-2, ADR 0019): Vorschau-, Ansicht- und Codec-Felder am Medium und die Größen der
+         * Vorschauen, die gegen das Speicherlimit zählen. Additiv. Bestehende Medien bekommen `NULL` (noch nicht eingereiht)
+         * und `0` Bytes. Der Worker holt sie beim nächsten Start nach ([SpaceVault.recover]).
+         */
+        val MIGRATION_6_7: Migration =
+            object : Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `media` ADD COLUMN `preview_state` TEXT")
+                    db.execSQL("ALTER TABLE `media` ADD COLUMN `view_state` TEXT")
+                    db.execSQL("ALTER TABLE `media` ADD COLUMN `video_codec` TEXT")
+                    db.execSQL("ALTER TABLE `media` ADD COLUMN `preview_bytes` INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE `media` ADD COLUMN `view_bytes` INTEGER NOT NULL DEFAULT 0")
                 }
             }
 
@@ -475,7 +531,7 @@ abstract class SpacesDatabase : RoomDatabase() {
             spacesDir.mkdirs()
             return Room
                 .databaseBuilder(IndexLocationContext(context, spacesDir), SpacesDatabase::class.java, FILE_NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
         }
     }
