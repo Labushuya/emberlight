@@ -228,6 +228,10 @@ jobs:
       - name: Werkzeuge für die Standort-Gegenprobe installieren
         uses: ./.github/actions/install-cross-check-tools
 
+      # Node 24 und Chrome für die Browser-Tests der Gäste-Seite (ADR 0019), wie in ci.yml.
+      - name: Werkzeuge für die Browser-Tests einrichten
+        uses: ./.github/actions/browser-test-tools
+
       # Wie in ci.yml, aber ohne Koverexport und ohne Debug-APK. Die Release-APK baut der Job "release" neu.
       - name: Prüfung ausführen
         run: ./gradlew check -Pemberlight.testForks=2 -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
