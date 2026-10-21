@@ -335,4 +335,5 @@
     <string name="space_participant_remove_uploads">Auch alle Uploads von %1$s löschen</string>
     <string name="space_participant_remove_confirm">Entfernen</string>
     <string name="space_running_media_uploader_removed">%1$s (entfernt)</string>
+    <string name="space_running_end_notice">Gäste mit offener Seite sehen den Hinweis sofort. Wer die Seite gerade nicht offen hat, sieht beim nächsten Versuch nur, dass der Space nicht mehr erreichbar ist.</string>
 </resources>
