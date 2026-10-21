@@ -39,6 +39,10 @@ class SpaceRunRepository(
     /** Fester Port des Space, `null` vor dem ersten Start (ADR 0017, Paket 3.4). */
     suspend fun portOf(id: SpaceId): Int? = spaces.find(id.value)?.port
 
+    /** Name und Aufbewahrung in Tagen, für die Benachrichtigung beim Ende (ADR 0017). `null`, wenn es den Space nicht gibt. */
+    suspend fun endingInfoOf(id: SpaceId): EndingInfo? =
+        spaces.find(id.value)?.let { EndingInfo(it.name, it.retentionDays) }
+
     /** Speichert den gebundenen Port. Gilt bei jedem späteren Start des Space. */
     suspend fun savePort(
         id: SpaceId,

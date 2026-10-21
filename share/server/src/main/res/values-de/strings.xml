@@ -19,4 +19,8 @@
     <string name="space_server_network_lost">WLAN weg. Der Space ist pausiert und läuft weiter, sobald dasselbe WLAN zurück ist.</string>
     <string name="space_server_interrupted">Space unterbrochen. Zum Fortsetzen die App öffnen.</string>
     <string name="space_server_network_changed_prompt">Neues WLAN erkannt – Space hier fortsetzen?</string>
+    <string name="space_server_warning_title">Space endet bald</string>
+    <string name="space_server_warning_text">Space ‚%1$s‘ endet in 10 Minuten.</string>
+    <string name="space_server_ended_title">Space beendet</string>
+    <string name="space_server_ended_text">Space ‚%1$s‘ wurde beendet – Aufbewahrung bis %2$s</string>
 </resources>
