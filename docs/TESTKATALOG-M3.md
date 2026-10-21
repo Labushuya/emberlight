@@ -62,6 +62,7 @@ Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Pa
 - [ ] **4.3 Speicherlimit zu hoch.** Handlung: Limit über „frei minus 2 GiB“ setzen, dann starten. Erwartet: Startfehler mit dem Weg „Bearbeiten“. *(seit 3.3, PR #32 Punkt 8)*
 - [ ] **4.4 Eigenes Ende in der Vergangenheit.** Handlung: Laufzeit „Eigenes Ende“ mit einem Zeitpunkt in der Vergangenheit starten. Erwartet: Fehlermeldung, der Space startet nicht. *(seit 3.3, PR #32, Umfang Punkt 3)*
 - [ ] **4.5 Bearbeiten im laufenden Space.** Handlung: Laufenden Space öffnen, „Bearbeiten“ ansehen. Erwartet: Der Knopf ist deaktiviert, ein Hinweis ist sichtbar. *(seit 3.3, PR #32 Punkt 18)*
+- [ ] **4.6 Start innerhalb des Nachlaufs.** Handlung: Space in der App beenden, sofort danach (innerhalb von 60 Sekunden) einen neuen Space starten. Erwartet: Im Space erscheint der Hinweis „Der vorige Space wird noch beendet (bis zu 60 Sekunden). Dein neuer Space startet danach automatisch.“ Die Anzeige steht auf „Startet gleich“ und zeigt nicht „Unterbrochen“. Der Knopf „Space beenden“ ist deaktiviert. Sobald der Server läuft, verschwindet der Hinweis, der Space zeigt „Läuft · noch X“ und die Serveradresse. Gäste erhalten die 60 Sekunden für den alten Space. *(seit Vor-Alpha, ADR 0017 Nachtrag 21.10.2026; Unit-Tests `SpaceRunnerTest` und `SpaceRunningBannerTest`, Goldens `SpaceRunning_startQueued_phone_de` und `_en`; Gerät offen)*
 
 ### Benachrichtigung
 
