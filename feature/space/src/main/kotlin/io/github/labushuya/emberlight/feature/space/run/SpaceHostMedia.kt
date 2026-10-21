@@ -237,10 +237,16 @@ private fun Tag(
     }
 }
 
+/**
+ * Name des Uploaders. Ein leerer Name gilt als unbekannt, sonst stünde in der Kachel nur „von “ (Fehlerbericht
+ * v0.3.0-alpha.1).
+ */
+private fun uploaderNameOrNull(item: HostMediaItem): String? = item.uploaderName?.takeIf { it.isNotBlank() }
+
 /** Name des Uploaders, mit „(entfernt)“, wenn er gegangen ist (ADR 0018). */
 @Composable
 private fun uploaderLabel(item: HostMediaItem): String {
-    val name = item.uploaderName ?: return stringResource(R.string.space_running_media_unknown)
+    val name = uploaderNameOrNull(item) ?: return stringResource(R.string.space_running_media_unknown)
     return if (item.uploaderRemoved) {
         stringResource(R.string.space_running_media_uploader_removed, name)
     } else {
@@ -251,7 +257,7 @@ private fun uploaderLabel(item: HostMediaItem): String {
 /** Name für die Detailzeile „Hochgeladen von …“. Entfernte Teilnehmer tragen den Vermerk im Namen (ADR 0018). */
 @Composable
 private fun detailUploader(item: HostMediaItem): String {
-    val name = item.uploaderName ?: return stringResource(R.string.space_running_media_unknown)
+    val name = uploaderNameOrNull(item) ?: return stringResource(R.string.space_running_media_unknown)
     return if (item.uploaderRemoved) stringResource(R.string.space_running_media_uploader_removed, name) else name
 }
 

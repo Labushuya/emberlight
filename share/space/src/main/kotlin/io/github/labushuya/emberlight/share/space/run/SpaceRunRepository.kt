@@ -8,6 +8,8 @@ import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import io.github.labushuya.emberlight.share.space.management.toSpaceRecord
+import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
+import io.github.labushuya.emberlight.share.space.participants.toInfo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -77,6 +79,10 @@ class SpaceRunRepository(
         id: SpaceId,
         limit: Int,
     ): Flow<List<MediaRow>> = database.media().observeFirstPage(id.value, limit)
+
+    /** Aktive Teilnehmer des Space in Beitrittsreihenfolge, live aus dem Index (ADR 0018). */
+    fun observeParticipants(id: SpaceId): Flow<List<ParticipantInfo>> =
+        database.participants().observeActiveOf(id.value).map { rows -> rows.map { it.toInfo() } }
 
     /**
      * Startet einen Entwurf. [freeBytes] ist der freie Speicher des Geräts. Der Start setzt Status `ACTIVE`, den Beginn
