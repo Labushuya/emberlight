@@ -236,6 +236,13 @@ interface ParticipantDao {
     @Query("SELECT * FROM participant WHERE space_id = :spaceId AND revoked_at IS NULL ORDER BY created_at, id")
     suspend fun activeOf(spaceId: String): List<ParticipantEntity>
 
+    /**
+     * Aktive Teilnehmer als Flow. Beitritt, Entfernen und Namensänderung im Index erscheinen sofort, auch wenn der Server
+     * sie schreibt. Ein Snapshot aus [activeOf] würde beim Start stehen bleiben.
+     */
+    @Query("SELECT * FROM participant WHERE space_id = :spaceId AND revoked_at IS NULL ORDER BY created_at, id")
+    fun observeActiveOf(spaceId: String): Flow<List<ParticipantEntity>>
+
     @Query("SELECT COUNT(*) FROM participant WHERE space_id = :spaceId AND revoked_at IS NULL")
     suspend fun countActive(spaceId: String): Int
 

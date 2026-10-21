@@ -116,23 +116,27 @@ class HostMediaViewModel
             return DetailMedia(file, isVideo = item.isVideo)
         }
 
+        /**
+         * Medien und Teilnehmer kommen beide live aus dem Index, derselben Datenbank wie der Server. Ein Beitritt, eine
+         * Entfernung oder ein Upload erscheint daher ohne erneutes Öffnen. Der Gastgeber für „Meine“ ist der Teilnehmer
+         * mit der Rolle Gastgeber.
+         */
         private fun observe(id: SpaceId): Flow<HostMediaUiState> =
-            combine(runs.observeMedia(id, MEDIA_LIMIT), hostActions.changes()) { rows, _ -> rows }
-                .mapLatest { rows ->
-                    val hostId = hostActions.participants(id).firstOrNull { it.role == Role.HOST }?.id
-                    HostMediaUiState(
-                        loaded = true,
-                        items =
-                            rows.map { row ->
-                                toItem(
-                                    id,
-                                    row,
-                                    mine =
-                                        hostId != null && row.uploaderId == hostId.value,
-                                )
-                            },
-                    )
-                }
+            combine(runs.observeMedia(id, MEDIA_LIMIT), runs.observeParticipants(id)) { rows, people ->
+                rows to people.firstOrNull { it.role == Role.HOST }?.id
+            }.mapLatest { (rows, hostId) ->
+                HostMediaUiState(
+                    loaded = true,
+                    items =
+                        rows.map { row ->
+                            toItem(
+                                id,
+                                row,
+                                mine = hostId != null && row.uploaderId == hostId.value,
+                            )
+                        },
+                )
+            }
 
         private suspend fun toItem(
             id: SpaceId,
