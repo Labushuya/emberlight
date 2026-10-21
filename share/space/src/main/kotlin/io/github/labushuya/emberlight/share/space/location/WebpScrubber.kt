@@ -55,7 +55,7 @@ internal object WebpScrubber {
                 }
 
                 in KEPT -> {
-                    Unit
+                    // Bild- und Darstellungsdaten: keine Standortquelle, nichts zu bereinigen.
                 }
 
                 else -> {

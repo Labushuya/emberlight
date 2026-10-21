@@ -210,9 +210,17 @@ internal object JpegScrubber {
         depth: Int,
     ) {
         when {
-            pass.startsWith(payload, end, MPF_ID) -> app2Mpf(pass, payload, end, depth)
-            pass.startsWith(payload, end, ICC_ID) -> Unit
-            else -> unknown(pass, payload, end)
+            pass.startsWith(payload, end, MPF_ID) -> {
+                app2Mpf(pass, payload, end, depth)
+            }
+
+            pass.startsWith(payload, end, ICC_ID) -> {
+                // ICC-Farbprofil: keine Standortquelle, bleibt unverändert.
+            }
+
+            else -> {
+                unknown(pass, payload, end)
+            }
         }
     }
 

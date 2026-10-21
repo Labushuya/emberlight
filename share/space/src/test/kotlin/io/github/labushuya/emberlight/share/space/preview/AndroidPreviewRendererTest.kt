@@ -30,6 +30,21 @@ class AndroidPreviewRendererTest {
 
     private val renderer = AndroidPreviewRenderer()
 
+    /** Ein Fehler liefert einen Code der Stufe und Klasse, ohne Dateinamen oder Pfad (Hotfix 2). */
+    @Test
+    fun aBrokenFileGivesAFailureCodeWithoutThePath() {
+        val source = File(folder.root, "kaputt-geheim.jpg").apply { writeBytes(ByteArray(64) { 7 }) }
+        val target = File(folder.root, "vorschau.jpg")
+
+        val result = renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target)
+
+        assertTrue("erwartet Fehler, war $result", result is RenderResult.Failed)
+        val reason = (result as RenderResult.Failed).reason
+        assertTrue("Grund beginnt mit der Stufe: $reason", reason.startsWith("bild:"))
+        assertFalse("Grund enthält keinen Dateinamen: $reason", reason.contains("kaputt"))
+        assertFalse("keine Datei bei Fehler", target.exists())
+    }
+
     @Test
     fun aLargeJpegBecomesAJpegWithTheLongEdgeAt320() {
         val source = jpegFile("gross.jpg", width = 1200, height = 600)
@@ -37,7 +52,7 @@ class AndroidPreviewRendererTest {
 
         val ok = renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target)
 
-        assertTrue(ok)
+        assertDone(ok)
         assertEquals(320 to 160, sizeOf(target))
     }
 
@@ -46,7 +61,7 @@ class AndroidPreviewRendererTest {
         val source = jpegFile("mit-exif.jpg", width = 640, height = 480, make = "Testkamera")
         val target = File(folder.root, "ohne-exif.jpg")
 
-        assertTrue(renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target))
+        assertDone(renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target))
 
         val exif = ExifInterface(target)
         assertNull(exif.getAttribute(ExifInterface.TAG_MAKE))
@@ -60,7 +75,7 @@ class AndroidPreviewRendererTest {
             jpegFile("quer-gedreht.jpg", width = 200, height = 100, orientation = ExifInterface.ORIENTATION_ROTATE_90)
         val target = File(folder.root, "hochkant.jpg")
 
-        assertTrue(renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target))
+        assertDone(renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target))
 
         assertEquals(100 to 200, sizeOf(target))
     }
@@ -70,7 +85,7 @@ class AndroidPreviewRendererTest {
         val source = jpegFile("klein.jpg", width = 120, height = 80)
         val target = File(folder.root, "klein-vorschau.jpg")
 
-        assertTrue(renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target))
+        assertDone(renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target))
 
         assertEquals(120 to 80, sizeOf(target))
     }
@@ -80,7 +95,7 @@ class AndroidPreviewRendererTest {
         val source = File(folder.root, "kaputt.jpg").apply { writeBytes("keine Bilddaten".toByteArray()) }
         val target = File(folder.root, "kaputt-vorschau.jpg")
 
-        assertFalse(renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target))
+        assertFailed(renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target))
         assertFalse(target.exists())
     }
 
@@ -90,7 +105,7 @@ class AndroidPreviewRendererTest {
         val source = File(folder.root, "bild.heic").apply { writeBytes(ByteArray(16)) }
         val target = File(folder.root, "heic-vorschau.jpg")
 
-        assertFalse(renderer.renderImage(source, "image/heic", PreviewRules.VIEW_LONG_EDGE, target))
+        assertFailed(renderer.renderImage(source, "image/heic", PreviewRules.VIEW_LONG_EDGE, target))
         assertFalse(target.exists())
     }
 
@@ -100,7 +115,7 @@ class AndroidPreviewRendererTest {
         val source = File(folder.root, "bild.avif").apply { writeBytes(ByteArray(16)) }
         val target = File(folder.root, "avif-vorschau.jpg")
 
-        assertFalse(renderer.renderImage(source, "image/avif", PreviewRules.PREVIEW_LONG_EDGE, target))
+        assertFailed(renderer.renderImage(source, "image/avif", PreviewRules.PREVIEW_LONG_EDGE, target))
     }
 
     @Test
@@ -108,7 +123,7 @@ class AndroidPreviewRendererTest {
         val source = File(folder.root, "kein.mp4").apply { writeBytes("kein Video".toByteArray()) }
         val target = File(folder.root, "frame.jpg")
 
-        assertFalse(renderer.renderVideoFrame(source, PreviewRules.PREVIEW_LONG_EDGE, target))
+        assertFailed(renderer.renderVideoFrame(source, PreviewRules.PREVIEW_LONG_EDGE, target))
         assertNull(renderer.videoCodec(source))
     }
 
@@ -138,4 +153,12 @@ class AndroidPreviewRendererTest {
         BitmapFactory.decodeFile(file.path, bounds)
         return bounds.outWidth to bounds.outHeight
     }
+}
+
+private fun assertDone(result: RenderResult) {
+    org.junit.Assert.assertEquals("erwartet Erfolg, war $result", RenderResult.Done, result)
+}
+
+private fun assertFailed(result: RenderResult) {
+    org.junit.Assert.assertTrue("erwartet Fehler, war $result", result is RenderResult.Failed)
 }

@@ -169,10 +169,10 @@ internal class PreviewService(
         view: Boolean,
     ) {
         val edge = if (view) PreviewRules.VIEW_LONG_EDGE else PreviewRules.PREVIEW_LONG_EDGE
-        lock.withLock { write(id, view, PreviewState.PENDING, 0L) }
+        lock.withLock { write(id, view, PreviewState.PENDING, 0L, null) }
         val temp = storage.newTempPath()
         val source = storage.contentPath(sha256).toFile()
-        val rendered =
+        val result: RenderResult =
             withTimeoutOrNull(PreviewRules.RENDER_TIMEOUT_MS) {
                 withContext(Dispatchers.IO) {
                     runInterruptible {
@@ -183,8 +183,8 @@ internal class PreviewService(
                         }
                     }
                 }
-            } ?: false
-        lock.withLock { commit(id, sha256, view, edge, temp, rendered) }
+            } ?: RenderResult.Failed(REASON_TIMEOUT)
+        lock.withLock { commit(id, sha256, view, edge, temp, result) }
     }
 
     /** Übernimmt das Ergebnis. Fehlt das Medium inzwischen, wird die Teildatei verworfen. */
@@ -194,26 +194,26 @@ internal class PreviewService(
         view: Boolean,
         edge: Int,
         temp: Path,
-        rendered: Boolean,
+        result: RenderResult,
     ) {
         val row = media.findById(id)?.takeIf { it.state == STATE_READY }
         if (row == null) {
             withContext(Dispatchers.IO) { Files.deleteIfExists(temp) }
             return
         }
-        if (!rendered) {
+        if (result is RenderResult.Failed) {
             withContext(Dispatchers.IO) { Files.deleteIfExists(temp) }
-            write(id, view, PreviewState.FAILED, 0L)
+            write(id, view, PreviewState.FAILED, 0L, result.reason)
             return
         }
         val size = withContext(Dispatchers.IO) { Files.size(temp) }
         if (!fitsBudget(size)) {
             withContext(Dispatchers.IO) { Files.deleteIfExists(temp) }
-            write(id, view, PreviewState.FAILED, 0L)
+            write(id, view, PreviewState.FAILED, 0L, REASON_BUDGET)
             return
         }
         withContext(Dispatchers.IO) { storage.moveAtomically(temp, storage.previewPath(sha256, edge)) }
-        write(id, view, PreviewState.READY, size)
+        write(id, view, PreviewState.READY, size, null)
     }
 
     /**
@@ -227,21 +227,32 @@ internal class PreviewService(
         return size <= spaceLeft && size <= deviceLeft
     }
 
+    /**
+     * Schreibt Zustand, Größe und den Fehlergrund (hier als Code, Hotfix 2). Ein Grund ist nur bei `FAILED` gesetzt; bei
+     * `READY` oder `PENDING` wird er gelöscht.
+     */
     private suspend fun write(
         id: String,
         view: Boolean,
         state: String,
         bytes: Long,
+        reason: String?,
     ) {
-        if (view) media.setViewState(id, state, bytes) else media.setPreviewState(id, state, bytes)
+        if (view) {
+            media.setViewState(id, state, bytes)
+            media.setViewReason(id, reason)
+        } else {
+            media.setPreviewState(id, state, bytes)
+            media.setPreviewReason(id, reason)
+        }
     }
 
     /** Nach einem Fehler: offene Zustände werden `failed`. Bereite und schon fehlgeschlagene bleiben. */
     private suspend fun markOpenAsFailed(id: String) {
         val row = media.findById(id)?.takeIf { it.state == STATE_READY } ?: return
-        if (needsPreview(row.previewState)) media.setPreviewState(id, PreviewState.FAILED, 0L)
+        if (needsPreview(row.previewState)) write(id, view = false, PreviewState.FAILED, 0L, REASON_SERVICE)
         if (PreviewRules.hasHeicView(row.mime) && needsPreview(row.viewState)) {
-            media.setViewState(id, PreviewState.FAILED, 0L)
+            write(id, view = true, PreviewState.FAILED, 0L, REASON_SERVICE)
         }
     }
 
@@ -274,5 +285,8 @@ internal class PreviewService(
 
     private companion object {
         const val STATE_READY = "READY"
+        const val REASON_TIMEOUT = "timeout"
+        const val REASON_BUDGET = "budget"
+        const val REASON_SERVICE = "service"
     }
 }

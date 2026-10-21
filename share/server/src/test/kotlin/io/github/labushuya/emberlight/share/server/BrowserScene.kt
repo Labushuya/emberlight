@@ -14,6 +14,7 @@ import io.github.labushuya.emberlight.share.space.participants.InviteState
 import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
 import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
 import io.github.labushuya.emberlight.share.space.preview.PreviewRenderer
+import io.github.labushuya.emberlight.share.space.preview.RenderResult
 import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
 import io.github.labushuya.emberlight.share.space.run.SystemRunClock
 import kotlinx.coroutines.runBlocking
@@ -311,9 +312,9 @@ internal class ImageIoPreviewRenderer : PreviewRenderer {
         mime: String,
         longEdge: Int,
         target: File,
-    ): Boolean {
-        if (mime != "image/jpeg" && mime != "image/png") return false
-        val original = ImageIO.read(source) ?: return false
+    ): RenderResult {
+        if (mime != "image/jpeg" && mime != "image/png") return RenderResult.Failed("mime")
+        val original = ImageIO.read(source) ?: return RenderResult.Failed("decode")
         val scale = minOf(1.0, longEdge.toDouble() / maxOf(original.width, original.height))
         val width = (original.width * scale).toInt().coerceAtLeast(1)
         val height = (original.height * scale).toInt().coerceAtLeast(1)
@@ -322,14 +323,14 @@ internal class ImageIoPreviewRenderer : PreviewRenderer {
             drawImage(original, 0, 0, width, height, null)
             dispose()
         }
-        return ImageIO.write(scaled, "jpg", target)
+        return if (ImageIO.write(scaled, "jpg", target)) RenderResult.Done else RenderResult.Failed("encode")
     }
 
     override fun renderVideoFrame(
         source: File,
         longEdge: Int,
         target: File,
-    ): Boolean = false
+    ): RenderResult = RenderResult.Failed("video")
 
     override fun videoCodec(source: File): String? = null
 }

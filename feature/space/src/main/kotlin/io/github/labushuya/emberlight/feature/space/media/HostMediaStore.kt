@@ -23,6 +23,19 @@ class HostMediaStore
         private val vaults: SpaceVaults,
         private val cipher: InviteSecretCipher,
     ) {
+        /**
+         * Original für den Rückfall, wenn die Vorschau fehlgeschlagen ist (Hotfix 2). Die Oberfläche verkleinert es beim
+         * Laden. Der Pfad liegt im Space-Speicher, nie im MediaStore.
+         */
+        suspend fun originalFile(
+            spaceId: SpaceId,
+            id: MediaId,
+        ): File? =
+            withContext(Dispatchers.IO) {
+                val vault = vaults.vaultOf(spaceId, cipher) ?: return@withContext null
+                vault.contentOf(id)?.path?.toFile()
+            }
+
         /** Vorschau (320 px) für die Kachel. `null`, solange sie nicht bereit ist. */
         suspend fun previewFile(
             spaceId: SpaceId,

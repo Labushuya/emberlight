@@ -380,4 +380,7 @@
     <string name="space_media_remove_text">Es verschwindet für alle im Space. Das lässt sich nicht rückgängig machen.</string>
     <string name="space_media_remove_confirm">Entfernen</string>
     <string name="space_media_video_failed">Dieses Video lässt sich nicht abspielen.</string>
+    <string name="space_media_video_play">Abspielen</string>
+    <string name="space_media_video_replay">Erneut abspielen</string>
+    <string name="space_media_video_pause">Pause</string>
 </resources>
