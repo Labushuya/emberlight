@@ -227,6 +227,17 @@ internal class BrowserScene(
         upload(filler.token, "fuellung.jpg", MediaFixtures.jpeg(fillerBytes), keepLocation = true)
     }
 
+    /** Gast, dessen Token die Steuerung `add-photo` für einen neuen Eintrag nutzt. */
+    var controlToken: String? = null
+
+    /** Ein neues Foto über die Schnittstelle, mit Vorschau. Die Revision steigt dabei (Paket 3.5a-4). */
+    fun addPhoto(): String {
+        val token = checkNotNull(controlToken) { "Kein Gast für die Foto-Steuerung gesetzt." }
+        val id = upload(token, "neu-" + System.nanoTime() + ".jpg", photo(System.nanoTime(), 120, 90))
+        renderPreviews(listOf(id))
+        return id
+    }
+
     override fun close() {
         stopServer()
         database.close()

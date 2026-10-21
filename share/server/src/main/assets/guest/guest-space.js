@@ -25,6 +25,13 @@
   var REFRESH_MARGIN_MS = 60 * 1000;
   var REFRESH_RETRY_MS = 15 * 1000;
   var ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
+  // Bildladungen des Rasters (Paket 3.5a-4): höchstens vier gleichzeitig, nur für Kacheln nahe am Sichtbereich, damit
+  // das Abfragen des Space nicht verdrängt wird (Chrome erlaubt je Host nur sechs Verbindungen). Ein Fehler lädt einmal
+  // neu, mit frischer Adresse und 1 bis 2 Sekunden Wartezeit.
+  var IMAGE_CONCURRENCY = 4;
+  var IMAGE_NEAR_MARGIN = "300px 0px";
+  var RETRY_MIN_MS = 1000;
+  var RETRY_JITTER_MS = 1000;
   var VIDEO_CODECS = { avc1: "avc1.42E01E", hvc1: "hvc1.1.6.L93.B0" };
   var TYPE_NAMES = {
     "image/jpeg": "JPEG",
@@ -536,7 +543,7 @@
       }
       renderCountdown(rem);
       var showBanner = rem <= WARN_BANNER_SECONDS;
-      el.banner.hidden = !showBanner;
+      if (el.banner.hidden === showBanner) el.banner.hidden = !showBanner;
       if (showBanner && !state.bannerShown) {
         state.bannerShown = true;
         core.announce(t("endingBanner"));
@@ -615,7 +622,8 @@
         state.listRevision = revision;
         state.listLoaded = true;
         state.listLoading = false;
-        renderGrid();
+        syncGrid();
+        ensureVisible();
         return true;
       });
     }
@@ -628,6 +636,15 @@
         state.listLoading = false;
       }
     );
+  }
+
+  var sentinelObserver = null;
+
+  /** Ein Observer meldet nur Änderungen. Nach dem Anhängen den Sentinel neu beobachten, damit er bei Sichtbarkeit erneut meldet. */
+  function recheckSentinel() {
+    if (!sentinelObserver) return;
+    sentinelObserver.unobserve(el.sentinel);
+    sentinelObserver.observe(el.sentinel);
   }
 
   /** Weitere Seite anhängen. Mit Filter „Meine“ wird so lange nachgeladen, bis etwas Eigenes sichtbar ist. */
@@ -648,8 +665,8 @@
       });
       state.items = state.items.concat(fresh);
       state.nextCursor = page.nextCursor;
-      appendTiles(fresh);
-      updateListState();
+      syncGrid();
+      recheckSentinel();
       if (visibleCount() === 0 && state.nextCursor) return loadMore();
       return undefined;
     });
@@ -659,20 +676,51 @@
     state.filter = value;
     el.filterAll.setAttribute("aria-pressed", value === "all" ? "true" : "false");
     el.filterMine.setAttribute("aria-pressed", value === "mine" ? "true" : "false");
-    renderGrid();
+    syncGrid();
+    ensureVisible();
   }
 
-  function renderGrid() {
-    while (el.grid.firstChild) el.grid.removeChild(el.grid.firstChild);
-    appendTiles(state.items);
-    updateListState();
+  /** Mit Filter „Meine“ wird so lange nachgeladen, bis etwas Eigenes sichtbar ist. */
+  function ensureVisible() {
     if (visibleCount() === 0 && state.nextCursor) loadMore();
   }
 
-  function appendTiles(items) {
-    items.filter(matchesFilter).forEach(function (item) {
-      el.grid.appendChild(tileFor(item));
+  /**
+   * Baut das Raster neu auf. Nur beim Öffnen eines Space, sonst ändert [syncGrid] das Raster gezielt (Paket 3.5a-4).
+   */
+  function renderGrid() {
+    Array.from(tiles.keys()).forEach(removeTile);
+    while (el.grid.firstChild) el.grid.removeChild(el.grid.firstChild);
+    syncGrid();
+  }
+
+  /**
+   * Gleicht das Raster mit `state.items` ab. Neue Kacheln kommen an ihre Sortierposition, entfernte gehen, geänderte
+   * werden gezielt aktualisiert. Ein vorhandenes Bild bleibt unangetastet, solange sein Bild gleich ist (Paket 3.5a-4).
+   */
+  function syncGrid() {
+    var wanted = {};
+    state.items.forEach(function (item) {
+      wanted[item.id] = true;
     });
+    Array.from(tiles.keys()).forEach(function (id) {
+      if (!wanted[id]) removeTile(id);
+    });
+    var seen = {};
+    var prev = null;
+    state.items.forEach(function (item) {
+      if (seen[item.id]) return;
+      seen[item.id] = true;
+      var entry = tiles.get(item.id) || createTile(item);
+      updateTile(entry, item);
+      entry.li.hidden = !matchesFilter(item);
+      var expected = prev ? prev.nextSibling : el.grid.firstChild;
+      if (entry.li !== expected) el.grid.insertBefore(entry.li, expected);
+      prev = entry.li;
+    });
+    updateListState();
+    // Liegt der Sentinel nach dem Laden schon im Rand, meldet der Observer keine Änderung. Darum neu beobachten.
+    recheckSentinel();
   }
 
   function updateListState() {
@@ -687,53 +735,299 @@
     el.listEmpty.hidden = count > 0 || state.nextCursor !== null;
   }
 
-  function tileFor(item) {
+  /** Kacheln je Medien-ID. Eine Kachel bleibt, solange ihr Medium in der Liste steht (Paket 3.5a-4). */
+  var tiles = new Map();
+
+  /** Eine neue Kachel ohne Medium. Das Medium setzt [updateTile] (Bild oder Platzhalter). */
+  function createTile(item) {
     var li = document.createElement("li");
     li.className = "cell";
-    if (ID_PATTERN.test(item.id)) li.setAttribute("data-id", item.id);
+    li.setAttribute("data-id", item.id);
     var button = document.createElement("button");
     button.type = "button";
     button.className = "tile";
-    var label = t(isVideo(item) ? "altVideo" : "altPhoto", { caption: captionOf(item) });
-    button.appendChild(mediaFor(item, label));
-    if (item.locationKept) button.appendChild(badge("loc", t("locationKept")));
-    if (isVideo(item)) button.appendChild(badge("vid", t("videoBadge")));
-    button.addEventListener("click", function () {
-      openDetail(item.id, button);
-    });
-    li.appendChild(button);
     var caption = document.createElement("p");
     caption.className = "caption";
-    caption.textContent = captionOf(item);
+    li.appendChild(button);
     li.appendChild(caption);
-    return li;
+    var entry = {
+      id: item.id,
+      li: li,
+      button: button,
+      caption: caption,
+      media: null,
+      mediaKind: null,
+      placeholderState: null,
+      imageKey: null,
+      slot: null,
+      queued: false,
+      loaded: false,
+      retried: false,
+      exhausted: false,
+      retrying: false,
+      locBadge: null,
+      vidBadge: null
+    };
+    if (isVideo(item)) {
+      entry.vidBadge = badge("vid", t("videoBadge"));
+      button.appendChild(entry.vidBadge);
+    }
+    button.addEventListener("click", function () {
+      openDetail(entry.id, button);
+    });
+    tiles.set(item.id, entry);
+    return entry;
   }
 
-  /** Vorschau: Bild über `previewUrl`, sobald bereit. Sonst bei Bildern das Original, lazy (ADR 0019, Schnittstelle). */
-  function mediaFor(item, label) {
-    var src = null;
-    if (item.previewUrl && item.previewState === "ready") src = item.previewUrl;
-    else if (!isVideo(item) && !isHeic(item) && item.viewUrl) src = item.viewUrl;
-    if (src === null) return placeholder(item, label);
+  /**
+   * Gleicht eine Kachel mit dem Eintrag ab. Ein vorhandenes, erfolgreich geladenes Bild wird nicht neu gesetzt. Neue
+   * Signaturen allein sind keine Änderung, nur ein anderes Bild (andere Route) ersetzt es.
+   */
+  function updateTile(entry, item) {
+    var caption = captionOf(item);
+    if (entry.caption.textContent !== caption) entry.caption.textContent = caption;
+    var label = t(isVideo(item) ? "altVideo" : "altPhoto", { caption: caption });
+    if (item.locationKept && entry.locBadge === null) {
+      entry.locBadge = badge("loc", t("locationKept"));
+      entry.button.insertBefore(entry.locBadge, entry.vidBadge);
+    } else if (!item.locationKept && entry.locBadge !== null) {
+      entry.locBadge.remove();
+      entry.locBadge = null;
+    }
+    if (!entry.retrying) {
+      var key = item.previewUrl && item.previewState === "ready" ? previewKey(item.previewUrl) : null;
+      if (key !== null) {
+        if (entry.imageKey !== key) {
+          entry.imageKey = key;
+          entry.retried = false;
+          entry.exhausted = false;
+          showTileImage(entry);
+        } else if (entry.mediaKind !== "img" && !entry.exhausted) {
+          showTileImage(entry);
+        }
+      } else {
+        entry.imageKey = null;
+        entry.exhausted = false;
+        entry.retried = false;
+        var pending = item.previewState === "failed" ? "failed" : "pending";
+        if (entry.mediaKind !== "placeholder" || entry.placeholderState !== pending) {
+          showPlaceholder(entry, item, pending);
+        }
+      }
+    }
+    applyLabel(entry, label);
+  }
+
+  /** Pfad ohne Abfrage: die Route der Vorschau. Die Signatur wechselt bei jeder Ausgabe, das Bild nicht. */
+  function previewKey(url) {
+    var cut = url.indexOf("?");
+    return cut < 0 ? url : url.slice(0, cut);
+  }
+
+  function applyLabel(entry, label) {
+    var node = entry.media;
+    if (!node) return;
+    var attribute = node.tagName === "IMG" ? "alt" : "aria-label";
+    if (node.getAttribute(attribute) !== label) node.setAttribute(attribute, label);
+  }
+
+  /** Ersetzt das Medium der Kachel. Ein laufender Ladeplatz und ein Eintrag in der Warteschlange gehen dabei frei. */
+  function replaceMedia(entry, node) {
+    var old = entry.media;
+    if (old) {
+      if (entry.queued) {
+        entry.queued = false;
+        imageQueue = imageQueue.filter(function (queued) {
+          return queued !== entry;
+        });
+      }
+      if (entry.slot === old) releaseSlot(entry, old);
+      entry.button.replaceChild(node, old);
+    } else {
+      entry.button.insertBefore(node, entry.button.firstChild);
+    }
+    entry.media = node;
+  }
+
+  /**
+   * Raster: nur die Vorschau (`previewUrl`), sobald `ready`. Sonst Platzhalter. Das Original (`viewUrl`) lädt
+   * das Raster nie, nur die Detailansicht (ADR 0019, Nachtrag 3.5a-4). Die Adresse setzt die Warteschlange.
+   */
+  function showTileImage(entry) {
     var img = document.createElement("img");
     img.className = "thumb";
-    img.setAttribute("alt", label);
-    img.setAttribute("loading", "lazy");
     img.setAttribute("decoding", "async");
-    img.addEventListener("error", function () {
-      if (img.parentNode) img.parentNode.replaceChild(placeholder(item, label), img);
+    img.addEventListener("load", function () {
+      onImageLoad(entry, img);
     });
-    img.setAttribute("src", src);
-    return img;
+    img.addEventListener("error", function () {
+      onImageError(entry, img);
+    });
+    entry.mediaKind = "img";
+    entry.placeholderState = null;
+    entry.loaded = false;
+    replaceMedia(entry, img);
+    watch(entry);
   }
 
-  function placeholder(item, label) {
+  /** `pending`: „Vorschau folgt“. `failed`: „Keine Vorschau“. Die Kennzeichnung des Videos bleibt am Kachelrand. */
+  function showPlaceholder(entry, item, kind) {
     var span = document.createElement("span");
     span.className = "placeholder";
     span.setAttribute("role", "img");
-    span.setAttribute("aria-label", label);
-    span.textContent = t(isVideo(item) ? "placeholderVideo" : "placeholderPhoto");
-    return span;
+    var key = isVideo(item) ? "placeholderVideo" : "placeholderPhoto";
+    if (kind === "failed") key += "Failed";
+    span.textContent = t(key);
+    entry.mediaKind = "placeholder";
+    entry.placeholderState = kind;
+    replaceMedia(entry, span);
+  }
+
+  // Warteschlange der Bildladungen
+
+  var imageQueue = [];
+  var imagesInFlight = 0;
+  var nearObserver = null;
+
+  function setupImageQueue() {
+    // Ohne IntersectionObserver lädt die Warteschlange sofort. Die Obergrenze gilt trotzdem.
+    if (!("IntersectionObserver" in window)) return;
+    nearObserver = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          nearObserver.unobserve(entry.target);
+          var tile = tiles.get(entry.target.getAttribute("data-id"));
+          if (tile) enqueue(tile);
+        });
+      },
+      { rootMargin: IMAGE_NEAR_MARGIN }
+    );
+  }
+
+  /** Meldet die Kachel, sobald sie in die Nähe des Sichtbereichs kommt. Ohne Beobachter sofort. */
+  function watch(entry) {
+    if (entry.mediaKind !== "img" || entry.loaded) return;
+    if (nearObserver === null) enqueue(entry);
+    else nearObserver.observe(entry.li);
+  }
+
+  function enqueue(entry) {
+    if (entry.queued || entry.slot || entry.loaded || entry.mediaKind !== "img") return;
+    entry.queued = true;
+    imageQueue.push(entry);
+    pumpImages();
+  }
+
+  function pumpImages() {
+    while (imagesInFlight < IMAGE_CONCURRENCY && imageQueue.length > 0) {
+      var entry = imageQueue.shift();
+      entry.queued = false;
+      if (entry.mediaKind === "img" && entry.media && !entry.slot && !entry.loaded) startImage(entry);
+    }
+  }
+
+  /** Gibt den Ladeplatz frei. Mit `img` nur, wenn der Platz zu diesem Bild gehört. */
+  function releaseSlot(entry, img) {
+    if (!entry.slot || (img && entry.slot !== img)) return;
+    entry.slot = null;
+    imagesInFlight -= 1;
+    pumpImages();
+  }
+
+  /**
+   * Startet den Abruf eines Bildes. Läuft die Adresse bald ab, wird sie vorher erneuert. Der Ladeplatz bleibt belegt,
+   * bis das Bild fertig ist oder die Kachel das Medium wechselt.
+   */
+  function startImage(entry) {
+    var img = entry.media;
+    var item = findItem(entry.id);
+    if (!item || !item.previewUrl) return;
+    entry.slot = img;
+    imagesInFlight += 1;
+    if (!needsRefresh(item.urlsUntil)) {
+      img.setAttribute("src", item.previewUrl);
+      return;
+    }
+    refreshItem(entry.id).then(function () {
+      if (entry.media !== img) return;
+      var current = findItem(entry.id);
+      if (current && current.previewUrl) img.setAttribute("src", current.previewUrl);
+      else releaseSlot(entry, img);
+    });
+  }
+
+  function onImageLoad(entry, img) {
+    releaseSlot(entry, img);
+    if (entry.media !== img) return;
+    entry.loaded = true;
+    entry.retried = false;
+    entry.exhausted = false;
+    if (nearObserver !== null) nearObserver.unobserve(entry.li);
+  }
+
+  /** Ein Fehler lädt einmal neu, mit frischer Adresse. Schlägt auch das fehl, bleibt der Platzhalter „Keine Vorschau“. */
+  function onImageError(entry, img) {
+    releaseSlot(entry, img);
+    if (entry.media !== img) return;
+    if (entry.retried) {
+      exhaust(entry);
+      return;
+    }
+    entry.retried = true;
+    entry.retrying = true;
+    var item = findItem(entry.id);
+    if (!item) return;
+    showPlaceholder(entry, item, "pending");
+    setTimeout(
+      function () {
+        retryTile(entry);
+      },
+      RETRY_MIN_MS + Math.random() * RETRY_JITTER_MS
+    );
+  }
+
+  function retryTile(entry) {
+    var id = entry.id;
+    refreshItem(id).then(function (fresh) {
+      if (tiles.get(id) !== entry) return;
+      entry.retrying = false;
+      var item = findItem(id);
+      if (!item) return;
+      if (fresh && item.previewUrl && item.previewState === "ready") {
+        showTileImage(entry);
+        applyLabel(entry, t(isVideo(item) ? "altVideo" : "altPhoto", { caption: captionOf(item) }));
+      } else if (fresh) {
+        entry.imageKey = null;
+        updateTile(entry, item);
+      } else {
+        exhaust(entry);
+      }
+    });
+  }
+
+  function exhaust(entry) {
+    entry.exhausted = true;
+    entry.retrying = false;
+    var item = findItem(entry.id);
+    if (item) showPlaceholder(entry, item, "failed");
+  }
+
+  /** Entfernt eine Kachel samt Beobachtung und Ladeplatz. */
+  function removeTile(id) {
+    var entry = tiles.get(id);
+    if (!entry) return;
+    if (nearObserver !== null) nearObserver.unobserve(entry.li);
+    if (entry.queued) {
+      entry.queued = false;
+      imageQueue = imageQueue.filter(function (queued) {
+        return queued !== entry;
+      });
+    }
+    if (entry.slot) releaseSlot(entry);
+    entry.retrying = false;
+    tiles.delete(id);
+    entry.li.remove();
   }
 
   function badge(kind, text) {
@@ -756,12 +1050,13 @@
           if (!fresh || !existing) return null;
           Object.assign(existing, fresh);
           noteSuccess();
+          syncGrid();
           return existing;
         }
         if (result.status === 404) {
           dropItem(id);
           if (state.openId === id) closeDetail(true);
-          renderGrid();
+          syncGrid();
           core.setStatus(t("notFound"));
           return null;
         }
@@ -1008,7 +1303,7 @@
           closeWithdraw(false);
           dropItem(id);
           if (state.openId === id) closeDetail(true);
-          renderGrid();
+          syncGrid();
           core.setStatus(result.status === 204 ? t("withdrawn") : t("notFound"));
           refreshSpace();
           return;
@@ -1048,10 +1343,11 @@
     });
     el.withdrawConfirm.addEventListener("click", confirmWithdraw);
     el.endingOk.addEventListener("click", hideEndingDialog);
+    setupImageQueue();
 
     // Liste wird beim Scrollen nachgeladen. Ohne IntersectionObserver bleibt der Knopf „Mehr laden“.
     if ("IntersectionObserver" in window) {
-      var observer = new IntersectionObserver(
+      sentinelObserver = new IntersectionObserver(
         function (entries) {
           if (entries.some(function (entry) {
             return entry.isIntersecting;
@@ -1061,7 +1357,7 @@
         },
         { rootMargin: "240px 0px" }
       );
-      observer.observe(el.sentinel);
+      sentinelObserver.observe(el.sentinel);
     }
 
     // Abfrage nur bei sichtbarer Seite. Kehrt der Tab zurück, sofort aktualisieren.
@@ -1116,6 +1412,11 @@
     },
     focusItem: function (id) {
       return focusItem(id);
+    },
+    // Nur für Tests: sofort ein Abfragezyklus, wie der Timer ihn auslöst. Kein zusätzlicher Netzwerkzugriff.
+    pollNow: function () {
+      clearPollTimer();
+      cycle();
     }
   };
 })();

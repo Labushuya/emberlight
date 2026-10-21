@@ -81,6 +81,20 @@ Folge für Paket 3.5: Die Gäste-Seite prüft die Größe vor dem Senden. Auf de
 
 Siehe die Liste in der PR-Beschreibung von #35. Sie enthält die Schritte für das Gerät und den Browser am PC.
 
+## Nachtrag: Wiederaufnahme bei vorübergehenden Fehlern (Fix Gäste-Seite)
+
+Die Prüfung der gespeicherten Sitzung mit `GET /api/v1/me` wertet die Antwort so aus:
+
+- `200` mit passender Space-ID: Space. `410`: Ende-Ansicht. `401`: Die gespeicherte Sitzung wird verworfen. Danach folgt der Beitritt mit Einladung oder der Hinweis zum Scannen.
+- `200` mit einer anderen Space-ID ist eindeutig und kein vorübergehender Fehler. Die Seite verwirft die Sitzung und zeigt danach wie vor dem Umbau den Beitritt (Einladung im Fragment) oder den QR-Hinweis. Sie prüft nicht weiter.
+- `429`, `5xx`, Netzfehler, `200` mit unlesbarem Körper oder ohne lesbare Space-ID sind vorübergehend. Die Seite wartet 0,5, 1, 2 und 4 Sekunden, danach alle 5 Sekunden. Sie zeigt „Verbindung wird hergestellt…“ (Statuszeile). Der QR-Hinweis erscheint nicht, solange eine Sitzung gespeichert ist.
+- `403` (Ort oder Adresse nicht zugelassen) zeigt den Hinweis zum WLAN und prüft weiter. Andere Antworten zeigen „Das hat nicht geklappt“ und prüfen ebenfalls weiter. Die Sitzung bleibt in beiden Fällen erhalten.
+- **Gastgeber dauerhaft nicht erreichbar.** Läuft die Prüfung 30 Sekunden ohne Erfolg, erscheint unter der Statuszeile der Hinweis „Gastgeber nicht erreichbar. Bist du im selben WLAN? Ist die App des Gastgebers geöffnet?“ und der Knopf „Neu beitreten“. Die Prüfung läuft weiter. Kommt vorher eine Antwort mit Erfolg (Space oder Ende), verschwinden Hinweis und Knopf. Der Knopf fragt nach einer Bestätigung und verwirft dann nur die lokal gespeicherte Sitzung, ohne Serveraufruf. Danach zeigt die Seite den Beitritt bzw. den QR-Hinweis. Die Prüfung endet dabei und die Seite fragt den Server nicht weiter ab.
+
+Begründung: Vor dem Fix verwarf die Seite die Sitzung bei einem `200` mit unlesbarem Körper nicht, zeigte aber den QR-Hinweis. Ein kurzes `503` (Parallelität des Servers) und ein `429` zeigten ihn ebenfalls. Ein Netzfehler öffnete den Space ohne Verbindung. Gäste mussten neu scannen. Die Browser-Tests `resume.test.mjs` prüfen Wiederholung bei zwei Antworten `503` und bei zwei Netzfehlern. Die Browser-Tests `resume-host.test.mjs` prüfen den fremden Space (mit und ohne Einladung), den Hinweis nach der Frist mit „Neu beitreten“ (Abbrechen und Bestätigen), und dass ein Erfolg vor dem Klick Hinweis und Knopf entfernt.
+
+Entschieden: Ein `200` für einen fremden Space ist eindeutig. Die Sitzung wird verworfen, die Seite zeigt den Beitritt. Ein dauerhaft nicht erreichbarer Gastgeber führt nicht in eine Schleife ohne Ausweg. Über „Neu beitreten“ gibt es einen Weg zurück in den Beitritt, ohne die Website-Daten zu löschen. Die Frist ist 30 Sekunden. Im Browser-Test ist sie durch ein Hilfsskript im Test auf 3 Sekunden verkürzt. Der Produktcode hat dafür keinen Haken.
+
 ## Offene Punkte
 
 - Titelbild auf der Gäste-Seite. Name und Farbe sind mit dem Geheimnis vorab sichtbar (siehe Abweichungen). Das Titelbild folgt mit einer Route, die nur nach dem Beitritt erreichbar ist.

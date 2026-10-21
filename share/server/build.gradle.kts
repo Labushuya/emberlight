@@ -44,6 +44,17 @@ afterEvaluate {
             classpath = unitTests.get().classpath
             include("**/GuestBrowserTest*")
             mustRunAfter(unitTests)
+            // Eingaben, die Node und der Server laden. Gradle kennt sie sonst nicht: Nach reinen JS-Änderungen würde der Task
+            // UP-TO-DATE melden oder aus dem Cache kommen, ohne dass der Browser lief.
+            inputs.dir(file("src/test/browser"))
+            inputs.dir(file("src/main/assets/guest"))
+            // Protokoll je Testdatei (überschrieben, nie gelöscht). Die Ausgabe des Tasks.
+            val browserLog = layout.buildDirectory.dir("browser-test-log")
+            outputs.dir(browserLog)
+            systemProperty("emberlight.browserTestLog", browserLog.get().asFile.absolutePath)
+            // Kein Cache-Treffer: Der Lauf hängt an Chrome, Node und der Uhr, und ein übersprungener Lauf zählt als Erfolg.
+            // Ein Treffer würde einen Browser-Lauf vortäuschen, der nie stattfand.
+            outputs.cacheIf { false }
         }
     tasks.named("check") { dependsOn(browserTests) }
 }

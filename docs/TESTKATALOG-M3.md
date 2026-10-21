@@ -1,13 +1,25 @@
 # Testkatalog Meilenstein 3 (kumulativ)
 
-Stand: 21.10.2026 (Paket 3.5a-3 eingetragen). Dieser Katalog gehört zum Endtest der Nutzerin bzw. des Nutzers beim Vorab-Release `v0.3.0-alpha.1` (Planung zuvor „v0.3.0-alpha“, siehe [PLAN-M3.md](PLAN-M3.md)). Er wird von jedem Paket fortgeschrieben und ist nach Funktionen gegliedert, nicht nach Paketen.
+Stand: 21.10.2026 (Vorab-Release `v0.3.0-alpha.2`, Nachzug PR #50 und #51 eingearbeitet). Dieser Katalog gehört zum Endtest der Nutzerin bzw. des Nutzers beim Vorab-Release `v0.3.0-alpha.2` (Vorgänger `v0.3.0-alpha.1`, siehe [PLAN-M3.md](PLAN-M3.md)). Er wird von jedem Paket fortgeschrieben und ist nach Funktionen gegliedert, nicht nach Paketen.
 
 ## Endtest in Kürze
 
-1. **Installieren:** Vorab-Release `v0.3.0-alpha.1` von https://github.com/Labushuya/emberlight/releases/tag/v0.3.0-alpha.1 (Punkt 1.1).
-2. **Gast:** Die Gast-Punkte im Browser (5.13 bis 5.21 sowie Abschnitte 6, 6b und 7) über den PC-Browser oder ein zweites Gerät im selben WLAN prüfen.
-3. **Überspringen:** Punkte mit „[Entwickler]“ und Punkte mit „folgt“ (Pakete 3.6 und 3.7). Umgesetzte Punkte in denselben Abschnitten (z. B. 10.6, 10.7, 11.2) gelten dagegen.
-4. **Rückmeldung:** per Punktnummer, etwa „4.12 ok“ oder „6.3 Fehler: …“.
+Vorab-Version `v0.3.0-alpha.2`. **`v0.3.0-alpha.1` nicht mehr verwenden**: Dort blieb bei manchen Kamera-Fotos (z. B. Honor, zweiter Exif-Block APP10) der Standort erhalten. Die Reihenfolge ist nach Priorität geordnet.
+
+1. **Standort, zuerst:** Ein eigenes Foto der Honor-Kamera mit Standort über den Browser hochladen (9.7). Die Kopie in einer Foto-App auf Standort prüfen: kein Standort.
+2. **Standort in der Gastgeber-App:** Die Kopie in der Gastgeber-App ansehen, ohne Markierung „Standort enthalten“ (8.12, 9.6).
+3. **Teilnehmerzahl:** Der Gast erscheint live in der Teilnehmerliste und in der Zahl (5.16).
+4. **Namen in Kacheln:** Im Raster steht „von <Name>“, in der Gastgeber-App ebenso (6.1, 8.2).
+5. **Video in der Gastgeber-App:** Abspielen, pausieren, vorspulen (8.11).
+6. **Vorschau bei Kamerafotos:** Vorschau in der Gastgeber-App ohne Neustart (8.9) und im Browser ohne neuen Upload (6.21).
+7. **Gäste-Seite mit vielen Fotos:** Scrollen, während Uploads laufen: flüssig, kein Neuladen, kein Abschneiden (6.22). Wiederaufnahme, „Verbindung wird hergestellt…“ bzw. „Neu beitreten“ (5.23, 5.24).
+8. **Ende, Verlängern, Aufbewahrung, Löschen, Vorlage:** Abschnitt 10, inkl. 10.30 bis 10.39. Zuerst 10.11 (Verlängern), 10.14 (Gäste sehen die Verlängerung), 10.19 (Erinnerung), 10.20 (ein Tag länger), 10.30 bis 10.33 (Gelöscht und Vorlage), 10.36 bis 10.37 (Uploads und automatische Löschung), 10.39 (Sofort löschen während eines Uploads).
+
+**Neu bzw. geändert seit `v0.3.0-alpha.1`:** Standort-Nachkontrolle bei jedem Upload (9.7), Teilnehmerzahl live (5.16), Namen in Kacheln (6.1, 8.2), Video in der Gastgeber-App (8.11), Vorschau-Rückfall, Gäste-Seite flüssig (6.22), Wiederaufnahme mit „Verbindung wird hergestellt…“ bzw. „Neu beitreten“ (5.23), Vorschau ohne neuen Upload (6.21), Upload während des Löschens (10.36), Pakete 3.6a, 3.6b und 3.6c (Abschnitt 10).
+
+**Überspringen:** Punkte mit „[Entwickler]“ und Punkte mit „folgt“ (Paket 3.7, Abschnitt 11). Umgesetzte Punkte in denselben Abschnitten gelten dagegen.
+
+**Rückmeldung:** per Punktnummer, etwa „4.12 ok“ oder „6.3 Fehler: …“.
 
 ## So liest man den Katalog
 
@@ -27,7 +39,7 @@ Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Pa
 
 ## 1 Installation bzw. Update
 
-- [ ] **1.1 Vorab-Release installieren (verfügbar).** Handlung: APK `emberlight-v0.3.0-alpha.1.apk` von https://github.com/Labushuya/emberlight/releases/tag/v0.3.0-alpha.1 laden und die SHA-256-Prüfsumme mit der Datei `emberlight-v0.3.0-alpha.1.apk.sha256` vergleichen. Installation als Update über v0.2.0, die App dafür nicht vorher deinstallieren. Erwartet: Prüfsumme stimmt, die App startet. *(Ergänzung)*
+- [ ] **1.1 Vorab-Release installieren (verfügbar).** Handlung: APK `emberlight-v0.3.0-alpha.2.apk` von https://github.com/Labushuya/emberlight/releases/tag/v0.3.0-alpha.2 laden und die SHA-256-Prüfsumme mit der Datei `emberlight-v0.3.0-alpha.2.apk.sha256` vergleichen. Installation als Update über `v0.3.0-alpha.1` oder v0.2.0, die App dafür nicht vorher deinstallieren. Erwartet: Prüfsumme stimmt, die App startet. *(Ergänzung)*
 - [ ] **1.2 Update mit bestehenden Spaces.** Handlung: Version mit Datenbank 2 bis 5 auf den aktuellen Stand aktualisieren. Erwartet: Spaces, Medien und Teilnehmer bleiben erhalten. *(seit 3.2, Migrationen 2 → 3, 3 → 4, 4 → 5; Ergänzung)*
 - [ ] **1.3 Update von Datenbank 5 (Stand 3.4 vor 3.4b).** Handlung: Version mit Datenbank 5 auf den aktuellen Stand aktualisieren, Space öffnen. Erwartet: Einmalig erscheint der Hinweis „Einladung wurde erneuert – bitte neuen QR teilen“ mit dem Knopf „Verstanden“, der QR-Code ist neu. Nach „Verstanden“ und einem Neustart der App erscheint der Hinweis nicht mehr, der QR-Code bleibt gleich. *(seit 3.4b, PR #35 Punkt 18, angepasst)*
 - [ ] **1.4 Release-Build.** Handlung: Release-Build (signiert) installieren, Space aus der Oberfläche starten. Erwartet: Start funktioniert, der Debug-Einstieg fehlt. *(seit 3.3, PR #32 Punkt 20)*
@@ -135,6 +147,9 @@ Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Pa
 - [ ] **5.19 Abmelden.** Handlung: „Abmelden“ antippen. Erwartet: „Du bist abgemeldet.“. Neuladen ohne Einladung ermöglicht keinen Beitritt. *(seit 3.4, PR #35 Punkt 11)*
 - [ ] **5.20 Zu viele Versuche.** Handlung: Zehn falsche Einladungen hintereinander von einem Gerät (Beitritt oder Vorschau), dann einen elften Versuch. Erwartet: „Zu viele Versuche“. Nach zehn Minuten ist der Beitritt wieder möglich. *(seit 3.4, PR #35 Punkt 15)*
 - [ ] **5.21 Seite ohne Einladung.** Handlung: Die Adresse ohne `#i=` öffnen. Erwartet: Der Text „Dem Space beitreten“, keine Daten des Space. *(seit 3.4b, Ergänzung aus ADR 0018)*
+- [ ] **5.23 Wiederaufnahme bei kurzer Störung.** Handlung: Gast hat einen Space offen, dann die Seite neu laden, während der Server kurz belegt oder das WLAN kurz getrennt ist. Erwartet: „Verbindung wird hergestellt…“, danach wechselt die Seite in den Space, sobald der Server wieder antwortet. Der Hinweis „Scanne den QR-Code…“ erscheint dabei nicht. *(seit Fix Gäste-Wiederaufnahme, ADR 0018 Nachtrag, Browser-Test `resume.test.mjs`; Gerät offen)*
+- [ ] **5.24 Gastgeber dauerhaft nicht erreichbar.** Handlung: Gast hat einen Space offen, dann die Seite neu laden, während die App des Gastgebers geschlossen oder das WLAN getrennt ist. Warten, bis nach etwa 30 Sekunden der Hinweis erscheint. Erwartet: Unter „Verbindung wird hergestellt…“ steht „Gastgeber nicht erreichbar. Bist du im selben WLAN? Ist die App des Gastgebers geöffnet?“ mit dem Knopf „Neu beitreten“. Der Knopf fragt nach, nach „Abbrechen“ bleibt alles wie es ist. Nach „Neu beitreten“ ist die gespeicherte Sitzung weg, die Seite zeigt den Beitritt (mit Einladung) bzw. den QR-Hinweis. Kommt die Verbindung vor dem Klick zurück, verschwinden Hinweis und Knopf, und die Seite wechselt in den Space. *(seit Fix Gäste-Wiederaufnahme, ADR 0018 Nachtrag, Browser-Test `resume-host.test.mjs` mit verkürzter Frist; Gerät offen)*
+- [ ] **5.25 [Entwickler] Fremder Space.** Handlung: Am Gerät nicht herstellbar, weil ein Token nur in seinem Space gilt. Der Fall wird im Browser mit abgefangener Antwort geprüft (`200` mit anderer Space-ID). Erwartet: Die Seite verwirft die gespeicherte Sitzung und zeigt den Beitritt bzw. den QR-Hinweis. Sie fragt danach nicht weiter nach `/api/v1/me`. *(seit Fix Gäste-Wiederaufnahme, ADR 0018 Nachtrag, Browser-Test `resume-host.test.mjs`; Entwickler-Prüfung offen)*
 
 ### Entwickler
 
@@ -173,6 +188,7 @@ Die Punkte gelten für den Browser des Gasts, einmal auf dem Telefon (390 px bre
 - [ ] **6.19 Speicherzählung mit Vorschauen.** Handlung: Space mit kleinem Speicherlimit füllen, dann Medien löschen. Erwartet: Die Speicheranzeige zählt die Vorschauen mit. Nach dem Löschen sinkt sie um Original und Vorschau. *(3.5a-2 umgesetzt, Tests `SpaceVaultPreviewTest`, `SpacesDatabaseMigrationToVersionSevenTest`)*
 - [ ] **6.20 [Entwickler] Vorschau-Route.** Handlung: `GET /api/v1/media/{id}/preview` mit Header abrufen, vor und nach dem Rendern. Erwartet: Vorher `404` mit `preview_unavailable`, danach `200` mit `image/jpeg`. Das Medien-Gate bremst die Vorschau nicht. *(3.5a-2 Server-Test `PreviewApiTest`; Entwickler-Prüfung am Gerät offen)*
 - [ ] **6.21 Vorschau ohne neuen Upload.** Handlung: Gast öffnet den Space im Browser, dann lädt der Gastgeber ein Foto hoch. Die Liste offen lassen, bis die Vorschau fertig ist, ohne dass jemand erneut etwas hochlädt. Erwartet: Das Vorschaubild erscheint innerhalb von 10 bis 15 Sekunden, ohne Neuladen. *(seit 3.6d, Entwickler-Test `SignedMediaApiTest`; Gerät offen)*
+- [ ] **6.22 Scrollen und Abfragen mit vielen Medien.** Handlung: Gast öffnet den Space am Telefon mit mindestens 30 Medien und scrollt länger hin und her, während der Gastgeber etwas hochlädt. Erwartet: Das Scrollen ruckelt nicht. Bereits geladene Bilder verschwinden nicht und laden nicht neu. Der neue Eintrag erscheint ohne Neuladen. Die Verbindung wird nicht als „weg“ gemeldet. *(3.5a-4, Browser-Tests `tiles.test.mjs` für Raster, Scrollen, neuen Stand und Bildfehler; Gerät offen)*
 
 ## 6b Ende-Hinweise im Browser (3.5a-3)
 
@@ -238,7 +254,7 @@ Die Punkte gelten für das Telefon des Gastgebers im laufenden Space. Die Unit-T
 - [ ] **9.4 Video mit Standort.** Handlung: Eigenes Video mit Standort über den Browser hochladen. Erwartet: Der Standort ist entfernt, das Video bleibt abspielbar. *(seit 3.1b, Upload im Browser seit 3.5b)*
 - [ ] **9.5 [Entwickler] Foto mit Standort.** Handlung: Eigenes Foto mit Standort über den Gast-Upload oder 8.1 hochladen, dann die Kopie prüfen. Erwartet: Keine GPS-Angaben, die Bildgröße bleibt erhalten. *(seit 3.1b, Gast-Upload seit 3.5b, Gastgeber-Upload seit 3.5c, Entwickler-Prüfung)*
 - [ ] **9.6 Markierung „Standort enthalten“.** Handlung: Bei nicht bereinigbarer Datei „Mit Standort hochladen“ wählen. Erwartet: Die Datei trägt in der Medienliste die Markierung „Standort enthalten“. *(seit 3.5b, ADR 0015)*
-- [ ] **9.7 [Entwickler] Honor-Kamerafoto mit Standort (APP10).** Handlung: Ein Foto der Honor-Kamera mit Standort über den Gast-Upload hochladen, die gespeicherte Kopie am PC mit einer Exif-App oder ExifTool prüfen. Erwartet: Kein Standort in EXIF, XMP und im Rest der Datei (auch nicht im zweiten Exif-Block in APP10). Die Bildgröße ändert sich nur durch das Abschneiden eines Anhangs. *(seit Hotfix 2, ADR 0015)*
+- [ ] **9.7 Honor-Kamerafoto mit Standort (APP10).** Handlung: Ein Foto der Honor-Kamera mit Standort über den Browser-Upload hochladen (Abschnitt 7). Die Kopie anschließend in einer Foto-App oder mit einer Exif-App am PC auf Standort prüfen. Erwartet: Kein Standort in EXIF, XMP und im Rest der Datei (auch nicht im zweiten Exif-Block in APP10). Die Bildgröße ändert sich nur durch das Abschneiden eines Anhangs. *(seit Hotfix 2, ADR 0015; Gerät offen)*
 
 ## 10 Ende bzw. Aufbewahrung bzw. Verlängern bzw. Vorlage (3.6a, 3.6b und 3.6c umgesetzt, Gerätetests offen)
 

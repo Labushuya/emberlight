@@ -37,7 +37,7 @@ async function checkLayout(page, { tapTargets }) {
 
 async function galleryChecks(page, width) {
   await openSpace(page, config, session);
-  await page.waitFor(`document.querySelectorAll('#grid .tile').length === ${config.expect.total}`, {
+  await page.waitFor(`document.querySelectorAll('#grid .cell:not([hidden]) .tile').length === ${config.expect.total}`, {
     what: "fünf Kacheln",
   });
 
@@ -50,28 +50,31 @@ async function galleryChecks(page, width) {
   assert.equal(await page.eval("document.querySelectorAll('.badge.loc').length"), 1, "Kennzeichen Standort");
 
   // Was das Raster zeigt, richtet sich nach der API: Eine Vorschau (previewState ready) erscheint als Bild mit ihrer
-  // Adresse. Bilder ohne Vorschau zeigen das Original (lazy). Alles andere ist ein Platzhalter.
+  // Adresse. Alles andere ist ein Platzhalter. Das Original (viewUrl) lädt das Raster nie (ADR 0019, Nachtrag 3.5a-4).
   const list = await apiGet(config, "/api/v1/media?limit=100", session.token);
   const items = list.body.items;
   const hasPreview = (item) => item.previewUrl !== null && item.previewState === "ready";
-  const isImage = (item) => item.type.startsWith("image/") && !item.type.endsWith("heic") && !item.type.endsWith("heif");
-  const showsOriginal = (item) => !hasPreview(item) && isImage(item) && item.viewUrl !== null;
-  const expectedImages = items.filter((item) => hasPreview(item) || showsOriginal(item)).length;
   assert.equal(
     await page.eval("document.querySelectorAll('.placeholder').length"),
-    items.length - expectedImages,
+    items.filter((item) => !hasPreview(item)).length,
     "Platzhalter entsprechen der API",
+  );
+  assert.equal(
+    await page.eval("document.querySelectorAll('img.thumb[src*=\"/view?\"]').length"),
+    0,
+    "Im Raster kein Original",
+  );
+
+  // Die Bilder laden über die signierten Adressen, sobald sie in Sichtnähe sind (Warteschlange, Paket 3.5a-4). Echte
+  // Bilder haben danach eine Breite.
+  await page.waitFor(
+    `document.querySelectorAll('img.thumb').length === ${items.filter(hasPreview).length} && [...document.querySelectorAll('img.thumb')].every((img) => img.complete && img.naturalWidth > 0)`,
+    { what: "geladene Vorschaubilder" },
   );
   assert.equal(
     await page.eval("document.querySelectorAll('img.thumb[src*=\"/preview?\"]').length"),
     items.filter(hasPreview).length,
     "Vorschaubilder entsprechen der API",
-  );
-
-  // Die Bilder laden über die signierten Adressen, echte Bilder haben eine Breite.
-  await page.waitFor(
-    "document.querySelectorAll('img.thumb').length === " + expectedImages + " && [...document.querySelectorAll('img.thumb')].every((img) => img.complete && img.naturalWidth > 0)",
-    { what: "geladene Vorschaubilder" },
   );
 
   // Restzeit sichtbar, Speicher mit Anzeige.
@@ -82,11 +85,11 @@ async function galleryChecks(page, width) {
 
   // Filter „Meine“ und zurück.
   await page.eval("document.getElementById('filter-mine').click()");
-  await page.waitFor(`document.querySelectorAll('#grid .tile').length === ${config.expect.mine}`, { what: "Filter Meine" });
+  await page.waitFor(`document.querySelectorAll('#grid .cell:not([hidden]) .tile').length === ${config.expect.mine}`, { what: "Filter Meine" });
   assert.equal(await page.eval("document.getElementById('filter-mine').getAttribute('aria-pressed')"), "true");
   assert.ok((await captions(page)).every((name) => name === "von dir"), "Filter Meine zeigt Fremdes");
   await page.eval("document.getElementById('filter-all').click()");
-  await page.waitFor(`document.querySelectorAll('#grid .tile').length === ${config.expect.total}`, { what: "Filter Alle" });
+  await page.waitFor(`document.querySelectorAll('#grid .cell:not([hidden]) .tile').length === ${config.expect.total}`, { what: "Filter Alle" });
   expectNoProblems(page, `Galerie ${width}`);
 }
 
@@ -165,7 +168,7 @@ test("Galerie am PC: Raster, Detail und Zurückziehen mit Bestätigung", async (
     await page.waitFor("!document.getElementById('list-view').hidden && document.getElementById('detail-view').hidden", {
       what: "Rückkehr zur Liste nach dem Zurückziehen",
     });
-    await page.waitFor(`document.querySelectorAll('#grid .tile').length === ${config.expect.total - 1}`, {
+    await page.waitFor(`document.querySelectorAll('#grid .cell:not([hidden]) .tile').length === ${config.expect.total - 1}`, {
       what: "Eine Kachel weniger",
     });
     assert.equal(await page.eval("document.getElementById('status').textContent"), "Medium zurückgezogen.");
