@@ -48,6 +48,23 @@
             <p id="storage-warning" class="warn" data-i18n="storageWarning" hidden>Storage is 80 % full or more.</p>
           </div>
 
+          <section id="upload-section" class="upload" aria-labelledby="upload-title">
+            <h2 id="upload-title" class="upload-title" data-i18n="uploadTitle">Upload</h2>
+            <div id="drop-zone" class="drop">
+              <button type="button" id="upload-pick" class="secondary" data-i18n="uploadPick" aria-describedby="drop-hint" disabled>Choose files</button>
+              <p id="drop-hint" class="meta" data-i18n="uploadDropHint">On a PC you can also drop files here.</p>
+            </div>
+            <input id="file-input" class="sr-only" type="file" multiple accept="image/*,video/*" tabindex="-1" aria-hidden="true" disabled>
+            <p id="upload-notice" class="warn"></p>
+            <p id="upload-keepopen" class="note" data-i18n="uploadKeepOpen" hidden>Please keep this page open until all uploads are done. Browsers pause background tabs.</p>
+            <div id="upload-total-bar" class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-i18n-aria="uploadTotalLabel" aria-label="Upload progress" hidden>
+              <i id="upload-total-fill"></i>
+            </div>
+            <p id="upload-total" class="meta"></p>
+            <button type="button" id="upload-resume" class="secondary" data-i18n="uploadResume" hidden>Continue</button>
+            <ol id="upload-queue" class="q-list" tabindex="-1" data-i18n-aria="uploadQueueLabel" aria-label="Upload queue" hidden></ol>
+          </section>
+
           <div class="tools">
             <div class="seg" role="group" data-i18n-aria="filterLabel" aria-label="Filter">
               <button type="button" id="filter-all" aria-pressed="true" data-i18n="filterAll">All</button>
@@ -118,6 +135,18 @@
         </div>
       </div>
 
+      <div id="location-scrim" class="scrim" hidden>
+        <div id="location-dialog" class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="location-title" aria-describedby="location-text">
+          <h2 id="location-title" data-i18n="locationDialogTitle">Location question</h2>
+          <p id="location-name" class="meta"></p>
+          <p id="location-text" data-i18n="locationDialogText">Location can't be removed. Upload with location anyway?</p>
+          <div class="dialog-actions">
+            <button type="button" id="location-skip" class="secondary" data-i18n="locationSkip">Do not upload</button>
+            <button type="button" id="location-keep" data-i18n="locationKeep">Upload with location</button>
+          </div>
+        </div>
+      </div>
+
       <div id="withdraw-scrim" class="scrim" hidden>
         <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="withdraw-title" aria-describedby="withdraw-text">
           <h2 id="withdraw-title" data-i18n="withdrawTitle">Withdraw the item?</h2>
@@ -131,6 +160,7 @@
     </main>
     <script src="/guest-core.js"></script>
     <script src="/guest-space.js"></script>
+    <script src="/guest-upload.js"></script>
     <script src="/guest.js"></script>
   </body>
 </html>
