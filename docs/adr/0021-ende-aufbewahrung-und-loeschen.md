@@ -107,4 +107,26 @@ Status: umgesetzt in 3.6c, Gerätetest offen (Testkatalog Abschnitt 10, Punkte 1
 
 - **Gerätetest** (Testkatalog 10.30 bis 10.38): Liste, Entfernen, Vorlage, Upload während der Löschung, Wecker und Lauf bei ausgeschalteter App, Doze.
 - **WorkManager und Doze.** Ob der stündliche Lauf im Akkubetrieb zuverlässig greift, ist am Gerät zu beobachten. Der Wecker ist das Sicherheitsnetz, und der Start der App holt alles nach.
-- **Fehler bei der automatischen Löschung** werden still wiederholt. Ein Protokoll oder eine Anzeige fehlt (kein Logging im Projekt).
+- **Fehler bei der automatischen Löschung** werden wiederholt und protokolliert (`EmberlightRetention`, siehe Nachtrag 3.6d). Eine Anzeige für die Nutzerin bzw. den Nutzer fehlt weiterhin.
+
+## Nachtrag 3.6d: Löschen während des Nachlaufs, Protokoll (21.10.2026)
+
+**Befund (vor dem Nachtrag).**
+1. **Uploads im Strom.** `SpaceVault.ingest` prüfte `purging` nur am Anfang. Ein Upload, der vor dem Ende begann und während des 60-s-Nachlaufs noch Bytes empfing, konnte nach der Löschung in `commit` die Teildatei in den Space-Ordner verschieben und einen Medieneintrag anlegen. Die Löschung war da schon durch.
+2. **Vorschauen.** `previewPath` legt den Ordner `previews/` bei Bedarf neu an. Ein Schreiben nach der Löschung war durch `writable()` verhindert, aber nur für den Vorschau-Worker, nicht für den Upload-Pfad.
+3. **Vault im Nachlauf.** Der Server hält seine Vault bis zum Ende des Nachlaufs. `forgetVault` gibt sie frei (`retire`), danach schreibt sie keine Vorschau mehr. Für Uploads gab es keine vergleichbare Sperre.
+4. **Gescheiterte Löschungen.** `RetentionRepository.purgeDue` nahm nur Spaces aus der Planung, die nicht `purging` sind. Eine gescheiterte Löschung blieb damit bis zum nächsten Start der App liegen, obwohl der stündliche Lauf sie fortsetzen soll.
+
+**Lösung.**
+- `SpaceVault.closedForUploads()` = Vault per `retire` geschlossen oder Space `purging`/`DELETED`. Die Prüfung läuft am Anfang, direkt nach dem Strom und erneut unter dem Commit-Lock. Dort gibt es `RejectReason.SpaceDeleting`, und die Teildatei wird verworfen.
+- Die Reihenfolge der Löschung bleibt: Merkmal `purging` setzen, dann `forgetVault` (`retire`, wartet auf den Commit-Lock), dann Dateien. Ein Commit läuft also entweder vollständig vor der Löschung oder gar nicht.
+- `purgeDue` setzt gescheiterte Löschungen (`purging`) zuerst fort, danach die fälligen.
+- Ein Fehler bei `resumePurges` hält die übrigen Spaces nicht mehr auf.
+
+**Protokoll.** `RetentionLog` schreibt mit `Log.w` unter `EmberlightRetention`: Space-Kennung, Klassenname der Ausnahme und der Versuch seit Prozessstart. Keine Fehlermeldung, keine Namen, keine Pfade. Der Versuch zählt nur im Speicher und beginnt beim Neustart neu, eine Persistenz dafür gibt es nicht.
+
+**Absicherung.**
+- `UploadAcrossPurgeTest` (share:space): Ein Upload steht mitten im Strom, die Löschung läuft ab, danach ist das Ergebnis `SpaceDeleting`. Es bleibt keine Datei im Space-Ordner und kein Medieneintrag. Zweiter Fall: `retire` allein verhindert die Übernahme.
+- `RetentionFailureLogTest` (share:space): Protokoll je Versuch ohne Fehlermeldung, Zähler beginnt nach einem Erfolg neu, gescheiterte Löschung wird im nächsten Lauf fortgesetzt.
+
+**Restrisiko.** Stürzt der Prozess mitten im Upload nach der Löschung ab, kann eine Teildatei `tmp-*.part` im Ordner des gelöschten Space liegen. Für gelöschte Spaces öffnet sich keine Vault mehr, `recover` läuft also nicht. Die Bereinigung beim Start für `DELETED` ist offen. Der Umfang ist eine Teildatei eines Uploads.

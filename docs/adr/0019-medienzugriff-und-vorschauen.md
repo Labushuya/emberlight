@@ -239,7 +239,21 @@ Das Raster lädt keine Originale mehr. Es zeigt `previewUrl` nur bei `previewSta
 
 **Offen aus diesem Nachtrag:**
 
-- Erhöhung der `revision` bei Fertigstellung einer Vorschau (serverseitig, eigenes Paket). Bis dahin erscheint eine fertige Vorschau erst beim nächsten Revisionswechsel.
+- Erledigt durch Nachtrag 3.6d (PR #51): Die `revision` steigt bei Fertigstellung einer Vorschau. Eine fertige Vorschau erscheint damit ohne neuen Upload.
 - Die Bildwarteschlange zählt nur die Raster-Bilder. Die Detailansicht und Videos laufen außerhalb davon.
 
 **Messungen (Browser-Tests `tiles.test.mjs`, Chrome headless, 21.10.2026):** Mit 40 Einträgen höchstens vier gleichzeitige Vorschauanfragen, alle mit Antwort 200, keine Originale. Bei einem neuen Eintrag eine neue Vorschauanfrage, keine für unveränderte Einträge. Layout-Verschiebung beim Scrollen und Abfragen 0,0000 (Grenze 0,01). Keine Long Task über 50 ms im Abfragezyklus. Ein Bildfehler führt zu zwei Vorschauanfragen und einer Erneuerung der Adresse.
+## Nachtrag 3.6d: Revision bei fertigen Vorschauen (21.10.2026)
+
+**Befund.** Die Gäste-Seite lädt die Liste nur neu, wenn sich `revision` ändert. Ein Upload erhöhte sie, das spätere Fertigwerden der Vorschau aber nicht. Ein Gast sah ein Foto ohne Vorschau, bis irgendjemand erneut etwas hochlud.
+
+**Entscheidung.** Wechselt der Zustand einer Vorschau oder der HEIC-Ansicht nach `READY` oder `FAILED`, steigt die `revision` des Space. Das gilt für beide Zustände und für jede Vorschau einzeln, also bei einem HEIC-Foto zweimal. Ein Wechsel nach `PENDING` (Einreihung, Neustart) und ein Schreiben ohne Zustandsänderung (zum Beispiel ein zweiter Lauf auf `READY`) erhöhen nichts.
+
+**Umsetzung.**
+- `PreviewService.write` vergleicht den Zustand vor dem Schreiben und meldet nur den echten Wechsel über `settled`. Der Aufruf geschieht unter dem Commit-Lock und bleibt nicht blockierend.
+- `SpaceVault.onPreviewSettled` leitet das an den Server weiter. `SpaceAccess` setzt es beim Anlegen auf `bumpRevision()`. Die Vault hält keine Server-Logik, der Zähler bleibt in der Sitzung.
+- Die Vault ist prozessweit, der Vorschau-Worker läuft ohne Server weiter. Ohne laufende Sitzung ist der Aufruf ein No-op.
+
+**Absicherung.**
+- `SpaceVaultPreviewTest` (share:space): Ein Wechsel meldet einmal, ein erneutes Rendern nicht. Ein Fehlschlag meldet ebenfalls. Die HEIC-Ansicht meldet zweimal.
+- `SignedMediaApiTest.aPreviewThatSettlesRaisesTheRevisionOnceWithoutANewUpload` (share:server): `GET /api/v1/space` zeigt `revision` vor und nach dem Abschluss der Vorschau, ohne neuen Upload. Ein weiterer Lauf ändert sie nicht.

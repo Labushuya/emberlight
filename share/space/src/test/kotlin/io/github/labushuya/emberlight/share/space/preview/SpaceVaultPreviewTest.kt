@@ -258,6 +258,46 @@ class SpaceVaultPreviewTest {
     }
 
     @Test
+    fun aPreviewReportsItsChangeToTheRevisionOnceAndAnUnchangedOneNever() {
+        val vault = vault()
+        var settled = 0
+        vault.onPreviewSettled = { settled++ }
+        val id = upload(vault, MediaFixtures.jpeg(100))
+        assertEquals(0, settled)
+
+        runBlocking { vault.renderPreviews(id) }
+        assertEquals(1, settled)
+
+        runBlocking { vault.renderPreviews(id) }
+        assertEquals(1, settled)
+    }
+
+    @Test
+    fun aFailedPreviewReportsItsChangeToo() {
+        val vault = vault(renderer = FakePreviewRenderer(ok = false))
+        var settled = 0
+        vault.onPreviewSettled = { settled++ }
+        val id = upload(vault, MediaFixtures.jpeg(100))
+
+        runBlocking { vault.renderPreviews(id) }
+
+        assertEquals("FAILED", entryOf(vault, id).previewState)
+        assertEquals(1, settled)
+    }
+
+    @Test
+    fun theHeicViewSettlesAndReportsItsChangeLikeThePreview() {
+        val vault = vault()
+        var settled = 0
+        vault.onPreviewSettled = { settled++ }
+        val id = upload(vault, MediaFixtures.heic(), name = "foto.heic", keepLocation = true)
+
+        runBlocking { vault.renderPreviews(id) }
+
+        assertEquals(2, settled)
+    }
+
+    @Test
     fun deletingTheMediumRemovesItsPreviewFilesAndItsBytes() {
         val vault = vault()
         val id = upload(vault, MediaFixtures.jpeg(100))
