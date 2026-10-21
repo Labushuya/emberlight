@@ -66,7 +66,14 @@ export async function launchChrome({ chromePath, profileBase, noSandbox }) {
   const [port, path] = await waitUntil(
     () => {
       if (!existsSync(portFile)) return null;
-      const lines = readFileSync(portFile, "utf8").split(/\r?\n/);
+      // Unter Windows kann ein Virenscanner die Datei kurz sperren (EBUSY). Dann wird es im nächsten Versuch erneut gelesen.
+      let text;
+      try {
+        text = readFileSync(portFile, "utf8");
+      } catch {
+        return null;
+      }
+      const lines = text.split(/\r?\n/);
       return lines.length >= 2 && lines[0] ? [lines[0], lines[1]] : null;
     },
     20000,

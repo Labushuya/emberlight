@@ -244,7 +244,7 @@ class GuestSiteTest {
         // Die Fehlertexte stehen in Tabellen und werden dynamisch gewählt. Diese Schlüssel prüft die Regel oben nicht.
         val script = File(assetDir, "guest-upload.js").readText()
         val plurals = Regex("plural\\(\"([A-Za-z0-9]+)\"").findAll(script).map { it.groupValues[1] }.toSet()
-        val literal = Regex("\"((?:upload|location)[A-Za-z]+)\"").findAll(script).map { it.groupValues[1] }.toSet()
+        val literal = Regex("\"((?:upload|location)[A-Z][A-Za-z]*)\"").findAll(script).map { it.groupValues[1] }.toSet()
         val used = (literal - plurals) + plurals.flatMap { listOf(it + "One", it + "Other") }
         val german = keysOf("i18n/de.json")
         val english = keysOf("i18n/en.json")

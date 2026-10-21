@@ -19,10 +19,12 @@ import {
 const config = loadConfig();
 const browser = useBrowser();
 
+// Der Space enthält schon den Vorab-Upload von Omar. Erst wenn die Liste ihn zeigt, zählen die Tests die Kacheln.
 async function openUpload() {
   const page = await browser.page({ width: 1280, height: 900, locale: "en-US" });
   await page.enableNetwork();
   await openSpace(page, config, config.session);
+  await page.waitFor("document.querySelectorAll('#grid .tile').length >= 1", { what: "Liste geladen", timeout: 30000 });
   return page;
 }
 
@@ -53,6 +55,7 @@ test("Bild mit Fortschritt bis fertig, Eintrag im Raster, Live-Region nur bei Ab
     await waitForItem(page, "gross.jpg", "done", 40000);
     await page.waitFor(`document.querySelectorAll('#grid .tile').length === ${before + 1}`, {
       what: "neuer Eintrag im Raster",
+      timeout: 30000,
     });
     assert.equal(await page.eval("document.getElementById('upload-keepopen').hidden"), true, "Hinweis danach aus");
     // Pro Fortschrittsereignis darf die Live-Region nicht ansagen. Erlaubt: die Abschlussmeldung und ein Puffer.

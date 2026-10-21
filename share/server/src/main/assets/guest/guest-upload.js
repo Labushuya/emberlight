@@ -705,7 +705,7 @@
       }
     });
     var overall = totalBytes > 0 ? Math.min(100, Math.floor((doneBytes * 100) / totalBytes)) : 0;
-    el.total.textContent = core.plural("uploadTotal", counted.length, { done: doneCount });
+    el.total.textContent = counted.length > 0 ? core.plural("uploadTotal", counted.length, { done: doneCount }) : "";
     el.totalFill.style.width = overall + "%";
     el.totalBar.setAttribute("aria-valuenow", String(overall));
     el.totalBar.hidden = counted.length === 0;
