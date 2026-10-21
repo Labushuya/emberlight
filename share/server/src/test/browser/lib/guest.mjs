@@ -13,7 +13,17 @@ export async function seedSession(page, config, session) {
 /** Öffnet die Seite mit gespeicherter Sitzung und wartet, bis der Space angezeigt wird. */
 export async function openSpace(page, config, session) {
   await seedSession(page, config, session);
-  await page.goto(`${config.base}/`);
+  // Zeigt die Seite nach dem Start nicht den Space, hat `GET /api/v1/me` nicht mit dem Space geantwortet (etwa `503`,
+  // wenn die Parallelität des Servers voll ist). Die Antwort wird dann gemessen und die Seite neu geladen, bis zu dreimal.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await page.goto(`${config.base}/`);
+    const shown = await page
+      .waitFor("!document.getElementById('space-section').hidden", { what: "Space-Ansicht", timeout: 8000 })
+      .catch(() => null);
+    if (shown !== null) break;
+    const me = await apiGet(config, "/api/v1/me", session.token);
+    console.log(`Messung: GET /api/v1/me beim Start ${me.status} (Versuch ${attempt}), die Seite zeigt den Beitritt`);
+  }
   await page.waitFor("!document.getElementById('space-section').hidden", { what: "Space-Ansicht", timeout: 30000 });
   await page.waitFor("document.getElementById('space-name').textContent.length > 0", { what: "Name des Space" });
 }
