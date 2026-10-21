@@ -54,12 +54,9 @@ internal object WebpScrubber {
                     walkChunks(pass, dataStart + ANMF_HEADER, dataEnd, depth + 1)
                 }
 
-                in KEPT -> {
-                    // Bild- und Darstellungsdaten: keine Standortquelle, nichts zu bereinigen.
-                }
-
+                // Bild- und Darstellungsdaten (KEPT) sind keine Standortquelle. Alles andere wird genullt.
                 else -> {
-                    pass.blank(dataStart, length, 0x00, "riff_unknown")
+                    if (fourcc !in KEPT) pass.blank(dataStart, length, 0x00, "riff_unknown")
                 }
             }
             // Chunks sind auf gerade Länge gepolstert.
