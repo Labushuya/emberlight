@@ -1,7 +1,9 @@
 package io.github.labushuya.emberlight.share.server
 
+import io.github.labushuya.emberlight.share.space.SpaceLimits
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
@@ -102,16 +104,119 @@ class GuestBrowserTest {
         }
     }
 
+    @Test
+    fun uploadInTheBrowserWithProgressQueueDuplicateRejectionAndLocation() {
+        val files = folder.newFolder("upload-files")
+        runScenario(file = "upload.test.mjs", spaceName = SPACE_NAME, endsInSeconds = null) { scene ->
+            val lena = scene.join("Lena")
+            val omar = scene.join("Omar")
+            scene.primaryGuest = lena.id
+            val known = BrowserScene.jpeg(0x884422)
+            val knownId = scene.upload(omar.token, "bekannt.jpg", known)
+            mapOf(
+                "session" to session(scene, lena),
+                "knownId" to JsonPrimitive(knownId),
+                "fixtures" to
+                    fixtures(
+                        files,
+                        mapOf(
+                            "foto" to BrowserScene.jpeg(0x3366CC),
+                            "bekannt" to known,
+                            "gross" to BrowserScene.photo(1, 1000, 800),
+                            "gross2" to BrowserScene.photo(2, 1000, 800),
+                            "gross3" to BrowserScene.photo(3, 1000, 800),
+                            "gross4" to BrowserScene.photo(4, 1000, 800),
+                            "falsch" to "Das ist kein Bild.".toByteArray(Charsets.UTF_8),
+                            "zugross" to oversizedJpeg(),
+                            "standort" to MediaFixtures.mp4WithGpmdTrack(),
+                            "wiederholen" to BrowserScene.jpeg(0x339966),
+                            "abbruch" to BrowserScene.jpeg(0x993366),
+                            "ziehen" to BrowserScene.jpeg(0x6699AA),
+                        ),
+                    ),
+            )
+        }
+    }
+
+    @Test
+    fun uploadStopsAtAFullSpaceAndKeepsTheRestWaiting() {
+        val files = folder.newFolder("storage-files")
+        // Drei echte Fotos. Das Limit ist ihre Summe, damit alle drei die Vorabprüfung bestehen. Der Füllstand lässt
+        // danach keinen der drei mehr passen.
+        val photos = listOf(1L, 2L, 3L).map { BrowserScene.photo(it, 300, 220) }
+        val limit = photos.sumOf { it.size.toLong() }
+        runScenario(
+            file = "upload-storage.test.mjs",
+            spaceName = SPACE_NAME,
+            endsInSeconds = null,
+            limits = SpaceLimits(storageLimitBytes = limit),
+        ) { scene ->
+            val lena = scene.join("Lena")
+            scene.primaryGuest = lena.id
+            scene.fillerBytes = (limit - photos.minOf { it.size } + 1).toInt()
+            mapOf(
+                "session" to session(scene, lena),
+                "fixtures" to
+                    fixtures(
+                        files,
+                        mapOf("eins" to photos[0], "zwei" to photos[1], "drei" to photos[2]),
+                    ),
+            )
+        }
+    }
+
+    @Test
+    fun uploadWaitingWhenTheSpaceEndsGetsTheEndingViewWithEndedAt() {
+        val files = folder.newFolder("closed-files")
+        runScenario(file = "upload-closed.test.mjs", spaceName = SPACE_NAME, endsInSeconds = 3_600) { scene ->
+            val lena = scene.join("Lena")
+            scene.primaryGuest = lena.id
+            mapOf(
+                "session" to session(scene, lena),
+                "fixtures" to fixtures(files, mapOf("foto" to BrowserScene.jpeg(0x3366CC))),
+            )
+        }
+    }
+
+    @Test
+    fun formatSignaturesAreJudgedTheSameWayInTheBrowser() {
+        runScenario(file = "formats.test.mjs", spaceName = SPACE_NAME, endsInSeconds = null) { emptyMap() }
+    }
+
+    /** Schreibt die Testdateien in [dir]. Der Schlüssel ist der Name im Browser-Test, die Endung ergibt sich daraus. */
+    private fun fixtures(
+        dir: File,
+        files: Map<String, ByteArray>,
+    ): JsonObject =
+        buildJsonObject {
+            files.forEach { (name, bytes) ->
+                val target = File(dir, "$name.${extensionOf(name)}")
+                target.writeBytes(bytes)
+                put(name, target.absolutePath)
+            }
+        }
+
+    private fun extensionOf(name: String): String = if (name == "standort") "mp4" else "jpg"
+
+    /** Beginnt wie ein JPEG und ist größer als die Bildgrenze. Die Größenprüfung im Browser lehnt sie vorab ab. */
+    private fun oversizedJpeg(): ByteArray =
+        ByteArray(SpaceLimits().imageMaxBytes.toInt() + 1).also {
+            it[0] = 0xFF.toByte()
+            it[1] = 0xD8.toByte()
+            it[2] = 0xFF.toByte()
+        }
+
     /** Ein Durchlauf: Space vorbereiten, Server starten, Node mit der Datei laufen lassen, Ergebnis prüfen. */
     private fun runScenario(
         file: String,
         spaceName: String,
         endsInSeconds: Long?,
+        limits: SpaceLimits = SpaceLimits(),
         prepare: (BrowserScene) -> Map<String, JsonElement>,
     ) {
         val chrome = requireBrowserTools()
         val endsAt = endsInSeconds?.let { System.currentTimeMillis() + it * 1_000 }
-        BrowserScene(folder.newFolder("spaces"), spaceName, endsAt).use { scene ->
+        BrowserScene(folder.newFolder("spaces"), spaceName, endsAt, limits).use { scene ->
             // Der Server läuft vor der Vorbereitung, Gäste und Uploads gehen über die echte Schnittstelle.
             val port = scene.start()
             val extra = prepare(scene)
@@ -216,6 +321,9 @@ internal class NodeBrowserRun(
             runCatching {
                 when (name) {
                     "close-space" -> scene.markClosed()
+                    "hold-uploads" -> scene.holdUploadSlots()
+                    "release-uploads" -> scene.releaseUploadSlots()
+                    "fill-storage" -> scene.fillStorage()
                     "stop-server" -> scene.stopServer()
                     else -> error("unbekannte Steuerung: $name")
                 }

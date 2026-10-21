@@ -34,6 +34,18 @@ internal object MediaFixtures {
 
     fun mp4(): ByteArray = ftyp("isom") + box("moov", box("free", ByteArray(8))) + box("mdat", ByteArray(16))
 
+    /**
+     * MP4 mit einem Metadaten-Track `gpmd`. Dort lässt sich der Standort nicht sicher entfernen, der Upload bekommt `422`
+     * (ADR 0015, Metadaten-Track). Gleiches Muster wie `LocationFixtures.gpmdTrack` in `share:space`.
+     */
+    fun mp4WithGpmdTrack(): ByteArray {
+        val handler = box("hdlr", ByteArray(8) + ascii("meta") + ByteArray(13))
+        val entry = box("gpmd", ByteArray(16))
+        val stsd = box("stsd", ByteArray(4) + u32(1) + entry)
+        val trak = box("trak", box("mdia", handler + box("minf", box("stbl", stsd))))
+        return ftyp("isom") + box("moov", trak) + box("mdat", ByteArray(16))
+    }
+
     fun ascii(text: String): ByteArray = text.toByteArray(Charsets.ISO_8859_1)
 
     private fun u32(value: Long): ByteArray =

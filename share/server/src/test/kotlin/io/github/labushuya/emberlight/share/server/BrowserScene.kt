@@ -36,9 +36,10 @@ internal class BrowserScene(
     private val spacesDir: File,
     val spaceName: String,
     val endsAtMillis: Long?,
+    spaceLimits: SpaceLimits = SpaceLimits(),
 ) : AutoCloseable {
     val spaceId: SpaceId = SpaceId.generate()
-    private val limits = SpaceLimits()
+    private val limits = spaceLimits
     private val database: SpacesDatabase =
         SpacesDatabase.open(ApplicationProvider.getApplicationContext<Context>(), spacesDir)
     private val vault: SpaceVault =
@@ -182,6 +183,35 @@ internal class BrowserScene(
     /** Markiert den Space als beendet. Der nächste Aufruf eines Gastes bekommt `410`. */
     fun markClosed() = closure.markClosed()
 
+    /** Gast, dessen Upload-Plätze die Steuerung der Browser-Tests belegt. */
+    var primaryGuest: ParticipantId? = null
+    private val heldSlots = mutableListOf<ParticipantId>()
+
+    /** Belegt beide Upload-Plätze des Gastes. Seine Uploads bekommen dann `429` und warten (ADR 0014). */
+    fun holdUploadSlots() {
+        val guest = checkNotNull(primaryGuest) { "Kein Gast für die Upload-Steuerung gesetzt." }
+        repeat(ServerGates.UPLOADS_PER_PARTICIPANT) {
+            check(gates.tryEnterUpload(guest)) { "Upload-Platz ist schon belegt." }
+            heldSlots += guest
+        }
+    }
+
+    fun releaseUploadSlots() {
+        heldSlots.forEach { gates.leaveUpload(it) }
+        heldSlots.clear()
+    }
+
+    /** Größe des Füllstands für [fillStorage], vom Test gesetzt. */
+    var fillerBytes: Int = 0
+
+    /** Füllt den Speicher des Space auf [fillerBytes]. Danach bekommt der nächste Upload `507`. */
+    fun fillStorage() {
+        check(fillerBytes > 0) { "Füllgröße nicht gesetzt." }
+        val filler = join("Fuellung")
+        // Der Füllstand ist kein echtes Foto. Mit „Standort behalten“ wird er unverändert gespeichert.
+        upload(filler.token, "fuellung.jpg", MediaFixtures.jpeg(fillerBytes), keepLocation = true)
+    }
+
     override fun close() {
         stopServer()
         database.close()
@@ -197,6 +227,26 @@ internal class BrowserScene(
     companion object {
         /** Gäste-Dateien im Modul, wie die App sie als Assets führt. */
         private val GUEST_DIR = File("src/main/assets/guest")
+
+        /**
+         * Ein echtes JPEG mit Zufallsbildpunkten, deterministisch über [seed]. Die Größe ergibt sich aus [width] und
+         * [height]. Anders als die Platzhalter aus MediaFixtures besteht es die Prüfung der Standortdaten.
+         */
+        fun photo(
+            seed: Long,
+            width: Int,
+            height: Int,
+        ): ByteArray {
+            val random = java.util.Random(seed)
+            val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+            for (y in 0 until height) {
+                for (x in 0 until width) image.setRGB(x, y, random.nextInt() and 0xFFFFFF)
+            }
+            return ByteArrayOutputStream().use { out ->
+                ImageIO.write(image, "jpg", out)
+                out.toByteArray()
+            }
+        }
 
         /** Ein kleines, echtes JPEG (Bild, damit der Browser es darstellt). Ohne GPS-Daten. */
         fun jpeg(rgb: Int): ByteArray {
