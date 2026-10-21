@@ -13,6 +13,7 @@ import io.github.labushuya.emberlight.share.space.management.SpaceAccentPalette
 import io.github.labushuya.emberlight.share.space.participants.AndroidKeyStoreInviteSecretCipher
 import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
 import io.github.labushuya.emberlight.share.space.participants.Secrets
+import io.github.labushuya.emberlight.share.space.preview.PreviewWorkers
 import java.io.File
 
 /** Ein Teilnehmer des Space mit dem Hash seines Zugangsschlüssels (ADR 0013). Der Schlüssel selbst bleibt außen. */
@@ -66,8 +67,16 @@ internal class SpaceRuntime private constructor(
     val access: SpaceAccess,
     /** Statische Gäste-Dateien aus den App-Assets. */
     val guestAssets: GuestAssets,
+    /** Hintergrundfaden der Vorschauen. Beim [close] beendet. */
+    private val previewWorkers: PreviewWorkers,
 ) {
     val spaceVault: SpaceVault get() = access.vault
+
+    /** Beendet den Worker der Vorschauen. Der Index bleibt offen, er gehört dem Prozess. */
+    fun close() {
+        access.vault.stopPreviews()
+        previewWorkers.close()
+    }
 
     companion object {
         /**
@@ -103,6 +112,9 @@ internal class SpaceRuntime private constructor(
                 )
             }
             vault.recover()
+            // Vorschauen entstehen im Hintergrund, nach der Wiederaufnahme offener Medien (ADR 0019).
+            val previewWorkers = PreviewWorkers()
+            vault.startPreviews(previewWorkers.scope)
             // Der Token des Gastgebers ist zufällig und nur im Speicher. In der Datenbank steht sein Hash (ADR 0018). Mit einem
             // Gastgeber aus dem Debug-Einstieg gilt dessen Hash. Ein neuer Token würde den Test-Token des PCs ungültig machen.
             val hostToken =
@@ -126,7 +138,7 @@ internal class SpaceRuntime private constructor(
                     endsAtMillis = setup.expiresAtMillis,
                     limits = setup.limits,
                 )
-            return SpaceRuntime(access, AssetGuestAssets(context.applicationContext.assets))
+            return SpaceRuntime(access, AssetGuestAssets(context.applicationContext.assets), previewWorkers)
         }
     }
 }

@@ -394,11 +394,11 @@ class SignedMediaApiTest {
         }
 
     @Test
-    fun itemsCarryNullPlaceholdersForPreviewsCodecAndHeicViewUntilPackage3Point5a2() =
+    fun itemsCarryThePreviewFieldsAndStayPendingUntilAWorkerRendersThem() =
         testApplication {
             install()
             val imageId = client.upload(MediaFixtures.jpeg(300), "bild.jpg")
-            client.upload(MediaFixtures.mp4(), "clip.mp4")
+            val videoId = client.upload(MediaFixtures.mp4(), "clip.mp4")
             val placeholders = listOf("previewUrl", "previewState", "videoCodec", "viewState")
 
             val list =
@@ -413,20 +413,30 @@ class SignedMediaApiTest {
                     .getValue("items")
                     .jsonArray
                     .map { it.jsonObject }
+                    .associateBy { it.getValue("id").jsonPrimitive.content }
             assertEquals(2, items.size)
-            items.forEach { item ->
-                placeholders.forEach { key ->
-                    assertTrue("$key fehlt", item.containsKey(key))
-                    assertEquals(JsonNull, item.getValue(key))
-                }
-            }
+            items.values.forEach { item -> placeholders.forEach { assertTrue("$it fehlt", item.containsKey(it)) } }
+
+            // Ohne laufenden Worker bleibt die Vorschau offen. Keine Adresse, kein Ergebnis (ADR 0019).
+            val image = items.getValue(imageId)
+            assertEquals("pending", image.getValue("previewState").jsonPrimitive.content)
+            assertEquals(JsonNull, image.getValue("previewUrl"))
+            assertEquals(JsonNull, image.getValue("viewState"))
+            assertEquals(JsonNull, image.getValue("videoCodec"))
+            assertEquals(
+                "pending",
+                items
+                    .getValue(videoId)
+                    .getValue("previewState")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(JsonNull, items.getValue(videoId).getValue("previewUrl"))
 
             val single = client.signedGet("/api/v1/media/$imageId", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN")
             assertEquals(HttpStatusCode.OK, single.status)
             val item = Json.parseToJsonElement(single.bodyAsText()).jsonObject
-            placeholders.forEach { key ->
-                assertEquals(JsonNull, item.getValue(key))
-            }
+            assertEquals("pending", item.getValue("previewState").jsonPrimitive.content)
+            assertEquals(JsonNull, item.getValue("previewUrl"))
         }
 
     @Test
