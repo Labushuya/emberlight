@@ -5,6 +5,7 @@ import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
+import kotlinx.coroutines.CancellationException
 
 /** Ergebnis einer Löschung. */
 sealed interface PurgeResult {
@@ -78,7 +79,18 @@ class SpacePurge(
     /** Setzt alle unterbrochenen Löschungen fort. Gibt die Zahl der fortgesetzten Spaces zurück. */
     suspend fun resumeAll(): Int {
         val pending = spaces.allPurging()
-        pending.forEach { purge(SpaceId(it.id)) }
+        // Ein Fehler bei einem Space hält die übrigen nicht auf. Er bleibt `purging` und kommt beim nächsten Lauf dran.
+        pending.forEach { row ->
+            val id = SpaceId(row.id)
+            try {
+                purge(id)
+                RetentionLog.purgeSucceeded(id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failed: Exception) {
+                RetentionLog.purgeFailed(id, failed)
+            }
+        }
         return pending.size
     }
 }

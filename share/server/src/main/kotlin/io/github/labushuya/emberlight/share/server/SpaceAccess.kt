@@ -57,6 +57,11 @@ class SpaceAccess internal constructor(
         revisionCounter.incrementAndGet()
     }
 
+    init {
+        // Eine fertige Vorschau oder HEIC-Ansicht erhöht die Revision, damit die Gäste-Seite sie ohne neuen Upload sieht (ADR 0019).
+        vault.onPreviewSettled = { bumpRevision() }
+    }
+
     /**
      * Geplantes Ende in UTC-Millisekunden, `null` ohne Ende (ADR 0017). Für `/space` (ADR 0019). Ändert sich nur über
      * [extendEnd] (Paket 3.6a).
