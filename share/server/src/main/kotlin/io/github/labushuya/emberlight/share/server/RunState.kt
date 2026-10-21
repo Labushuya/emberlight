@@ -45,8 +45,8 @@ enum class PauseCause {
 }
 
 /**
- * Wird vor jeder Anfrage gefragt (ADR 0017, Ablauf). Ist der Space abgelaufen, antwortet der Server mit `410`
- * (`space_closed`) und meldet das Ende an den Betrieb. Die Zugriffsprüfung bleibt davon unberührt.
+ * Wird vor jeder Anfrage gefragt (ADR 0017, Ablauf). Ist der Space beendet, durch Ablauf oder durch den Gastgeber, antwortet
+ * der Server mit `410` (`space_closed`) und meldet das Ende an den Betrieb. Die Zugriffsprüfung bleibt davon unberührt.
  */
 interface SpaceClosure {
     /** `true`, wenn der Space abgelaufen ist. Die Abfrage ist billig und blockiert nicht. */

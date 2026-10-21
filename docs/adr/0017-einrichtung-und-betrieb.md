@@ -79,10 +79,10 @@ Honor und Huawei erhalten den Anleitungstext „Akku → App-Start: emberlight a
 ### Automatisches Ende
 
 - Die Frist ist ein Wand-Uhr-Zeitpunkt (`expiresAt`). Eine Dauer wird beim Start in einen Zeitpunkt umgerechnet (`SpaceRunPolicy.expiresAt`).
-- Prüfung bei jeder Anfrage (`SpaceClosure.isClosed`): Die Antwort lautet `410 {"error":"space_closed"}`, danach beendet der Verarbeiter den Space. Außerdem beim Herzschlag, beim Start des Dienstes und der App und über einen Wecker.
+- Prüfung bei jeder Anfrage (`SpaceClosure.isClosed`): Die Antwort lautet `410 {"error":"space_closed"}`. Danach beendet der Verarbeiter den Space nach dem Nachlauf (siehe Nachtrag 21.10.2026). Außerdem beim Herzschlag, beim Start des Dienstes und der App und über einen Wecker.
 - Der Wecker ist ungenau (`setAndAllowWhileIdle`). Keine exakten Alarme, deshalb kein Sonderrecht.
 - Plausibilisierung: Wand-Uhr und `elapsedRealtime` seit dem Start gelten beide. Das frühere Ergebnis zählt (`SpaceRunPolicy.isClosed`). Eine vorgestellte Uhr beendet den Space nicht später, eine zurückgestellte nicht früher als die gemessene Laufzeit. Die Tests decken beide Richtungen ab.
-- Beim Ablauf bleibt die Frist eine Sekunde gesetzt (`CLOSE_GRACE_MILLIS`), damit die 410-Antwort beim Gast ankommt, bevor der Server schließt.
+- Nach jedem Ende bleibt der Server 60 s offen (`CLOSE_GRACE_MILLIS`, siehe Nachtrag 21.10.2026). Die 410-Antwort kommt so beim Gast an, bevor der Server schließt.
 - Endezeit: Beim Ablauf ist es die Frist, bei einem Ende durch den Gastgeber der Zeitpunkt des Stopps.
 
 ### WLAN und Netzwechsel
@@ -223,11 +223,17 @@ Der Testkatalog für die Nutzerin bzw. den Nutzer steht in der PR-Beschreibung. 
 - Die Keep-Regel für `KtorLocalServer` aus Paket 3.4 ist entfernt. R8 hatte die Klasse nicht entfernt, sondern zusammengelegt. Ihr Code steht im Mapping als Inline-Frame und in der dex (`api/v1/join`, `invite_invalid`). Die Prüfung `checkReleaseServerPipeline` sucht deshalb Methoden der Pipeline (Member oder Inline-Frame mit Besitzer) und nicht nur Klassenzeilen. Belege und Begründung in ADR 0018, Abweichungen.
 - Die Aussage „keine Keep-Regeln für den Serverpfad“ bleibt gültig.
 
-## Nachtrag (21.10.2026): Nachlauf nach dem Ende 60 s (Paket 3.5a)
+## Nachtrag (21.10.2026): Nachlauf nach dem Ende 60 s (Paket 3.5a, Korrektur 3.5b)
 
-- Der Nachlauf nach dem Ablauf ist 60 s statt 1 s (`SpaceRunner.CLOSE_GRACE_MILLIS`). In dieser Zeit antworten authentifizierte Anfragen mit `410 space_closed`. Keine Medien, keine Vorschauen, kein Beitritt. Danach stoppt der Server.
-- Begründung: Die Gäste-Seite soll die Ende-Ansicht sicher erreichen, auch wenn der Gast gerade im Browser wartet. Eine Sekunde reichte dafür nicht.
-- Der Test `aRequestToAClosedSpaceAnswersAndThenTheRunStops` prüft den Zeitpunkt mit der Fake-Uhr.
+- Der Nachlauf ist 60 s statt 1 s (`SpaceRunner.CLOSE_GRACE_MILLIS`). Er gilt nach **jedem** Ende: Ablauf, Beenden durch den Gastgeber (in der App mit Bestätigung oder über die Benachrichtigung) und Wecker. Der Verarbeiter nutzt dafür einen einzigen Ende-Pfad (`SpaceRunner.stop`).
+- In dieser Zeit antworten authentifizierte Anfragen mit `410 space_closed` und `endedAt` (Stoppzeit des Gastgebers bzw. Frist beim Ablauf). Keine Medien, keine Vorschauen, keine Uploads, kein Beitritt. Die Gäste-Seite selbst bleibt erreichbar, damit die Ende-Ansicht erscheint. Danach stoppt der Server.
+- **Space-Status sofort `ENDED`.** Die Datenbank wird beim Ende geschrieben, nicht erst nach dem Nachlauf. Die Oberfläche zeigt den Betrieb als beendet (`RunState.Idle`).
+- **Sperren und Dienst.** Die CPU- und WLAN-Sperre bleiben bis zum Ende des Nachlaufs, weil der Server bis dahin antwortet. Die Dauermeldung zeigt „Space beendet – Gäste werden informiert“, ohne Schaltfläche „Beenden“. Der Dienst bleibt im Vordergrund.
+- **Pausiert** (WLAN weg): Der Server ist schon aus, der Betrieb endet sofort ohne Nachlauf. **Dienst endet** (System, Prozess-Tod, `DESTROYED`): kein Nachlauf, wie bisher. Der Space bleibt dann `ACTIVE` und unterbrochen, der Neustart entscheidet (Paket 3.3).
+- **Neuer Space während des Nachlaufs: wartet.** Ein Start im Nachlauf wird vorgemerkt (ein Platz, der neueste Start gewinnt) und startet, sobald der Nachlauf vorbei ist. Die Meldung „Der vorherige Space ist noch kurz im Nachlauf …“ sagt das. Begründung: Die Oberfläche setzt den neuen Space vor dem Dienststart in der Datenbank auf `ACTIVE` (`SpaceStarter`). Eine Ablehnung ließe einen aktiven Space ohne Server zurück. Ein Abbruch des Nachlaufs für den Start kam nicht in Frage, weil die Gäste die 60 s erhalten sollen.
+- **Prozess-Tod im Nachlauf.** Kein Neustart des Nachlaufs. Das Ende steht in der Datenbank, der gemerkte Lauf ist gelöscht, und ein vorgemerkter Start geht verloren. Der neue Space bleibt dann `ACTIVE` ohne Lauf und wird als unterbrochen angeboten („Fortsetzen“).
+- **Tests.** `SpaceRunnerTest`: jeder Auslöser mit Fake-Uhr (Gastgeber, Herzschlag, Wecker, Anfrage), pausiert, Dienst endet, Wiederholungen, Warteschlange für den Start. `SpaceEndGraceSocketTest`: echter Socket nach manuellem Ende (410 mit `endedAt`, keine Medien, danach geschlossen). `SpaceServerServiceTest`: Sperren bleiben bis zum Nachlauf. Browser-Test `closed.test.mjs`: Stoppzeit der Ende-Ansicht liegt im Fenster des Endes.
+- **Korrektur.** Der Nachlauf war bisher nur für den Ablauf umgesetzt. Beim manuellen Beenden schloss der Server seit Paket 3.3 sofort. Den Befund dazu hat 3.5b festgehalten (ADR 0014, Nachtrag endedAt). Die Entscheidung oben gilt für alle Enden.
 
 ## Nachtrag (21.10.2026, Paket 3.5a-3): Benachrichtigungen zum Ende und Hinweis im Beenden-Dialog
 
