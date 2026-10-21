@@ -1,6 +1,6 @@
 # Testkatalog Meilenstein 3 (kumulativ)
 
-Stand: 21.10.2026. Dieser Katalog gehört zum Endtest der Nutzerin bzw. des Nutzers beim Vorab-Release `v0.3.0-alpha.1` (Planung zuvor „v0.3.0-alpha“, siehe [PLAN-M3.md](PLAN-M3.md)). Er wird von jedem Paket fortgeschrieben und ist nach Funktionen gegliedert, nicht nach Paketen.
+Stand: 21.10.2026 (Paket 3.5a-3 eingetragen). Dieser Katalog gehört zum Endtest der Nutzerin bzw. des Nutzers beim Vorab-Release `v0.3.0-alpha.1` (Planung zuvor „v0.3.0-alpha“, siehe [PLAN-M3.md](PLAN-M3.md)). Er wird von jedem Paket fortgeschrieben und ist nach Funktionen gegliedert, nicht nach Paketen.
 
 ## So liest man den Katalog
 
@@ -13,7 +13,7 @@ Stand: 21.10.2026. Dieser Katalog gehört zum Endtest der Nutzerin bzw. des Nutz
 Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Paket 3.3) und #35 (Paket 3.4), zusammengeführt und dedupliziert. Korrigiert gegenüber den PR-Texten:
 
 - **Uhr (Korrektur 3.3, PR #32, Punkt 12):** Bei vorgestellter Uhr endet der Space früher. Beschlossen ist: Das frühere von Wand-Uhr-Frist und gemessener Laufzeit gilt (ADR 0017).
-- **Zuordnung der Ende-Hinweise:** Die Hinweise für Gäste (Restzeit, Vorwarnung, Ende-Ansicht, Nachlauf, Verbindungsverlust) gehören zu 3.5a (Abschnitt 6). Die Gastgeber-Benachrichtigungen und der Hinweis im Beenden-Dialog gehören zu 3.6 (Abschnitt 10). Diese Zuordnung ist ein Vorschlag.
+- **Zuordnung der Ende-Hinweise:** Die Hinweise für Gäste (Restzeit, Vorwarnung, Ende-Ansicht, Nachlauf, Verbindungsverlust) gehören zu 3.5a (Abschnitt 6). Die Gastgeber-Benachrichtigungen und der Hinweis im Beenden-Dialog sind mit 3.5a-3 umgesetzt (Abschnitt 4, Ende, und Abschnitt 10, Punkte 10.6 und 10.7).
 - **Erneuerte Einladung (PR #35, Punkte 14, 18, 19):** Der Hinweis erscheint nur nach automatischer Erneuerung und verschwindet mit „Verstanden“ bzw. bei manueller Erneuerung (Paket 3.4b, ADR 0018).
 
 ---
@@ -94,6 +94,10 @@ Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Pa
 - [ ] **4.20 Uhr vorstellen.** Handlung: Bei laufendem Space die Systemuhr um eine Stunde vorstellen. Erwartet: Der Space endet früher, sofort bzw. vor seiner Frist. Es gilt das frühere Ergebnis aus Wand-Uhr-Frist und gemessener Laufzeit. *(seit 3.3, PR #32 Punkt 12, korrigiert)*
 - [ ] **4.21 Uhr zurückstellen.** Handlung: Bei laufendem Space die Systemuhr um eine Stunde zurückstellen. Erwartet: Der Space endet nicht später als seine gemessene Frist. Es gilt das frühere Ergebnis. *(seit 3.3, PR #32 Punkt 12, korrigiert)*
 - [ ] **4.22 Speicherwarnung ab 80 %.** Handlung: Upload über den Browser bis 80 % des Limits. Erwartet: Warnung im laufenden Space. *(seit 3.3, PR #32 Punkt 17; Upload im Browser braucht 3.5b)*
+- [ ] **4.23 Vorwarnung 10 Minuten vorher.** Handlung: Einen Space mit festem Ende starten und bis 10 Minuten vor dem Ende warten. Erwartet: Eine Benachrichtigung „Space ‚Name‘ endet in 10 Minuten.“, genau eine. *(seit 3.5a-3, Unit-Tests `EndNoticesTest`; Gerät offen)*
+- [ ] **4.24 Meldung beim Ende.** Handlung: Den Space beenden oder ablaufen lassen. Erwartet: Eine Benachrichtigung „Space ‚Name‘ wurde beendet – Aufbewahrung bis <Datum>“, genau eine, auch nach einem Neustart der App. *(seit 3.5a-3, Unit-Tests `PrefsEndNoticeStoreTest`; Gerät offen)*
+- [ ] **4.25 Ohne Benachrichtigungsrecht.** Handlung: Benachrichtigungen für emberlight verbieten, den Space bis zur Vorwarnung laufen lassen. Erwartet: Keine Benachrichtigung. Die Statuszeile im laufenden Space zeigt die Restzeit. *(seit 3.5a-3; Gerät offen)*
+- [ ] **4.26 Hinweis im Beenden-Dialog.** Handlung: „Space beenden“ wählen. Erwartet: Der Dialog sagt, dass Gäste mit offener Seite den Hinweis sofort sehen und andere beim nächsten Versuch sehen, dass der Space nicht mehr erreichbar ist. *(seit 3.5a-3, Golden `SpaceRunEndDialog_phone_de` und `_en`)*
 
 ## 5 Einladung und Beitritt (App und Browser)
 
@@ -128,18 +132,43 @@ Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Pa
 
 - [ ] **5.22 [Entwickler] curl-Prüfung.** Handlung: Die Befehle aus `docs/DEBUG-SERVER.md` ausführen. Erwartet: Beitritt mit gültiger Einladung `201`. Vorschau mit gültigem Geheimnis `200` mit genau `spaceName` und `accentColor`. Falsche Einladung bei Beitritt und Vorschau `403` (`invite_invalid`). Falscher Content-Type `415`. Gast auf `/participants` `403`. *(seit 3.4, PR #35 Punkt 21, Entwickler-Prüfung)*
 
-## 6 Medien im Browser (3.5a-1 Server umgesetzt, 3.5a-2 und 3.5a-3 folgen)
+## 6 Medien im Browser (3.5a-1 und 3.5a-3 umgesetzt, 3.5a-2 folgt)
 
-- [ ] **6.1 Medienliste im Browser.** Handlung: Gast öffnet den Space im Browser. Erwartet: Bilder und Videos mit Uploader und Zeitpunkt. HEIC erscheint als JPEG-Ansicht. *(folgt 3.5a)*
-- [ ] **6.2 [Entwickler] Signierte Medien-URLs.** Handlung: Eine Medien-URL abrufen, nach Ablauf erneut abrufen. Erwartet: Eine abgelaufene URL wird abgewiesen, eine neue Abfrage liefert eine neue, gültige URL. *(3.5a-1 umgesetzt, Server-Tests `MediaUrlSignerTest`, `SignedMediaApiTest`; Entwickler-Prüfung am Gerät offen)*
-- [ ] **6.3 Video mit langer Wiedergabe.** Handlung: Video über mehr als 30 Minuten abspielen. Erwartet: Die Wiedergabe läuft weiter. Die URL erneuert sich still, ohne Unterbrechung und ohne Hinweis. *(folgt 3.5a)*
-- [ ] **6.4 Aktualisierung der Liste.** Handlung: Die Seite offen lassen, während ein anderer Gast hochlädt. Erwartet: Der neue Upload erscheint innerhalb von 10 bis 15 Sekunden, ohne Neuladen. *(folgt 3.5a)*
-- [ ] **6.5 Restzeit sichtbar.** Handlung: Im Space die Seite ansehen. Erwartet: Die Restzeit ist immer sichtbar. *(folgt 3.5a)*
-- [ ] **6.6 Vorwarnung 10 Minuten.** Handlung: Warten, bis noch 10 Minuten übrig sind. Erwartet: Banner mit der Vorwarnung. Die Seite bleibt benutzbar. *(folgt 3.5a)*
-- [ ] **6.7 Vorwarnung 1 Minute.** Handlung: Warten, bis noch 1 Minute übrig ist. Erwartet: Dialog mit der Vorwarnung. *(folgt 3.5a)*
-- [ ] **6.8 Ende-Ansicht.** Handlung: Das Ende abwarten, dann die Seite neu laden. Erwartet: Ganzseitige Ende-Ansicht. Die Seite merkt sich die Ende-Ansicht, auch nach dem Neuladen. *(folgt 3.5a)*
-- [ ] **6.9 [Entwickler] Nachlauf 60 Sekunden.** Handlung: Kurz nach dem Ende eine Anfrage senden, dann nach 60 Sekunden erneut. Erwartet: In den ersten 60 Sekunden antwortet der Server mit `410`, danach beendet er sich. Die Seite zeigt die Ende-Ansicht ohne Verbindungsfehler. *(3.5a-1 umgesetzt, Server-Test `SpaceClosureSocketTest`; Entwickler-Prüfung am Gerät offen)*
-- [ ] **6.10 Verbindungsverlust.** Handlung: WLAN am Handy des Gasts ausschalten, Seite bedienen, dann wieder einschalten. Erwartet: Klarer Text statt einer Fehlerseite. Nach der Rückkehr des WLAN lädt die Seite weiter. *(folgt 3.5a)*
+Die Punkte gelten für den Browser des Gasts, einmal auf dem Telefon (390 px breit) und einmal am PC (1280 px). Die Browser-Tests (`GuestBrowserTest`, Node mit Chrome headless) decken die Fälle ab, die sich ohne Gerät prüfen lassen. Der Gerätetest bleibt offen.
+
+**Handy-Browser (Telefon, Hochformat)**
+
+- [ ] **6.1 Medienliste.** Handlung: Gast öffnet den Space im Browser des Telefons. Erwartet: Raster mit „von <Name>“, bei entferntem Uploader „(entfernt)“. Ohne Vorschau zeigen Videos und HEIC den Platzhalter „Vorschau folgt“. *(3.5a-3 umgesetzt, Browser-Test „Galerie auf dem Telefon“; Gerät offen)*
+- [ ] **6.2 Filter „Meine“.** Handlung: „Meine“ antippen, dann „Alle“. Erwartet: Nur eigene Uploads, danach wieder alles. *(3.5a-3, Browser-Test; Gerät offen)*
+- [ ] **6.3 Foto im Detail.** Handlung: Ein Foto antippen, „Herunterladen“ antippen. Erwartet: Das Bild ist groß zu sehen. Der Download startet als Datei, nicht als Ansicht. *(3.5a-3, Browser-Test mit Download-Kopf; Gerät offen)*
+- [ ] **6.4 Video im Detail.** Handlung: Video antippen, abspielen, pausieren, vorspulen. Erwartet: Die Wiedergabe läuft mit den üblichen Bedienelementen. Kann der Browser das Format nicht, steht dort „Nur Download“. *(3.5a-3, Browser-Test mit Metadaten; Gerät offen)*
+- [ ] **6.5 Zurückziehen mit Bestätigung.** Handlung: Eigenes Foto öffnen, „Zurückziehen“, zuerst „Abbrechen“, dann erneut, dann „Zurückziehen“. Erwartet: Erst nach der Bestätigung verschwindet das Medium für alle. *(3.5a-3, Browser-Test; Gerät offen)*
+- [ ] **6.6 [Entwickler] Video über 30 Minuten.** Handlung: Video länger als 30 Minuten spielen oder die Gültigkeit der Adresse verkürzen. Erwartet: Die Wiedergabe läuft ohne Unterbrechung weiter, die Adresse erneuert sich still. *(3.5a-3 im Code, Browser-Test nur für die Metadaten; Entwickler-Prüfung offen)*
+- [ ] **6.7 Verbindungsverlust.** Handlung: WLAN am Telefon des Gasts ausschalten, Seite bedienen, dann WLAN wieder einschalten. Erwartet: Der Text „Keine Verbindung zum Space …“ erscheint, ohne Fehlerseite. Nach der Rückkehr lädt die Seite weiter. *(3.5a-3, Browser-Test mit Serverstopp; Gerät offen)*
+- [ ] **6.8 Layout und Tippziele.** Handlung: Seite auf dem Telefon öffnen, Schriftgröße des Systems hochstellen. Erwartet: Kein Querscrollen, die Tippziele sind groß genug (mindestens 44 px). *(3.5a-3, Browser-Test ohne Schriftvergrößerung; Gerät offen)*
+
+**PC-Browser (1280 px)**
+
+- [ ] **6.9 Raster am PC.** Handlung: Seite am PC öffnen. Erwartet: Mehrere Spalten, kein Querscrollen, Namen und Platzhalter wie auf dem Telefon. *(3.5a-3, Browser-Test „Galerie am PC“; Gerät offen)*
+- [ ] **6.10 Tastatur.** Handlung: Nur mit Tab und Umschalt-Tab durch Filter, Kacheln, Detail und Dialog gehen. Esc im Dialog „Zurückziehen“ schließen. Erwartet: Der Fokus ist sichtbar, bleibt im offenen Dialog und kehrt danach an den Auslöser zurück. *(3.5a-3, Browser-Test für Fokus und Esc; Tastatur am Gerät offen)*
+
+**Beide**
+
+- [ ] **6.11 Sprache.** Handlung: Die Seite auf Englisch stellen und öffnen. Erwartet: Alle Texte sind englisch, die Pluralformen stimmen („1 minute left“, „9 minutes left“). *(3.5a-3, Browser-Test auf Englisch; Gerät offen)*
+- [ ] **6.12 Aktualisierung der Liste.** Handlung: Die Seite offen lassen, während ein anderer Gast etwas hochlädt. Erwartet: Der neue Upload erscheint innerhalb von 10 bis 15 Sekunden, ohne Neuladen. *(3.5a-3 im Code; Gerät offen, Upload im Browser folgt mit 3.5b)*
+- [ ] **6.13 [Entwickler] Nachlauf 60 Sekunden.** Handlung: Kurz nach dem Ende eine Anfrage senden, dann nach 60 Sekunden erneut. Erwartet: In den ersten 60 Sekunden antwortet der Server mit `410`, danach beendet er sich. Die Seite zeigt die Ende-Ansicht ohne Verbindungsfehler. *(3.5a-1 umgesetzt, Server-Test `SpaceClosureSocketTest`; Entwickler-Prüfung am Gerät offen)*
+- [ ] **6.14 HEIC im Browser.** Handlung: Ein HEIC-Foto öffnen. Erwartet: Mit Vorschau (1600 px) sichtbar. Ohne Vorschau steht „Vorschau nicht verfügbar – herunterladen“. *(folgt 3.5a-2)*
+- [ ] **6.15 [Entwickler] Signierte Medien-URLs.** Handlung: Eine Medien-URL abrufen, nach Ablauf erneut abrufen. Erwartet: Eine abgelaufene URL wird abgewiesen, eine neue Abfrage liefert eine neue, gültige URL. *(3.5a-1 umgesetzt, Server-Tests `MediaUrlSignerTest`, `SignedMediaApiTest`; Entwickler-Prüfung am Gerät offen)*
+
+## 6b Ende-Hinweise im Browser (3.5a-3)
+
+- [ ] **6b.1 Restzeit.** Handlung: Die Space-Seite öffnen. Erwartet: Im Kopf steht „Noch X h Y min“, „Noch X Minuten“ bzw. „Noch X Sekunden“. Die Restzeit bleibt auch in der Detailansicht sichtbar. *(3.5a-3, Browser-Test; Gerät offen)*
+- [ ] **6b.2 Banner ab 10 Minuten.** Handlung: Warten, bis noch 10 Minuten übrig sind, am Telefon und am PC. Erwartet: Banner „Der Space endet in 10 Minuten – lade jetzt herunter, was du behalten möchtest.“. Die Restzeit ist hervorgehoben, die Seite bleibt benutzbar, es erscheint noch kein Dialog. *(3.5a-3, Browser-Test mit Restzeit 9 Minuten; Wartezeit am Gerät offen)*
+- [ ] **6b.3 Dialog ab 1 Minute.** Handlung: Warten, bis noch 1 Minute übrig ist. Erwartet: Dialog „Der Space endet in einer Minute“. Der Fokus liegt im Dialog, Tab bleibt darin. Nur „Verstanden“ schließt ihn, Esc nicht. *(3.5a-3, Browser-Test; Gerät offen)*
+- [ ] **6b.4 Ende bei Ablauf.** Handlung: Das Ende abwarten. Erwartet: Ganzseitige Ansicht „Space ‚<Name>‘ wurde um <Zeit> beendet. Was du heruntergeladen hast, bleibt bei dir.“ *(3.5a-3, Browser-Test; Gerät offen)*
+- [ ] **6b.5 Ende nach Neuladen.** Handlung: Nach dem Ende die Seite neu laden, am Telefon auch den Browser schließen und wieder öffnen. Erwartet: Die Ende-Ansicht bleibt. *(3.5a-3, Browser-Test für das Neuladen; Browser-Neustart am Gerät offen)*
+- [ ] **6b.6 Ende durch den Gastgeber.** Handlung: Der Gastgeber beendet den Space vor der Frist, während der Gast die Seite offen hat. Erwartet: Die Ende-Ansicht erscheint beim nächsten Abruf, spätestens nach 15 Sekunden. Die Uhrzeit ist der Zeitpunkt, zu dem die Seite das Ende bemerkt hat. *(3.5a-3, Browser-Test mit `410`; Gerät offen)*
+- [ ] **6b.7 Verbindungsverlust ohne Ende.** Handlung: Der Server ist nicht erreichbar, das Ende ist nicht bekannt. Erwartet: „Keine Verbindung zum Space. Vielleicht wurde er beendet …“, die Seite versucht es automatisch erneut und zeigt danach den Space wieder. *(3.5a-3, Browser-Test; Gerät offen)*
 
 ## 7 Upload im Browser (3.5b, folgt)
 
@@ -176,8 +205,8 @@ Die Hinweise für Gäste zum Ende stehen in Abschnitt 6 (Vorgabe 3.5a). Die Punk
 - [ ] **10.3 Jetzt löschen mit Bestätigung.** Handlung: In der Erinnerung „Jetzt löschen“ wählen. Erwartet: Erst nach einer Bestätigung wird gelöscht. *(folgt 3.6, Designentscheidung (a))*
 - [ ] **10.4 Sofort löschen.** Handlung: Aufbewahrung „Sofort löschen“ wählen, den Space beenden. Erwartet: Die Erinnerung kommt kurz vor dem Ende. *(folgt 3.6, Designentscheidung (f))*
 - [ ] **10.5 Automatische Löschung.** Handlung: Die Aufbewahrungsfrist abwarten. Erwartet: Die nicht behaltenen Medien sind gelöscht, der Speicher ist frei. *(folgt 3.6)*
-- [ ] **10.6 Gastgeber-Benachrichtigung.** Handlung: Auf eine Benachrichtigung 10 Minuten vor dem Ende und auf eine beim Ende warten. Erwartet: Zwei Benachrichtigungen zum richtigen Zeitpunkt. *(folgt 3.6)*
-- [ ] **10.7 Hinweis im Beenden-Dialog.** Handlung: „Space beenden“ wählen. Erwartet: Der Dialog weist auf die Folgen für die Medien und die Aufbewahrung hin. *(folgt 3.6)*
+- [ ] **10.6 Gastgeber-Benachrichtigung.** Handlung: Auf eine Benachrichtigung 10 Minuten vor dem Ende und auf eine beim Ende warten. Erwartet: Zwei Benachrichtigungen zum richtigen Zeitpunkt. *(umgesetzt in 3.5a-3, siehe 4.23 und 4.24)*
+- [ ] **10.7 Hinweis im Beenden-Dialog.** Handlung: „Space beenden“ wählen. Erwartet: Der Dialog weist auf die Folgen für die Medien und die Aufbewahrung hin. *(umgesetzt in 3.5a-3, siehe 4.26)*
 - [ ] **10.8 Verlängern.** Handlung: Während der Laufzeit den Space verlängern. Erwartet: Die neue Frist gilt. Gäste sehen ein Banner mit der Verlängerung. *(folgt 3.6)*
 - [ ] **10.9 Als Vorlage für neuen Space.** Handlung: Nach dem Ende „Als Vorlage für neuen Space“ wählen. Erwartet: Ein neuer Entwurf mit den Einstellungen des Space, ohne Medien. *(folgt 3.6)*
 - [ ] **10.10 Beendeter Space bleibt geschlossen.** Handlung: Einen beendeten Space öffnen und versuchen, ihn zu starten oder zu verlängern. Erwartet: Beides ist nicht möglich, der Space bleibt geschlossen. *(folgt 3.6, Nutzerentscheidung „a“ vom 21.10.2026)*

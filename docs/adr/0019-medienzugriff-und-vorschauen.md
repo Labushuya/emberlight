@@ -49,11 +49,11 @@ Eigene Grenze für Medien-Streams und Downloads: vier gleichzeitig (`ServerGates
 ### 6. Ende des Space (teilweise umgesetzt)
 
 - **Umgesetzt:** Nachlauf nach dem Ablauf von 1 s auf 60 s (`SpaceRunner.CLOSE_GRACE_MILLIS`, siehe Nachtrag in [ADR 0017](0017-einrichtung-und-betrieb.md)). In dieser Zeit antworten authentifizierte Anfragen mit `410 space_closed`. Medien und Vorschauen gibt es nicht mehr.
-- **Offen:** Die Seite mit Restzeit, Banner (10 Minuten), Dialog (1 Minute), Ende-Ansicht und Verbindungsverlust. Die Benachrichtigungen des Gastgebers. Der Hinweis im Beenden-Dialog. Alles davon liegt in den Teilen 6 und 7 des Auftrags und ist noch nicht begonnen.
+- **Umgesetzt in 3.5a-3:** Die Seite mit Restzeit, Banner (10 Minuten), Dialog (1 Minute), Ende-Ansicht und Verbindungsverlust (Nachtrag unten). Die Benachrichtigungen des Gastgebers und der Hinweis im Beenden-Dialog (Nachtrag 3.5a-3 in [ADR 0017](0017-einrichtung-und-betrieb.md)).
 
-### 7. Gäste-Seite (offen)
+### 7. Gäste-Seite (umgesetzt in 3.5a-3)
 
-Raster, unendliches Scrollen, Filter „Meine“, Detail, Download, Zurückziehen mit Bestätigung, Speicheranzeige, Abfrage alle 10 bis 15 Sekunden bei sichtbarer Seite, i18n de und en, Barrierefreiheit. Noch nicht begonnen. Die Browser-Tests (Node mit CDP, headless) auch nicht.
+Raster, unendliches Scrollen, Filter „Meine“, Detail, Download, Zurückziehen mit Bestätigung, Speicheranzeige, Abfrage alle 10 bis 15 Sekunden bei sichtbarer Seite, i18n de und en, Barrierefreiheit. Umsetzung und Abweichungen im Nachtrag 3.5a-3 unten.
 
 ## Schnittstelle für 3.5a-2 und 3.5a-3
 
@@ -82,9 +82,24 @@ Festgeschrieben am 21.10.2026. Paket 3.5a-2 (Vorschauen, Codec, HEIC-Ansicht) f�
 - Ein Neustart des Servers macht alle Adressen ungültig. Die Seite muss dann neu anfragen. Das ist im Plan vorgesehen.
 - Die Schlüsselverwaltung bleibt im Speicher. Eine Persistenz des Schlüssels ist nicht vorgesehen.
 
-## Offen
+## Nachtrag 3.5a-3: Gäste-Seite, Ende-Hinweise, Browser-Tests (21.10.2026)
 
-- Vorschauen (Abschnitt 3) mit Migration 6 → 7 und Migrationstest, Paket 3.5a-2. Füllt den Vertrag oben.
-- Codec-Erkennung und `videoCodec` (Abschnitt 2), Paket 3.5a-2.
-- Gäste-Seite, Browser-Tests, Testkatalog-Abschnitt „Medien im Browser“, Paket 3.5a-3.
-- Ende-Hinweise für Gäste und für den Gastgeber (Abschnitt 6).
+Der Vertrag oben bleibt unverändert. Dieser Nachtrag hält fest, wie die Seite ihn nutzt und wo die Umsetzung davon abweicht.
+
+**Aufbau der Seite.** Drei Skripte ohne Build (`guest-core.js` mit dem gemeinsamen Kern, `guest-space.js` mit Raster, Detail, Abfrage und Ende, `guest.js` mit Beitritt und Einstieg). Einstieg ist `index.html`. Alle Texte per `textContent`, Attribute nur aus geprüften Werten. Medien-Adressen erkennt die Seite nur als relativen Pfad der Form `/api/v1/media/{id}/{route}?pid=…&exp=…&sig=…` erkennen; sonst gelten sie als fehlend.
+
+**Vorschau und Platzhalter.** Ein Bild zeigt `previewUrl`, sobald `previewState` `ready` ist. Sonst zeigt die Seite bei Bildern (außer HEIC) das Original `viewUrl` mit `loading="lazy"`. Bei Video und HEIC bleibt es beim Platzhalter. Solange 3.5a-2 fehlt, sind `previewUrl` und `viewUrl` für Videos und HEIC `null`. Das ist der Zustand, den die Browser-Tests prüfen.
+
+**Erneuerung der Adressen.** Die Seite rechnet die Gültigkeit lokal ab dem Abruf (`urlsExpireInSeconds`, Video 30 Minuten). Kurz vor Ablauf holt sie den Eintrag über `GET /api/v1/media/{id}` neu. Die Video-Adresse wird still getauscht, die Wiedergabe setzt an `currentTime` fort. Schlägt die Wiedergabe fehl, versucht die Seite es einmal mit neuer Adresse und zeigt danach „Nur Download“. Der Browser meldet bei einem HTTP-Fehler am Medienelement nur „nicht unterstützt“. Darum wird ein Fehler immer zuerst als Erneuerung behandelt, nicht sofort als fehlendes Format.
+
+**Codec.** Ist `videoCodec` `null`, versucht die Seite die Wiedergabe. Bei `avc1` oder `hvc1` prüft sie `canPlayType` mit einer festen Codec-Angabe. Unbekannte Werte gelten als nicht abspielbar.
+
+**Abweichungen.**
+- Die Ende-Uhrzeit: Die API meldet das Ende nicht gesondert (410 trägt nur `space_closed`). Bei Ablauf zeigt die Seite das geplante Ende. Beendet der Gastgeber früher, zeigt sie den Zeitpunkt, zu dem sie das Ende bemerkt hat.
+- Das Anschauen der Medien über die Ansicht (`viewUrl` für Bilder) zählt gegen die Gate-Grenze der Medienrouten (vier gleichzeitig, ADR 0019, Abschnitt 5). Bei vielen Bildern im Raster kann der Server mit `503` antworten, die Seite zeigt dann den Platzhalter. 3.5a-2 mit echten Vorschauen beseitigt das.
+- Der Dialog „Der Space endet in einer Minute“ verlangt die Bestätigung über den Knopf. Esc schließt ihn nicht, weil die Warnung eine Bestätigung braucht.
+- Die stille Erneuerung nach 30 Minuten prüfen die Browser-Tests nicht, das dauert zu lange. Sie ist im Testkatalog als Entwickler-Prüfung vorgesehen (Punkt 6.6).
+
+**Browser-Tests.** Node 22 oder neuer, ohne npm-Abhängigkeiten. Node steuert Chrome headless per CDP. Chrome startet mit `--headless=new`, `--remote-debugging-port=0` und einem eigenen Profil im Temp-Ordner. Der JVM-Test `GuestBrowserTest` startet den echten Server auf 127.0.0.1 (CIO, feste Host-Prüfung), legt Space, Gäste und Medien über die Schnittstelle an und übergibt Port, Einladung und Sitzung an Node. Braucht ein Fall eine Änderung am Server (Ende, Abschalten), meldet Node es über stderr (`EMBERLIGHT-CONTROL <name>`). Der JVM-Test führt die Aktion aus und antwortet auf stdin mit `ok`. Probleme der Seite (JavaScript-Fehler, CSP-Verstöße) sind Testfehler. Fehlen Node oder Chrome, werden die Tests übersprungen. Mit `CI=true` schlagen sie fehl. CI richtet Node 24 über die Composite-Action `browser-test-tools` ein. Das Video-Fixture `clip.mp4` entstand einmalig in Chrome über `MediaRecorder` (Skript `fixtures/make-clip.mjs`), weil auf dem Entwicklungsrechner kein ffmpeg liegt.
+
+**Offen.** Die Gerätetests (Handy und PC) stehen im Testkatalog. Nach 3.5a-2 prüft der Browser-Test die echten Vorschauen. Der Platzhalter-Fall für Video und HEIC ändert sich dann.
