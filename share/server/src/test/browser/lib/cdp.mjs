@@ -66,7 +66,14 @@ export async function launchChrome({ chromePath, profileBase, noSandbox }) {
   const [port, path] = await waitUntil(
     () => {
       if (!existsSync(portFile)) return null;
-      const lines = readFileSync(portFile, "utf8").split(/\r?\n/);
+      // Unter Windows kann ein Virenscanner die Datei kurz sperren (EBUSY). Dann wird es im nächsten Versuch erneut gelesen.
+      let text;
+      try {
+        text = readFileSync(portFile, "utf8");
+      } catch {
+        return null;
+      }
+      const lines = text.split(/\r?\n/);
       return lines.length >= 2 && lines[0] ? [lines[0], lines[1]] : null;
     },
     20000,
@@ -147,6 +154,8 @@ export class Page {
   #cdp;
   #sessionId;
   problems = [];
+  // Anfragen der Seite (Methode und Adresse), nur nach enableNetwork() gefüllt (Paket 3.5b, Vorabprüfung ohne Netzwerk).
+  networkLog = [];
   #targetId;
 
   static async open(cdp) {
@@ -173,7 +182,9 @@ export class Page {
   }
 
   #onEvent(method, params) {
-    if (method === "Runtime.exceptionThrown") {
+    if (method === "Network.requestWillBeSent") {
+      this.networkLog.push({ method: params.request?.method ?? "", url: params.request?.url ?? "" });
+    } else if (method === "Runtime.exceptionThrown") {
       const details = params.exceptionDetails ?? {};
       this.problems.push(`JavaScript-Fehler: ${details.exception?.description ?? details.text ?? "unbekannt"}`);
     } else if (method === "Log.entryAdded") {
@@ -186,6 +197,41 @@ export class Page {
 
   send(method, params = {}) {
     return this.#cdp.send(method, params, this.#sessionId);
+  }
+
+  /** Schaltet das Netzwerk-Protokoll der Seite ein. Danach füllt sich `networkLog`. */
+  async enableNetwork() {
+    await this.send("Network.enable");
+  }
+
+  /** Begrenzt die Upload-Geschwindigkeit (Bytes je Sekunde), damit Fortschritt und Warteschlange sichtbar sind. */
+  async throttleUpload(bytesPerSecond) {
+    await this.send("Network.emulateNetworkConditions", {
+      offline: false,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: bytesPerSecond,
+    });
+  }
+
+  /** Setzt Dateien in ein Eingabefeld (wie die Auswahl im Dialog). Das Feld meldet danach `change`. */
+  async setFiles(selector, paths) {
+    const { root } = await this.send("DOM.getDocument", { depth: 0 });
+    const { nodeId } = await this.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+    if (!nodeId) throw new Error(`Eingabefeld fehlt: ${selector}`);
+    await this.send("DOM.setFileInputFiles", { nodeId, files: paths });
+  }
+
+  /** Zieht Dateien per Drag and Drop auf ein Element (CDP-Ereignisse dragEnter, dragOver, drop). */
+  async dragFiles(selector, paths) {
+    const center = await this.eval(`(() => {
+      const rect = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`);
+    const data = { items: [], files: paths, dragOperationsMask: 1 };
+    for (const type of ["dragEnter", "dragOver", "drop"]) {
+      await this.send("Input.dispatchDragEvent", { type, x: center.x, y: center.y, data });
+    }
   }
 
   async goto(url) {

@@ -477,6 +477,95 @@ button:disabled {
   display: none !important;
 }
 
+/* Upload im Browser (Paket 3.5b): Ablagezone, Warteschlange, Fortschritt je Datei. Breiten setzt das Skript über style. */
+.upload {
+  margin: 0 0 16px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--ember-card);
+}
+
+.upload-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  border: 2px dashed var(--ember-muted);
+  border-radius: 10px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.drop.is-over {
+  border-color: var(--ember-accent);
+  background: var(--ember-tile);
+}
+
+.drop.is-disabled {
+  opacity: 0.6;
+}
+
+.drop .meta {
+  margin: 0;
+}
+
+.drop button,
+.q-actions button {
+  min-height: 44px;
+  width: auto;
+}
+
+.upload .bar {
+  margin: 8px 0 4px;
+}
+
+.q-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.q-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--ember-tile);
+}
+
+.q-name {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.q-status {
+  margin: 2px 0 6px;
+  color: var(--ember-muted);
+  font-size: 0.9rem;
+}
+
+.q-item[data-state="failed"] .q-status,
+.q-item[data-state="rejected"] .q-status {
+  color: var(--ember-error);
+}
+
+.q-item .bar {
+  margin: 0 0 6px;
+}
+
+.q-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;

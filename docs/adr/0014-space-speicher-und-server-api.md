@@ -311,3 +311,10 @@ Alle Änderungen sind additiv. `SERVER_API_VERSION` bleibt 1.
 - Medienantworten tragen `Referrer-Policy`, `Cross-Origin-Resource-Policy`, `Content-Security-Policy` und `nosniff` (ADR 0019).
 - Neue Fehlercodes: `403 url_invalid`, `403 url_expired`, `403 participant_inactive` (nur bei signierten Adressen), `503 service_busy` mit `Retry-After` auch für Medien (eigene Grenze, ADR 0019).
 - Offen mit den Vorschauen: `previewUrl`, `previewState`, `videoCodec`.
+
+## Nachtrag (21.10.2026, Paket 3.5b): endedAt in der 410-Antwort
+
+- `410 space_closed` trägt das Feld `endedAt` als ISO-8601-Zeit in UTC, wenn der Zeitpunkt bekannt ist. Bei Ablauf ist das die Frist. Ohne bekannten Zeitpunkt fehlt das Feld, wie bisher. Die Änderung ist additiv, `SERVER_API_VERSION` bleibt 1.
+- Technik: `SpaceClosure.endedAtMillis()` (Standard `null`). `SpaceRunner` liefert bei abgelaufener Frist das geplante Ende. Test: `SpaceClosureSocketTest.aClosedSpaceNamesTheEndInUtcWhenItIsKnown`.
+- Die Gäste-Seite nutzt `endedAt` für die Ende-Ansicht, beim Upload (410 während des Wartens) wie beim Abfragen (`GET /api/v1/space`).
+- **Offen:** Beim manuellen Beenden durch den Gastgeber schließt der Server sofort (`stop` ruft `closeServer`). Gäste bekommen dann keine 410-Antwort, sondern einen Verbindungsverlust. Die Seite zeigt dort die Uhrzeit, zu der sie das Ende bemerkt hat. Eine echte Stoppzeit für Gäste braucht einen kurzen Nachlauf auch beim manuellen Beenden. Das ändert die Laufzeit des Dienstes nach „Beenden“ und ist eine Entscheidung der Nutzerin bzw. des Nutzers.
