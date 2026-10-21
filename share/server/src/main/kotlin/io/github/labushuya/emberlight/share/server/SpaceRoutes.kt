@@ -230,19 +230,19 @@ fun spaceRoutes(
 
             get("/media/{id}/content") {
                 call.routeTemplate("/api/v1/media/{id}/content")
-                call.respondMedia(vault, call.parameters["id"], inline = false)
+                call.respondMedia(vault, gates, call.parameters["id"], inline = false)
             }
 
             // Ansicht im Browser: Original inline (ADR 0019). Die HEIC-JPEG-Ansicht folgt mit den Vorschauen.
             get("/media/{id}/view") {
                 call.routeTemplate("/api/v1/media/{id}/view")
-                call.respondMedia(vault, call.parameters["id"], inline = true)
+                call.respondMedia(vault, gates, call.parameters["id"], inline = true)
             }
 
             // Video mit Range (ADR 0019). Nur Videos, sonst 404.
             get("/media/{id}/stream") {
                 call.routeTemplate("/api/v1/media/{id}/stream")
-                call.respondMedia(vault, call.parameters["id"], inline = true, onlyVideo = true)
+                call.respondMedia(vault, gates, call.parameters["id"], inline = true, onlyVideo = true)
             }
 
             delete("/media/{id}") {
@@ -267,6 +267,7 @@ fun spaceRoutes(
  */
 private suspend fun ApplicationCall.respondMedia(
     vault: SpaceVault,
+    gates: ServerGates,
     rawId: String?,
     inline: Boolean,
     onlyVideo: Boolean = false,
@@ -281,11 +282,21 @@ private suspend fun ApplicationCall.respondMedia(
         respondError(HttpStatusCode.RequestedRangeNotSatisfiable, "range_not_satisfiable")
         return
     }
-    respondContent(
-        file = file.path.toFile(),
-        contentType = ContentType.parse(file.record.mime),
-        disposition = if (inline) "inline" else ContentDispositionHeader.attachment(file.record.originalName),
-    )
+    // Eigene Parallelitätsgrenze für Streams und Downloads (ADR 0019). Vorschauen zählen nicht dazu.
+    if (!gates.tryEnterMedia()) {
+        response.headers.append(HttpHeaders.RetryAfter, RETRY_AFTER_SECONDS)
+        respondError(HttpStatusCode.ServiceUnavailable, "service_busy")
+        return
+    }
+    try {
+        respondContent(
+            file = file.path.toFile(),
+            contentType = ContentType.parse(file.record.mime),
+            disposition = if (inline) "inline" else ContentDispositionHeader.attachment(file.record.originalName),
+        )
+    } finally {
+        gates.leaveMedia()
+    }
 }
 
 /** Antwort 403 für Nicht-Gastgeber. Liefert `false`, wenn die Anfrage abgewiesen wurde. */
