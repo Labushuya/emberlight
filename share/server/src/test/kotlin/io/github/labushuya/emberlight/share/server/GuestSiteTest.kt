@@ -18,9 +18,9 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Gäste-Seite W1 (ADR 0018): Auslieferung ohne Zugriffsprüfung, Sicherheits-Header und statische Regeln
- * für die Dateien
- * (keine Inline-Skripte, keine Inline-Stile, keine externen Quellen, Ausgabe nur per textContent).
+ * Gäste-Seite (ADR 0018, ADR 0019, Paket 3.5a-3): Auslieferung ohne Zugriffsprüfung, Sicherheits-Header und statische Regeln
+ * für alle Dateien der Seite (keine Inline-Skripte, keine Inline-Stile, keine externen Quellen, Ausgabe nur per textContent,
+ * vollständige Übersetzungen, nur bekannte Element-IDs).
  */
 class GuestSiteTest {
     private val assetDir = File("src/main/assets/guest")
@@ -45,6 +45,10 @@ class GuestSiteTest {
     }
 
     private suspend fun HttpResponse.header(name: String): String? = headers[name]
+
+    private fun scripts(): List<File> = assetDir.listFiles().orEmpty().filter { it.isFile && it.extension == "js" }.sortedBy { it.name }
+
+    private fun keysOf(name: String) = Json.parseToJsonElement(File(assetDir, name).readText()).jsonObject.keys
 
     @Test
     fun theStartPageIsServedWithoutAuthorizationAndWithTheSecurityHeaders() =
@@ -74,6 +78,19 @@ class GuestSiteTest {
             assertEquals("nosniff", script.header("X-Content-Type-Options"))
             assertEquals(HttpStatusCode.OK, style.status)
             assertTrue(style.headers[HttpHeaders.ContentType]!!.startsWith("text/css"))
+        }
+
+    @Test
+    fun theSharedAndSpaceScriptsAreServedAsScriptsToo() =
+        testApplication {
+            install()
+
+            listOf("/guest-core.js", "/guest-space.js").forEach { path ->
+                val response = client.get(path) { header(HttpHeaders.Host, "localhost") }
+                assertEquals(path, HttpStatusCode.OK, response.status)
+                assertTrue(path, response.headers[HttpHeaders.ContentType]!!.startsWith("text/javascript"))
+                assertEquals(path, GuestSite.CONTENT_SECURITY_POLICY, response.header("Content-Security-Policy"))
+            }
         }
 
     @Test
@@ -108,6 +125,14 @@ class GuestSiteTest {
         }
 
     @Test
+    fun everyFileOfTheFolderIsServedByARoute() {
+        val served = GuestSite.FILES.values.map { it.first }.toSet()
+        val onDisk =
+            assetDir.walkTopDown().filter { it.isFile }.map { it.relativeTo(assetDir).path.replace('\\', '/') }.toSet()
+        assertTrue("Nicht ausgeliefert: ${onDisk - served}", served.containsAll(onDisk))
+    }
+
+    @Test
     fun theStartPageHasNoInlineScriptsOrStylesAndNoExternalSources() {
         val html = File(assetDir, "index.html").readText()
 
@@ -120,42 +145,79 @@ class GuestSiteTest {
     }
 
     @Test
-    fun stylesheetAndScriptUseNoExternalSources() {
-        listOf("guest.css", "guest.js").forEach { name ->
-            val text = File(assetDir, name).readText()
-            assertFalse("$name lädt extern", Regex("https?://").containsMatchIn(text))
+    fun stylesheetAndScriptsUseNoExternalSources() {
+        (scripts() + File(assetDir, "guest.css")).forEach { file ->
+            assertFalse("${file.name} lädt extern", Regex("https?://").containsMatchIn(file.readText()))
         }
     }
 
     @Test
-    fun theScriptNeverWritesHtmlAndOnlyUsesTextOutput() {
-        val script = File(assetDir, "guest.js").readText()
+    fun noScriptWritesHtmlEvaluatesStringsOrUsesStyleAttributes() {
         val forbidden =
-            listOf("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function")
-        forbidden.forEach { term ->
-            assertFalse("Verboten im Skript: $term", script.contains(term))
+            listOf(
+                "innerHTML",
+                "outerHTML",
+                "insertAdjacentHTML",
+                "document.write",
+                "eval(",
+                "new Function",
+                "setTimeout(\"",
+                "setInterval(\"",
+            )
+        scripts().forEach { file ->
+            val source = file.readText()
+            forbidden.forEach { term ->
+                assertFalse("Verboten in ${file.name}: $term", source.contains(term))
+            }
+            // Stile nur über element.style.x, nie als Attribut (CSP, ADR 0018).
+            assertFalse("setAttribute(style) in ${file.name}", Regex("setAttribute\\(\\s*[\"']style[\"']").containsMatchIn(source))
         }
-        assertTrue(script.contains("textContent"))
+        assertTrue(scripts().any { it.readText().contains("textContent") })
     }
 
     @Test
     fun thePreviewUsesOnlyTheHexPaletteColorAndTheTextOfTheName() {
-        val script = File(assetDir, "guest.js").readText()
-        assertTrue(script.contains("/api/v1/join/preview"))
+        val join = File(assetDir, "guest.js").readText()
+        val core = File(assetDir, "guest-core.js").readText()
+        assertTrue(join.contains("/api/v1/join/preview"))
         // Die Farbe kommt nur als Hex-Wert durch die Prüfung, nie als freier CSS-Wert (ADR 0018).
-        assertTrue(script.contains("ACCENT_PATTERN = /^#[0-9A-Fa-f]{6}$/"))
-        assertTrue(script.contains("el.preview.textContent = text(\"previewJoin\""))
-        assertFalse(script.contains("el.preview.innerHTML"))
+        assertTrue(core.contains("ACCENT_PATTERN = /^#[0-9A-Fa-f]{6}$/"))
+        assertTrue(join.contains("el.preview.textContent = text(\"previewJoin\""))
+        assertFalse(join.contains("el.preview.innerHTML"))
     }
 
     @Test
-    fun everyTranslatedKeyUsedInTheStartPageExistsInBothLanguages() {
+    fun everyElementIdTheScriptsUseExistsInTheMarkup() {
         val html = File(assetDir, "index.html").readText()
-        val used = Regex("data-i18n=\"([^\"]+)\"").findAll(html).map { it.groupValues[1] }.toSet()
-        val german = Json.parseToJsonElement(File(assetDir, "i18n/de.json").readText()).jsonObject.keys
-        val english = Json.parseToJsonElement(File(assetDir, "i18n/en.json").readText()).jsonObject.keys
+        val ids = Regex("\\sid=\"([^\"]+)\"").findAll(html).map { it.groupValues[1] }.toSet()
+        val used =
+            scripts()
+                .flatMap { file ->
+                    Regex("(?:getElementById|byId)\\(\"([^\"]+)\"\\)").findAll(file.readText()).map { it.groupValues[1] }
+                }.toSet()
+        assertTrue("Fehlende IDs im Markup: ${used - ids}", ids.containsAll(used))
+    }
+
+    @Test
+    fun everyTranslationKeyUsedByThePagesExistsInBothLanguagesAndPluralsAreComplete() {
+        val html = File(assetDir, "index.html").readText()
+        val used = mutableSetOf<String>()
+        Regex("data-i18n(?:-aria)?=\"([^\"]+)\"").findAll(html).forEach { used += it.groupValues[1] }
+        val plurals = mutableSetOf<String>()
+        scripts().forEach { file ->
+            val source = file.readText()
+            Regex("\\b(?:t|text)\\(\"([A-Za-z0-9]+)\"").findAll(source).forEach { used += it.groupValues[1] }
+            Regex("plural\\(\"([A-Za-z0-9]+)\"").findAll(source).forEach { plurals += it.groupValues[1] }
+        }
+        plurals.forEach { base ->
+            used += base + "One"
+            used += base + "Other"
+        }
+        val german = keysOf("i18n/de.json")
+        val english = keysOf("i18n/en.json")
 
         assertTrue("Fehlt auf Deutsch: ${used - german}", german.containsAll(used))
         assertTrue("Fehlt auf Englisch: ${used - english}", english.containsAll(used))
+        assertEquals(german, english)
     }
 }
