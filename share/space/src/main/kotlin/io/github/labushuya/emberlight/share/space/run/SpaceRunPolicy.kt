@@ -35,6 +35,21 @@ enum class StartProblem {
     NOT_FOUND,
 }
 
+/** Gründe, warum ein laufender Space nicht verlängert werden kann (Paket 3.6a). */
+enum class ExtendProblem {
+    /** Der Space ist nicht aktiv: entworfen, beendet oder schon im Nachlauf. */
+    NOT_ACTIVE,
+
+    /** Die neue Endzeit liegt nicht in der Zukunft. */
+    NOT_IN_FUTURE,
+
+    /** Die neue Endzeit liegt nicht nach dem bisherigen Ende. Verlängern kürzt nicht. */
+    NOT_LATER,
+
+    /** Die Gesamtlaufzeit ab dem Start würde 30 Tage überschreiten. */
+    TOO_LONG,
+}
+
 /** Regeln für Laufzeit, Ablauf und Pausen. Ohne Android, ohne Speicher. */
 object SpaceRunPolicy {
     /** Abstand der Herzschläge im Dienst. Ein Herzschlag prüft Ablauf und Pause (ADR 0017). */
@@ -91,6 +106,30 @@ object SpaceRunPolicy {
         if (anotherActive) return StartProblem.ANOTHER_ACTIVE
         if (storageLimitBytes > freeBytes - SpaceRules.DEVICE_RESERVE_BYTES) return StartProblem.STORAGE_ABOVE_FREE
         if (lifetime is Lifetime.Until && lifetime.epochMillis <= nowWallMillis) return StartProblem.END_IN_PAST
+        return null
+    }
+
+    /** Höchstens so lange darf ein Space ab seinem Start laufen, auch nach dem Verlängern (Paket 3.6a). */
+    const val MAX_TOTAL_MILLIS = 30L * 86_400_000L
+
+    /**
+     * Prüft eine Verlängerung auf eine neue Endzeit. Erlaubt ist nur ein aktiver Space, dessen neue Endzeit in der Zukunft
+     * und nach dem bisherigen Ende liegt. Die Gesamtlaufzeit ab [startedAtMillis] bleibt bei höchstens [MAX_TOTAL_MILLIS].
+     * Liefert `null`, wenn die Verlängerung gilt.
+     */
+    fun extendProblem(
+        status: SpaceStatus?,
+        startedAtMillis: Long?,
+        currentEndsAtMillis: Long?,
+        newEndsAtMillis: Long,
+        nowWallMillis: Long,
+    ): ExtendProblem? {
+        if (status != SpaceStatus.ACTIVE || startedAtMillis == null || currentEndsAtMillis == null) {
+            return ExtendProblem.NOT_ACTIVE
+        }
+        if (newEndsAtMillis <= nowWallMillis) return ExtendProblem.NOT_IN_FUTURE
+        if (newEndsAtMillis <= currentEndsAtMillis) return ExtendProblem.NOT_LATER
+        if (newEndsAtMillis - startedAtMillis > MAX_TOTAL_MILLIS) return ExtendProblem.TOO_LONG
         return null
     }
 

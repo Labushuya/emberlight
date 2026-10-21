@@ -47,6 +47,8 @@
     countdown: byId("countdown"),
     leaveButton: byId("leave-button"),
     banner: byId("banner"),
+    extendedBanner: byId("extended-banner"),
+    extendedText: byId("extended-text"),
     lost: byId("lost"),
     listView: byId("list-view"),
     storageBar: byId("storage-bar"),
@@ -418,6 +420,7 @@
   /** Übernimmt die Angaben aus `GET /api/v1/space`. Liefert `false` bei ungültiger Antwort. */
   function applySpace(data) {
     if (!data || typeof data.name !== "string" || typeof data.revision !== "number") return false;
+    var previousEnd = state.endsAt;
     state.spaceName = data.name;
     state.endsAt = typeof data.endsAt === "string" ? data.endsAt : null;
     state.remaining = typeof data.remainingSeconds === "number" ? data.remainingSeconds : null;
@@ -438,7 +441,26 @@
     renderHeader();
     renderCountdown(remainingNow());
     renderStorage();
+    // Ein späteres Ende heißt: der Gastgeber hat verlängert (Paket 3.6a).
+    if (previousEnd && state.endsAt && Date.parse(state.endsAt) > Date.parse(previousEnd)) {
+      showExtended(state.endsAt);
+    }
     return true;
+  }
+
+  /**
+   * Der Space ist bis zu einer späteren Zeit verlängert. Die Seite zeigt das Banner in einer Live-Region, schließt eine offene
+   * Vorwarnung und setzt die Merkungen zurück, damit die Warnungen zur neuen Endzeit wieder gelten. Die Restzeit rechnet
+   * [renderCountdown] mit dem neuen Wert, auch die Hervorhebung fällt dort weg.
+   */
+  function showExtended(endsAt) {
+    hideEndingDialog();
+    el.banner.hidden = true;
+    state.bannerShown = false;
+    state.dialogShown = false;
+    var time = core.formatTime(endsAt);
+    el.extendedText.textContent = time ? t("extendedWithTime", { time: time }) : t("extendedNoTime");
+    el.extendedBanner.hidden = false;
   }
 
   function refreshSpace() {

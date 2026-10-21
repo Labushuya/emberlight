@@ -821,6 +821,120 @@ class SpaceRunnerTest {
         }
 
     /** Ein laufender, gespeicherter Space. Die Zeit steht am Start. */
+    @Test
+    fun anExtensionMovesTheEndTheAlarmAndTheRunningStateAndKeepsTheServer() =
+        runTest {
+            val env = runningEnv()
+            val newEnd = expires + HOUR
+
+            env.submit(RunCommand.Extend(spaceId, newEnd))
+            runCurrent()
+
+            assertEquals(newEnd, (env.state.value as RunState.Running).expiresAtMillis)
+            assertEquals(newEnd, env.host.expiries.last())
+            assertEquals(1, env.host.expiryCancelled.size)
+            assertEquals(listOf(spaceId to newEnd), env.host.extended)
+            assertEquals(0, env.servers.single().stops)
+        }
+
+    @Test
+    fun theExtendedSpaceEndsAtTheLaterPlannedEndAndTheMeasuredRunTimeStillCounts() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Extend(spaceId, START + 3 * HOUR))
+            runCurrent()
+
+            clock.advance(3 * HOUR - 1)
+            assertFalse(env.runner.isClosed())
+
+            // Die Wand-Uhr wird zurückgestellt. Die gemessene Laufzeit seit dem Start reicht weiter (ADR 0017).
+            clock.turnBackWall(2 * HOUR)
+            assertFalse(env.runner.isClosed())
+            clock.advance(1)
+            assertTrue(env.runner.isClosed())
+        }
+
+    @Test
+    fun aRefusedExtensionChangesNothingAndTheDatabaseCanRefuseToo() =
+        runTest {
+            val env = runningEnv()
+
+            env.submit(RunCommand.Extend(spaceId, expires))
+            env.submit(RunCommand.Extend(spaceId, START + 31 * DAY))
+            runCurrent()
+            assertEquals(expires, (env.state.value as RunState.Running).expiresAtMillis)
+            assertEquals(0, env.host.extended.size)
+
+            env.host.refuseExtensions = true
+            env.submit(RunCommand.Extend(spaceId, expires + HOUR))
+            runCurrent()
+            assertEquals(expires, (env.state.value as RunState.Running).expiresAtMillis)
+            assertEquals(0, env.host.extended.size)
+        }
+
+    @Test
+    fun aStopRightAfterAnExtensionEndsWithTheNewStateInTheSameOrder() =
+        runTest {
+            val env = runningEnv()
+            clock.advance(10 * MINUTE)
+
+            env.submit(RunCommand.Extend(spaceId, expires + 2 * HOUR))
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            assertEquals(listOf(spaceId to START + 10 * MINUTE), env.host.ended)
+            assertEquals(listOf(spaceId to expires + 2 * HOUR), env.host.extended)
+            assertGraceAfter(env, endedAt = START + 10 * MINUTE)
+        }
+
+    @Test
+    fun anExtensionDuringTheGraceIsIgnoredAndTheEndStands() =
+        runTest {
+            val env = runningEnv()
+            clock.advance(5 * MINUTE)
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            env.submit(RunCommand.Extend(spaceId, expires + HOUR))
+            runCurrent()
+
+            assertEquals(0, env.host.extended.size)
+            assertEquals(listOf(spaceId to START + 5 * MINUTE), env.host.ended)
+            assertGraceAfter(env, endedAt = START + 5 * MINUTE)
+        }
+
+    @Test
+    fun aPausedSpaceIsExtendedAndTheServerStaysOff() =
+        runTest {
+            val env = runningEnv()
+            env.wifiNow = null
+            env.wifiFlow.emit(null)
+            runCurrent()
+
+            env.submit(RunCommand.Extend(spaceId, expires + HOUR))
+            runCurrent()
+
+            assertEquals(expires + HOUR, (env.state.value as RunState.Paused).expiresAtMillis)
+            assertEquals(1, env.servers.single().stops)
+            assertEquals(listOf(spaceId to expires + HOUR), env.host.extended)
+            assertEquals(expires + HOUR, env.host.expiries.last())
+        }
+
+    @Test
+    fun anExtensionWhileIdleOnlyStoresTheEndAndMovesTheAlarm() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+
+            env.submit(RunCommand.Extend(spaceId, expires + HOUR))
+            runCurrent()
+
+            assertEquals(listOf(expires + HOUR), env.host.expiries)
+            assertEquals(listOf(spaceId to expires + HOUR), env.host.extended)
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(0, env.servers.size)
+        }
+
     private fun TestScope.runningEnv(): Env {
         val env = Env(this)
         env.setup = persistedSetup()
@@ -983,6 +1097,21 @@ class SpaceRunnerTest {
             expiries += atMillis
         }
 
+        val extended = mutableListOf<Pair<SpaceId, Long>>()
+        var refuseExtensions = false
+
+        override suspend fun extendSpace(
+            spaceId: SpaceId,
+            endsAtMillis: Long,
+        ): Boolean = !refuseExtensions
+
+        override fun onExtended(
+            spaceId: SpaceId,
+            endsAtMillis: Long,
+        ) {
+            extended += spaceId to endsAtMillis
+        }
+
         override fun cancelExpiry() {
             expiryCancelled += Unit
         }
@@ -1070,12 +1199,18 @@ class SpaceRunnerTest {
 
         /** Der Dienst pausiert: Die Wand-Uhr und die Laufzeit gehen weiter, der Herzschlag fehlt. */
         fun skip(millis: Long) = advance(millis)
+
+        /** Die Wand-Uhr wird zurückgestellt, die Laufzeit läuft unverändert weiter. */
+        fun turnBackWall(millis: Long) {
+            wall -= millis
+        }
     }
 
     private companion object {
         const val START = 1_800_000_000_000L
         const val MINUTE = 60_000L
         const val HOUR = 60 * MINUTE
+        const val DAY = 24 * HOUR
         const val FAKE_PORT = 8787
         const val FIXED_PORT = 5_000
         val WIFI = WifiAddress("192.168.1.20", 24, gateway = "192.168.1.1")

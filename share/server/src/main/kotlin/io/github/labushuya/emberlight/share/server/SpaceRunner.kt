@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.share.server
 
 import io.github.labushuya.emberlight.share.space.SpaceId
+import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import io.github.labushuya.emberlight.share.space.run.ActiveSpan
 import io.github.labushuya.emberlight.share.space.run.PauseDetector
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
@@ -60,6 +61,15 @@ internal sealed interface RunCommand {
      * Hinweis kehrt bis zum nächsten Start nicht zurück (Paket 3.4b).
      */
     data object InviteSettled : RunCommand
+
+    /**
+     * Verlängern auf eine neue Endzeit (Paket 3.6a). Die Prüfung und das Speichern laufen im Verarbeiter, nacheinander mit den
+     * anderen Befehlen. Ein Stopp direkt davor oder danach gilt mit dem jeweils aktuellen Stand.
+     */
+    data class Extend(
+        val spaceId: SpaceId,
+        val endsAtMillis: Long,
+    ) : RunCommand
 }
 
 internal enum class StopReason {
@@ -166,6 +176,24 @@ internal interface RunHost {
     suspend fun savePort(
         spaceId: SpaceId,
         port: Int,
+    ) {}
+
+    /**
+     * Schreibt die neue Endzeit in die Datenbank. `false`, wenn der Space nicht verlängert werden kann (Paket 3.6a). Ohne
+     * Speicher (Debug-Einstieg) gilt die Verlängerung nur im Speicher.
+     */
+    suspend fun extendSpace(
+        spaceId: SpaceId,
+        endsAtMillis: Long,
+    ): Boolean = true
+
+    /**
+     * Die Endzeit hat sich geändert (Paket 3.6a): Die Revision der Gäste-Seite steigt, die Vorwarnung wird für die neue Endzeit
+     * neu geplant. Eine schon gesendete alte Vorwarnung nimmt die Benachrichtigung weg.
+     */
+    fun onExtended(
+        spaceId: SpaceId,
+        endsAtMillis: Long,
     ) {}
 
     fun onEvent(event: RunEvent)
@@ -279,6 +307,7 @@ internal class SpaceRunner(
             is RunCommand.Network -> network(command.address)
             RunCommand.ConfirmNetwork -> confirm()
             RunCommand.InviteSettled -> settleInvite()
+            is RunCommand.Extend -> extend(command)
         }
     }
 
@@ -698,6 +727,81 @@ internal class SpaceRunner(
         publish(runningState(setup, bound, address, setup.startedAtMillis ?: clock.wallMillis()))
     }
 
+    /**
+     * Verlängert den Space (Paket 3.6a). Geprüft wird wie beim Start: aktiv, neue Endzeit in der Zukunft und nach dem bisherigen
+     * Ende, Gesamtlaufzeit höchstens 30 Tage ab Start. Der Laufzeit-Anker (Start in Wand-Uhr und `elapsedRealtime`) bleibt
+     * unverändert. Die Frist gilt damit wie zuvor: das frühere von Wand-Uhr und gemessener Laufzeit (ADR 0017). Der Wecker wird
+     * neu gesetzt, die Gastgeber-Vorwarnung für die neue Endzeit neu geplant. Im Nachlauf gibt es nichts zu verlängern.
+     */
+    private suspend fun extend(command: RunCommand.Extend) {
+        val current = phase
+        if (current is Phase.Closing) return
+        val now = clock.wallMillis()
+        if (current is Phase.Idle) {
+            // Kein Server läuft: Der Space ist aktiv und unterbrochen. Nur die Datenbank und der Wecker zählen.
+            if (host.extendSpace(command.spaceId, command.endsAtMillis)) {
+                host.cancelExpiry()
+                host.scheduleExpiry(command.endsAtMillis)
+                host.onExtended(command.spaceId, command.endsAtMillis)
+            }
+            host.onIdle()
+            return
+        }
+        val setup = setupOf(current)
+        if (setup.spaceId != command.spaceId) return
+        val problem =
+            SpaceRunPolicy.extendProblem(
+                status = SpaceStatus.ACTIVE,
+                startedAtMillis = setup.startedAtMillis,
+                currentEndsAtMillis = setup.expiresAtMillis,
+                newEndsAtMillis = command.endsAtMillis,
+                nowWallMillis = now,
+            )
+        if (problem != null) return
+        if (setup.persisted && !host.extendSpace(setup.spaceId, command.endsAtMillis)) return
+        val newSetup = setup.copy(expiresAtMillis = command.endsAtMillis)
+        deadline = deadline?.withEnd(command.endsAtMillis)
+        val updated: Phase =
+            when (current) {
+                is Phase.Running -> {
+                    Phase.Running(newSetup, current.opened, current.address, current.port)
+                }
+
+                is Phase.Paused -> {
+                    Phase.Paused(
+                        newSetup,
+                        current.opened,
+                        current.lastAddress,
+                        current.port,
+                        current.cause,
+                        current.pending,
+                    )
+                }
+            }
+        phase = updated
+        host.cancelExpiry()
+        host.scheduleExpiry(command.endsAtMillis)
+        host.onExtended(setup.spaceId, command.endsAtMillis)
+        when (updated) {
+            is Phase.Running -> {
+                publish(
+                    runningState(
+                        newSetup,
+                        updated.port,
+                        updated.address,
+                        newSetup.startedAtMillis ?: clock.wallMillis(),
+                    ),
+                )
+            }
+
+            is Phase.Paused -> {
+                publish(pausedState(newSetup, updated.cause, updated.pending))
+            }
+
+            is Phase.Idle, is Phase.Closing -> {}
+        }
+    }
+
     private fun runningState(
         setup: ServerSetup,
         port: Int,
@@ -833,7 +937,11 @@ internal class SpaceRunner(
         val expiresAtMillis: Long,
         val startedAtMillis: Long,
         val startedElapsedMillis: Long,
-    )
+    ) {
+        /** Dieselbe Messung mit einer neuen Frist. Start und gemessene Laufzeit bleiben die Anker (ADR 0017). */
+        fun withEnd(newExpiresAtMillis: Long): Deadline =
+            Deadline(newExpiresAtMillis, startedAtMillis, startedElapsedMillis)
+    }
 
     private class Jobs(
         val watch: Job,

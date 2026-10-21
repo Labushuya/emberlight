@@ -397,4 +397,15 @@
     <string name="space_retention_notifications_off">Reminders are off. Allow notifications in the settings so the app can remind you in time.</string>
     <string name="space_retention_media_hint">Here you see what is kept. Saving to your gallery comes later.</string>
     <string name="space_retention_list_until">Deleted on %1$s</string>
+    <string name="space_running_extend">Extend</string>
+    <string name="space_extend_title">Extend space</string>
+    <string name="space_extend_current">Current end: %1$s</string>
+    <string name="space_extend_hour">+1 hour</string>
+    <string name="space_extend_day">+1 day</string>
+    <string name="space_extend_custom">Custom end</string>
+    <string name="space_extend_confirm">Extend</string>
+    <string name="space_extend_error_not_active">The space is no longer running and cannot be extended.</string>
+    <string name="space_extend_error_future">The new end must be in the future.</string>
+    <string name="space_extend_error_later">The new end must be after the current end.</string>
+    <string name="space_extend_error_too_long">A space can run for at most 30 days from its start.</string>
 </resources>

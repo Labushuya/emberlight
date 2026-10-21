@@ -11,8 +11,10 @@ import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
+import io.github.labushuya.emberlight.share.space.run.ExtendProblem
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
 import io.github.labushuya.emberlight.share.space.run.RunClock
+import io.github.labushuya.emberlight.share.space.run.SpaceRunPolicy
 import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -201,6 +203,31 @@ class SpaceRunningViewModel
             controller.end()
         }
 
+        /**
+         * Verlängert den laufenden Space (Paket 3.6a). Liefert den Grund, wenn die Regel nicht gilt (30 Tage ab Start, Ende in der
+         * Zukunft, nach dem bisherigen Ende, aktiver Space). Sonst `null`: der Dienst speichert die neue Endzeit.
+         */
+        fun extend(choice: ExtendChoice): ExtendProblem? {
+            val record = state.value.record ?: return ExtendProblem.NOT_ACTIVE
+            val current = record.expiresAt ?: return ExtendProblem.NOT_ACTIVE
+            val newEnd =
+                when (choice) {
+                    ExtendChoice.PlusHour -> current + HOUR_MILLIS
+                    ExtendChoice.PlusDay -> current + DAY_MILLIS
+                    is ExtendChoice.Until -> choice.endsAtMillis
+                }
+            val problem =
+                SpaceRunPolicy.extendProblem(
+                    status = record.status,
+                    startedAtMillis = record.startedAt,
+                    currentEndsAtMillis = current,
+                    newEndsAtMillis = newEnd,
+                    nowWallMillis = clock.wallMillis(),
+                )
+            if (problem == null) controller.extend(record.id, newEnd)
+            return problem
+        }
+
         /** Bestätigt den Wechsel in ein neues WLAN. */
         fun confirmNetwork() {
             controller.confirmNetwork()
@@ -232,6 +259,8 @@ class SpaceRunningViewModel
         private companion object {
             const val ARG_ID = "id"
             const val TICK_MILLIS = 15_000L
+            const val HOUR_MILLIS = 3_600_000L
+            const val DAY_MILLIS = 86_400_000L
             const val STOP_TIMEOUT_MILLIS = 5_000L
         }
     }
