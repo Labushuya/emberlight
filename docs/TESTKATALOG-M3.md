@@ -132,7 +132,7 @@ Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Pa
 
 - [ ] **5.22 [Entwickler] curl-Prüfung.** Handlung: Die Befehle aus `docs/DEBUG-SERVER.md` ausführen. Erwartet: Beitritt mit gültiger Einladung `201`. Vorschau mit gültigem Geheimnis `200` mit genau `spaceName` und `accentColor`. Falsche Einladung bei Beitritt und Vorschau `403` (`invite_invalid`). Falscher Content-Type `415`. Gast auf `/participants` `403`. *(seit 3.4, PR #35 Punkt 21, Entwickler-Prüfung)*
 
-## 6 Medien im Browser (3.5a-1 und 3.5a-3 umgesetzt, 3.5a-2 folgt)
+## 6 Medien im Browser (3.5a-1, 3.5a-2 und 3.5a-3 umgesetzt, Gerätetests offen)
 
 Die Punkte gelten für den Browser des Gasts, einmal auf dem Telefon (390 px breit) und einmal am PC (1280 px). Die Browser-Tests (`GuestBrowserTest`, Node mit Chrome headless) decken die Fälle ab, die sich ohne Gerät prüfen lassen. Der Gerätetest bleibt offen.
 
@@ -159,6 +159,11 @@ Die Punkte gelten für den Browser des Gasts, einmal auf dem Telefon (390 px bre
 - [ ] **6.13 [Entwickler] Nachlauf 60 Sekunden.** Handlung: Kurz nach dem Ende eine Anfrage senden, dann nach 60 Sekunden erneut. Erwartet: In den ersten 60 Sekunden antwortet der Server mit `410`, danach beendet er sich. Die Seite zeigt die Ende-Ansicht ohne Verbindungsfehler. *(3.5a-1 umgesetzt, Server-Test `SpaceClosureSocketTest`; Entwickler-Prüfung am Gerät offen)*
 - [ ] **6.14 HEIC im Browser.** Handlung: Ein HEIC-Foto öffnen. Erwartet: Mit Vorschau (1600 px) sichtbar. Ohne Vorschau steht „Vorschau nicht verfügbar – herunterladen“. *(folgt 3.5a-2)*
 - [ ] **6.15 [Entwickler] Signierte Medien-URLs.** Handlung: Eine Medien-URL abrufen, nach Ablauf erneut abrufen. Erwartet: Eine abgelaufene URL wird abgewiesen, eine neue Abfrage liefert eine neue, gültige URL. *(3.5a-1 umgesetzt, Server-Tests `MediaUrlSignerTest`, `SignedMediaApiTest`; Entwickler-Prüfung am Gerät offen)*
+- [ ] **6.16 HEIC-Ansicht.** Handlung: Ein HEIC-Foto (vom iPhone) in den Space hochladen, die Liste neu laden, bis die Ansicht bereit ist, dann öffnen. Erwartet: Die Ansicht zeigt das Foto als JPEG, nicht als leeres Bild. Der Download liefert weiterhin das Original. Unter Android 9 bleibt die Ansicht aus, der Platzhalter erscheint. *(3.5a-2 Server umgesetzt, Test `PreviewApiTest`; Gerätetest mit echten HEIC-Dateien offen)*
+- [ ] **6.17 Video-Vorschaubild.** Handlung: Ein MP4 hochladen, die Liste ansehen. Erwartet: Ein Vorschaubild aus dem Video, etwa bei 1 s (bei kurzen Videos bei 10 % der Länge). Die Drehung stimmt. *(3.5a-2 Server umgesetzt; Frame-Auswahl und Drehung am Gerät offen)*
+- [ ] **6.18 Platzhalter bei `failed`.** Handlung: Ein Bild mit mehr als 100 Megapixeln hochladen oder ein AVIF-Bild auf einem Gerät unter Android 12. Erwartet: Platzhalter statt Bild, kein Dauerladen. Das Original lässt sich weiterhin herunterladen. *(3.5a-2 umgesetzt, Test `SpaceVaultPreviewTest`; Gerätetest offen)*
+- [ ] **6.19 Speicherzählung mit Vorschauen.** Handlung: Space mit kleinem Speicherlimit füllen, dann Medien löschen. Erwartet: Die Speicheranzeige zählt die Vorschauen mit. Nach dem Löschen sinkt sie um Original und Vorschau. *(3.5a-2 umgesetzt, Tests `SpaceVaultPreviewTest`, `SpacesDatabaseMigrationToVersionSevenTest`)*
+- [ ] **6.20 [Entwickler] Vorschau-Route.** Handlung: `GET /api/v1/media/{id}/preview` mit Header abrufen, vor und nach dem Rendern. Erwartet: Vorher `404` mit `preview_unavailable`, danach `200` mit `image/jpeg`. Das Medien-Gate bremst die Vorschau nicht. *(3.5a-2 Server-Test `PreviewApiTest`; Entwickler-Prüfung am Gerät offen)*
 
 ## 6b Ende-Hinweise im Browser (3.5a-3)
 
@@ -169,6 +174,7 @@ Die Punkte gelten für den Browser des Gasts, einmal auf dem Telefon (390 px bre
 - [ ] **6b.5 Ende nach Neuladen.** Handlung: Nach dem Ende die Seite neu laden, am Telefon auch den Browser schließen und wieder öffnen. Erwartet: Die Ende-Ansicht bleibt. *(3.5a-3, Browser-Test für das Neuladen; Browser-Neustart am Gerät offen)*
 - [ ] **6b.6 Ende durch den Gastgeber.** Handlung: Der Gastgeber beendet den Space vor der Frist, während der Gast die Seite offen hat. Erwartet: Die Ende-Ansicht erscheint beim nächsten Abruf, spätestens nach 15 Sekunden. Die Uhrzeit ist der Zeitpunkt, zu dem die Seite das Ende bemerkt hat. *(3.5a-3, Browser-Test mit `410`; Gerät offen)*
 - [ ] **6b.7 Verbindungsverlust ohne Ende.** Handlung: Der Server ist nicht erreichbar, das Ende ist nicht bekannt. Erwartet: „Keine Verbindung zum Space. Vielleicht wurde er beendet …“, die Seite versucht es automatisch erneut und zeigt danach den Space wieder. *(3.5a-3, Browser-Test; Gerät offen)*
+
 
 ## 7 Upload im Browser (3.5b, folgt)
 

@@ -14,6 +14,9 @@ import io.github.labushuya.emberlight.share.space.StorageWarning
 import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
 import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
 import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
+import io.github.labushuya.emberlight.share.space.preview.PreviewLookup
+import io.github.labushuya.emberlight.share.space.preview.PreviewRules
+import io.github.labushuya.emberlight.share.space.preview.PreviewState
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -55,6 +58,9 @@ data class UploadTuning(
 internal const val JOIN_MAX_BODY_BYTES = 4_096L
 
 private val json = Json { ignoreUnknownKeys = true }
+
+/** Zustand `READY` im Index (ADR 0019). */
+private const val READY_STATE = "READY"
 
 /** Körper von `POST /api/v1/join`. Geheimnis und Name stehen nur hier, nie in URL oder Header (ADR 0018). */
 @Serializable
@@ -258,10 +264,16 @@ fun spaceRoutes(
                 call.respondMedia(vault, gates, call.parameters["id"], inline = false)
             }
 
-            // Ansicht im Browser: Original inline (ADR 0019). Die HEIC-JPEG-Ansicht folgt mit den Vorschauen.
+            // Ansicht im Browser: Original inline. Bei HEIC und HEIF die 1600-px-JPEG-Ansicht (ADR 0019).
             get("/media/{id}/view") {
                 call.routeTemplate("/api/v1/media/{id}/view")
-                call.respondMedia(vault, gates, call.parameters["id"], inline = true)
+                call.respondView(vault, gates, call.parameters["id"])
+            }
+
+            // Vorschau mit 320 px, für Bilder und Videos. Zählt nicht gegen das Medien-Gate (ADR 0019).
+            get("/media/{id}/preview") {
+                call.routeTemplate("/api/v1/media/{id}/preview")
+                call.respondPreview(vault, call.parameters["id"])
             }
 
             // Video mit Range (ADR 0019). Nur Videos, sonst 404.
@@ -330,6 +342,62 @@ private suspend fun ApplicationCall.respondMedia(
         )
     } finally {
         gates.leaveMedia()
+    }
+}
+
+/**
+ * Ansicht (`/view`). Bei HEIC und HEIF liefert sie die 1600-px-JPEG-Ansicht, sobald sie bereit ist. Sonst `404` mit
+ * `preview_unavailable`. Alle anderen Medien kommen unverändert als Original (ADR 0019).
+ */
+private suspend fun ApplicationCall.respondView(
+    vault: SpaceVault,
+    gates: ServerGates,
+    rawId: String?,
+) {
+    val id = rawId?.let { MediaId.parse(it) }
+    val record = id?.let { vault.find(it) }
+    if (id == null || record == null) {
+        respondError(HttpStatusCode.NotFound, "not_found")
+        return
+    }
+    if (!PreviewRules.hasHeicView(record.mime)) {
+        respondMedia(vault, gates, rawId, inline = true)
+        return
+    }
+    respondRendered(vault.viewOf(id))
+}
+
+/** Vorschau (`/preview`): 320-px-JPEG für Bilder und Videos. Ohne Medien-Gate (ADR 0019). */
+private suspend fun ApplicationCall.respondPreview(
+    vault: SpaceVault,
+    rawId: String?,
+) {
+    val id = rawId?.let { MediaId.parse(it) }
+    if (id == null) {
+        respondError(HttpStatusCode.NotFound, "not_found")
+        return
+    }
+    respondRendered(vault.previewOf(id))
+}
+
+/** Antwort für eine Vorschau oder Ansicht: bereit als JPEG inline, sonst `404` mit dem Grund. */
+private suspend fun ApplicationCall.respondRendered(lookup: PreviewLookup) {
+    when (lookup) {
+        PreviewLookup.NotFound -> {
+            respondError(HttpStatusCode.NotFound, "not_found")
+        }
+
+        PreviewLookup.Unavailable -> {
+            respondError(HttpStatusCode.NotFound, "preview_unavailable")
+        }
+
+        is PreviewLookup.Ready -> {
+            respondContent(
+                file = lookup.path.toFile(),
+                contentType = ContentType.Image.JPEG,
+                disposition = "inline",
+            )
+        }
     }
 }
 
@@ -613,8 +681,22 @@ private fun SpaceAccess.mediaItemJson(
     who: Principal,
 ): JsonObject {
     val id = entry.id.value
+    val heic = PreviewRules.hasHeicView(entry.mime)
+    // HEIC und HEIF zeigen die 1600-px-JPEG-Ansicht erst, wenn sie bereit ist. Bei allen anderen Medien das Original (ADR 0019).
+    val viewable = !heic || entry.viewState == READY_STATE
+    val previewUrl =
+        if (entry.previewState == READY_STATE) {
+            JsonPrimitive(signedMediaPath(id, "preview", MediaPurpose.PREVIEW, who.participantId))
+        } else {
+            JsonNull
+        }
     val urls = linkedMapOf<String, JsonElement>()
-    urls["viewUrl"] = JsonPrimitive(signedMediaPath(id, "view", MediaPurpose.VIEW, who.participantId))
+    urls["viewUrl"] =
+        if (viewable) {
+            JsonPrimitive(signedMediaPath(id, "view", MediaPurpose.VIEW, who.participantId))
+        } else {
+            JsonNull
+        }
     urls["downloadUrl"] = JsonPrimitive(signedMediaPath(id, "content", MediaPurpose.DOWNLOAD, who.participantId))
     if (entry.mime.startsWith("video/")) {
         urls["streamUrl"] = JsonPrimitive(signedMediaPath(id, "stream", MediaPurpose.STREAM, who.participantId))
@@ -631,12 +713,15 @@ private fun SpaceAccess.mediaItemJson(
             "locationKept" to JsonPrimitive(entry.locationKept),
             // Die kürzeste Gültigkeit der Adressen. Die Stream-Adresse lebt länger (ADR 0019).
             "urlsExpireInSeconds" to JsonPrimitive(MediaPurpose.VIEW.ttlSeconds),
-            // Platzhalter für Paket 3.5a-2 (Vorschauen, Video-Codec, HEIC-Ansicht). Vertrag in ADR 0019, Abschnitt
-            // „Schnittstelle für 3.5a-2 und 3.5a-3“. Bis dahin immer null.
-            "previewUrl" to JsonNull,
-            "previewState" to JsonNull,
-            "videoCodec" to JsonNull,
-            "viewState" to JsonNull,
+            // Vorschau-Felder (Paket 3.5a-2). Vertrag in ADR 0019, Abschnitt „Schnittstelle für 3.5a-2 und 3.5a-3“.
+            "previewUrl" to previewUrl,
+            "previewState" to (PreviewState.wire(entry.previewState)?.let { JsonPrimitive(it) } ?: JsonNull),
+            // Leer heißt: geprüft, nicht erkannt. Die Schnittstelle zeigt das als null.
+            "videoCodec" to (entry.videoCodec?.takeIf { it.isNotEmpty() }?.let { JsonPrimitive(it) } ?: JsonNull),
+            "viewState" to
+                (
+                    if (heic) PreviewState.wire(entry.viewState)?.let { JsonPrimitive(it) } ?: JsonNull else JsonNull
+                ),
         ) + urls,
     )
 }

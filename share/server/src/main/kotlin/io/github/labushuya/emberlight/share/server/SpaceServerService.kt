@@ -205,7 +205,10 @@ class SpaceServerService : Service() {
             ActiveSpaces.publish(runtime.access)
             return OpenedServer(
                 serverFactory(runtime, setup, closure),
-                release = { ActiveSpaces.clear(setup.spaceId) },
+                release = {
+                    runtime.close()
+                    ActiveSpaces.clear(setup.spaceId)
+                },
                 inviteRenewed = runtime.access.inviteRenewed,
             )
         }

@@ -1,6 +1,6 @@
 # ADR 0019: Medienzugriff und Vorschauen (Meilenstein 3, Paket 3.5a)
 
-Status: angenommen (21.10.2026, Nutzerentscheidung 1 bis 7 aus dem Auftrag zu Paket 3.5a). Umsetzung im Branch `feature/m3-3.5a-medienansicht` (PR #36, Paket 3.5a-1 „Server-Grundlage“). Vorschauen und Gäste-Seite folgen als 3.5a-2 und 3.5a-3. Der Stand dieses ADR zeigt, was schon im Code ist. Offene Teile sind unten ausdrücklich markiert.
+Status: angenommen (21.10.2026, Nutzerentscheidung 1 bis 7 aus dem Auftrag zu Paket 3.5a). Umsetzung im Branch `feature/m3-3.5a-medienansicht` (PR #36, Paket 3.5a-1 „Server-Grundlage“). Vorschauen sind in Paket 3.5a-2 umgesetzt (PR #37), die Gäste-Seite folgt als 3.5a-3. Der Stand dieses ADR zeigt, was schon im Code ist. Offene Teile sind unten ausdrücklich markiert.
 
 ## Kontext
 
@@ -27,11 +27,12 @@ Begründung der Ausnahme von der Regel „Token nie in URL“: siehe Nachtrag in
 ### 2. Video (teilweise umgesetzt)
 
 - **Umgesetzt:** Stream-Route `/api/v1/media/{id}/stream` mit 30-Minuten-Signatur, Range über das Plugin `PartialContent`. Mehrere Bereiche im `Range`-Header ergeben `416` mit `Content-Range: bytes */<Größe>`. Der Server liefert kein `multipart/byteranges`. Nur Videos (`video/*`) sind über den Stream-Pfad erreichbar, sonst `404`.
-- **Offen:** Codec beim Indexieren per `MediaExtractor` (Feld `videoCodec`). Die Prüfung mit `canPlayType` und den Fallback „Nur Download“ in der Seite. Die stille Erneuerung der Stream-URL in der Seite.
+- **Codec (umgesetzt in 3.5a-2):** beim Indexieren per `MediaExtractor` (Feld `videoCodec`), für Bestand im Worker.
+- **Offen (3.5a-3):** Die Prüfung mit `canPlayType` und den Fallback „Nur Download“ in der Seite. Die stille Erneuerung der Stream-URL in der Seite.
 
-### 3. Vorschauen (offen)
+### 3. Vorschauen (umgesetzt in 3.5a-2, Abweichungen unten)
 
-Geplant und noch nicht umgesetzt: serverseitig asynchron mit einem Worker niedrigerer Priorität. 320 px lange Kante für Bilder und Videos. Zusätzlich 1600-px-JPEG-Ansicht nur für HEIC/HEIF. JPEG q ≈ 80 ohne EXIF. Dekompressionsschutz über Maße vorab, Pixelgrenze und Ziel-Subsampling. `ImageDecoder` ab API 28 mit `setTargetSize`, darunter `BitmapFactory` mit `inSampleSize`. Video-Frame über `MediaMetadataRetriever`. Status `PENDING`, `READY`, `FAILED` im Index, Migration 6 → 7 mit Migrationstest. Ablage inhaltsadressiert unter dem Space-Speicher. Die Vorschauen zählen gegen das Speicherlimit, werden mit dem Medium gelöscht und von `recover()` aufgeräumt. Nie im MediaStore und nie im Coil-Disk-Cache.
+Umgesetzt in 3.5a-2: serverseitig asynchron mit einem Worker niedrigerer Priorität. 320 px lange Kante für Bilder und Videos. Zusätzlich 1600-px-JPEG-Ansicht nur für HEIC/HEIF. JPEG q ≈ 80 ohne EXIF. Dekompressionsschutz über Maße vorab, Pixelgrenze und Ziel-Subsampling. `ImageDecoder` ab API 28 mit `setTargetSize`, darunter `BitmapFactory` mit `inSampleSize`. Video-Frame über `MediaMetadataRetriever`. Status `PENDING`, `READY`, `FAILED` im Index, Migration 6 → 7 mit Migrationstest. Ablage inhaltsadressiert unter dem Space-Speicher. Die Vorschauen zählen gegen das Speicherlimit, werden mit dem Medium gelöscht und von `recover()` aufgeräumt. Nie im MediaStore und nie im Coil-Disk-Cache.
 
 Die Pixelgrenze liegt vorläufig bei 100 Megapixel. Das deckt 12- bis 50-Megapixel-Sensoren mit Reserve ab. Eine Decodierung über dieser Grenze kostet bei 4 Byte je Pixel mehr als 400 MB Arbeitsspeicher und ist auf Geräten mit 4 GB RAM nicht sicher. Ein Bild darüber bekommt `FAILED` und den Platzhalter.
 
@@ -40,7 +41,7 @@ Die Pixelgrenze liegt vorläufig bei 100 Megapixel. Das deckt 12- bis 50-Megapix
 - Medienliste und `GET /api/v1/media/{id}` (Header-Auth) liefern je Eintrag `mine`, `urlsExpireInSeconds` (600) und die signierten Adressen `viewUrl`, `downloadUrl`, bei Video `streamUrl`. Die Adressen sind pro anfragendem Teilnehmer.
 - `GET /api/v1/space` liefert `remainingSeconds` (`null` ohne Ende), `endsAt` (ISO 8601, UTC, `null` ohne Ende), `revision` und `limits` (`imageMaxBytes`, `videoMaxBytes`).
 - `revision` steigt bei Uploads, Löschungen, Beitritt, Entfernen und Erneuern der Einladung.
-- Die Felder `previewUrl`, `previewState`, `videoCodec` und `viewState` sind mit Paket 3.5a-1 als Platzhalter enthalten und immer `null`. Sie werden in 3.5a-2 gefüllt. Der Vertrag steht im Abschnitt „Schnittstelle für 3.5a-2 und 3.5a-3“.
+- Die Felder `previewUrl`, `previewState`, `videoCodec` und `viewState` waren mit Paket 3.5a-1 als Platzhalter immer `null`. Seit 3.5a-2 sind sie gefüllt (Abschnitt „Umsetzung 3.5a-2“). Der Vertrag steht im Abschnitt „Schnittstelle für 3.5a-2 und 3.5a-3“.
 
 ### 5. Server-Last (umgesetzt)
 
@@ -72,9 +73,24 @@ Festgeschrieben am 21.10.2026. Paket 3.5a-2 (Vorschauen, Codec, HEIC-Ansicht) f�
 - `GET /api/v1/media/{id}/view`: bestehende Route. Bei HEIC/HEIF liefert sie die 1600-px-JPEG-Ansicht. Zugriff wie oben.
 - Antwortcodes für beide Routen: `200` bei Erfolg. `404` mit `preview_unavailable`, wenn der Zustand `pending` oder `failed` ist. `404` mit `not_found`, wenn das Medium nicht existiert.
 
-**Stand 3.5a-1:** Die Felder sind als Platzhalter vorhanden (`null`). Die Routen `/preview` gibt es noch nicht. Der Test `itemsCarryNullPlaceholdersForPreviewsCodecAndHeicViewUntilPackage3Point5a2` prüft die Platzhalter.
+**Stand 3.5a-2:** Die Felder sind gefüllt, die Routen `/preview` und `/view` (HEIC/HEIF) gibt es. Der Test `itemsCarryThePreviewFieldsAndStayPendingUntilAWorkerRendersThem` (in `SignedMediaApiTest`) und `PreviewApiTest` prüfen das. Vor 3.5a-2 waren die Felder `null`.
 
 **Folgepakete:** Die Gäste-Seite behandelt `null` bei `previewUrl` und `viewUrl` als „Vorschau folgt“ bzw. „Original laden“ und nie als Fehler. Die Seite erneuert Adressen still bei `401` und `403` (Abschnitt 1).
+
+## Umsetzung 3.5a-2 (21.10.2026): Entscheidungen und Abweichungen
+
+- **Ort.** Renderer, Worker und Index liegen in `share:space` (Paket `preview`). `share:server` ruft nur die Methoden des Vault auf. Die Isolationsprüfungen bleiben grün.
+- **Worker.** Eine Warteschlange (FIFO) und ein Faden mit niedriger Priorität (`PreviewWorkers`). Der Upload reiht nach dem Commit ein und wartet nicht. Der Commit-Lock hält nur die Schreibzugriffe auf den Index. Das Rendern läuft ohne Lock.
+- **Wiederaufnahme.** `recover()` setzt Medien ohne Vorschau-Zustand (Bestand vor 3.5a-2) auf `PENDING` und reiht sie ein. `READY` ohne Datei wird wieder `PENDING`. Vorschauen ohne Medium werden gelöscht. Dateien liegen unter `previews/<sha256>-<Kante>.jpg`. Jede Datei gehört zu genau einem Medium, weil der Hash des Originals im Space eindeutig ist (Dedupe).
+- **Zustände.** `PENDING`, `READY`, `FAILED` im Index, `null` für „noch nicht eingereiht“. Ein Fehler, ein Timeout (30 s) oder ein Ergebnis über dem Speicherlimit ergibt `FAILED`. Es gibt keinen Wiederholungsversuch in der Schleife. `FAILED` bleibt auch nach einem Neustart.
+- **Speicher.** Vorschauen zählen mit ihrer Größe (`preview_bytes`, `view_bytes`) gegen das Speicherlimit und den Mindest-Restspeicher. Passt eine Vorschau nicht, wird sie `FAILED`. Das Medium bleibt unberührt.
+- **Codec.** Beim Upload per `MediaExtractor`, nur aus dem Kopf der Datei. Wird kein Codec erkannt, speichert der Index einen leeren Wert. Die Schnittstelle zeigt ihn als `null`. So wird nicht endlos neu geprüft. Die Zuordnung MIME zu Vierzeichen-Code steht in `PreviewRules.codecOf`.
+- **Dekodierung.** Ab API 28 `ImageDecoder` mit Zielgröße (Subsampling). Darunter `BitmapFactory` mit `inSampleSize` und Ausrichtung nach EXIF. Das Ergebnis wird auf Weiß verflacht und ohne EXIF als JPEG (Qualität 80) geschrieben. HEIC/HEIF brauchen API 28. AVIF wird ab API 31 versucht. Das ist eine Annahme, am Gerät nicht geprüft. Darunter ergibt beides `FAILED` ohne Dekodierversuch.
+- **Video-Frame.** Ab 10 s Länge bei 1 s, sonst bei 10 % der Dauer. Ohne Dauer der erste Frame. Eine Drehung wird nachgeholt, nur wenn der Frame noch im Rohformat vorliegt (erkannt am Seitenverhältnis). Das Verhalten der Plattform ist am Gerät zu prüfen.
+- **Pixelgrenze.** 100 Megapixel, vor dem Dekodieren geprüft (Kopfdaten bzw. Bounds). Darüber `FAILED`.
+- **Gate.** Vorschauen und die HEIC-Ansicht (`/view` bei HEIC/HEIF) laufen nicht durch das Medien-Gate. Das Original (Download, Ansicht bei anderen Typen, Stream) bleibt dahinter.
+- **Gastgeber-App.** Die Medienliste im laufenden Space zeigt heute Textzeilen ohne Bilder. Vorschaubilder dort wären eine UI-Änderung mit Goldens. Sie sind für 3.5c vorgemerkt.
+- **Nicht in 3.5a-2:** `canPlayType`-Prüfung und Fallback „Nur Download“ sowie die Gäste-Seite (3.5a-3).
 
 ## Konsequenzen
 
@@ -103,3 +119,8 @@ Der Vertrag oben bleibt unverändert. Dieser Nachtrag hält fest, wie die Seite 
 **Browser-Tests.** Node 22 oder neuer, ohne npm-Abhängigkeiten. Node steuert Chrome headless per CDP. Chrome startet mit `--headless=new`, `--remote-debugging-port=0` und einem eigenen Profil im Temp-Ordner. Der JVM-Test `GuestBrowserTest` startet den echten Server auf 127.0.0.1 (CIO, feste Host-Prüfung), legt Space, Gäste und Medien über die Schnittstelle an und übergibt Port, Einladung und Sitzung an Node. Braucht ein Fall eine Änderung am Server (Ende, Abschalten), meldet Node es über stderr (`EMBERLIGHT-CONTROL <name>`). Der JVM-Test führt die Aktion aus und antwortet auf stdin mit `ok`. Probleme der Seite (JavaScript-Fehler, CSP-Verstöße) sind Testfehler. Fehlen Node oder Chrome, werden die Tests übersprungen. Mit `CI=true` schlagen sie fehl. CI richtet Node 24 über die Composite-Action `browser-test-tools` ein. Das Video-Fixture `clip.mp4` entstand einmalig in Chrome über `MediaRecorder` (Skript `fixtures/make-clip.mjs`), weil auf dem Entwicklungsrechner kein ffmpeg liegt.
 
 **Offen.** Die Gerätetests (Handy und PC) stehen im Testkatalog. Nach 3.5a-2 prüft der Browser-Test die echten Vorschauen. Der Platzhalter-Fall für Video und HEIC ändert sich dann.
+
+## Offen
+
+- Gerätetest der Vorschauen (HEIC ab API 28, Videobild und Drehung, Speicherzählung), Testkatalog 6.16 bis 6.20.
+- Vorschau in der Gastgeber-App (Medienliste im laufenden Space, heute nur Text), vorgemerkt für 3.5c.
