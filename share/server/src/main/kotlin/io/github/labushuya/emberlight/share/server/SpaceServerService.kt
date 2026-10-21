@@ -205,10 +205,8 @@ class SpaceServerService : Service() {
             ActiveSpaces.publish(runtime.access)
             return OpenedServer(
                 serverFactory(runtime, setup, closure),
-                release = {
-                    runtime.close()
-                    ActiveSpaces.clear(setup.spaceId)
-                },
+                // Die Vault bleibt offen: Der Vorschau-Worker und ein Upload aus der App laufen weiter (Paket 3.5c).
+                release = { ActiveSpaces.clear(setup.spaceId) },
                 inviteRenewed = runtime.access.inviteRenewed,
             )
         }

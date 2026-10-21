@@ -3,14 +3,15 @@ package io.github.labushuya.emberlight.feature.space.run
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import io.github.labushuya.emberlight.share.space.MediaEntity
+import io.github.labushuya.emberlight.share.space.MediaId
 import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
+import io.github.labushuya.emberlight.share.space.SpaceVaults
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
-import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
 import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
 import io.github.labushuya.emberlight.share.space.participants.Secrets
@@ -44,18 +45,24 @@ class SpaceHostActionsTest {
     private lateinit var spacesDir: File
     private lateinit var cipher: FakeInviteSecretCipher
     private lateinit var vault: SpaceVault
+    private lateinit var vaults: SpaceVaults
     private lateinit var actions: SpaceHostActions
     private val host = ParticipantId.generate()
     private val guest = ParticipantId.generate()
     private val otherGuest = ParticipantId.generate()
+
+    // Gültige Medien-IDs (ADR 0013): der Wiederaufnahme-Pfad prüft sie beim Lesen des Index.
+    private val guestUpload = MediaId.generate().value
+    private val otherUpload = MediaId.generate().value
 
     @Before
     fun setUp() {
         spacesDir = folder.newFolder("spaces")
         database = SpacesDatabase.open(context, spacesDir)
         cipher = FakeInviteSecretCipher()
-        vault = openVault()
-        actions = SpaceHostActions(context, database, cipher)
+        vaults = SpaceVaults.create(database, spacesDir)
+        vault = openVault(vaults)
+        actions = SpaceHostActions(vaults, cipher)
         runBlocking {
             database.spaces().upsert(
                 SpaceEntity(
@@ -75,8 +82,8 @@ class SpaceHostActionsTest {
             vault.registerParticipant(host, "Gastgeber", Role.HOST, Secrets.hashHex(hostToken))
             vault.registerParticipant(guest, "Gast", Role.GUEST, "0".repeat(64))
             vault.registerParticipant(otherGuest, "Anderer Gast", Role.GUEST, "0".repeat(64))
-            insertUpload("upload-guest", guest, "a")
-            insertUpload("upload-other", otherGuest, "b")
+            insertUpload(guestUpload, guest, "a")
+            insertUpload(otherUpload, otherGuest, "b")
         }
     }
 
@@ -85,15 +92,8 @@ class SpaceHostActionsTest {
         database.close()
     }
 
-    private fun openVault(): SpaceVault =
-        SpaceVault.open(
-            database,
-            spacesDir,
-            space,
-            SpaceLimits(),
-            StorageProbe { Long.MAX_VALUE / 4 },
-            cipher,
-        )
+    /** Dieselbe Instanz, die Server und Oberfläche im Prozess teilen (Paket 3.5c). */
+    private fun openVault(on: SpaceVaults): SpaceVault = runBlocking { on.vaultFor(space, SpaceLimits(), cipher) }
 
     private fun insertUpload(
         id: String,
@@ -133,11 +133,11 @@ class SpaceHostActionsTest {
         val outcome = runBlocking { actions.removeGuest(space, guest, deleteUploads = false) }
 
         assertEquals(RemoveOutcome.Removed, outcome)
-        assertEquals(setOf("upload-guest", "upload-other"), uploadIds())
+        assertEquals(setOf(guestUpload, otherUpload), uploadIds())
         assertEquals(
             "Der Upload bleibt als Upload eines entfernten Gastes erhalten.",
             guest.value,
-            runBlocking { database.media().findById("upload-guest") }?.uploaderId,
+            runBlocking { database.media().findById(guestUpload) }?.uploaderId,
         )
         assertEquals(before + 1, actions.changes().value)
         assertNull(runBlocking { vault.participant(guest) })
@@ -148,8 +148,8 @@ class SpaceHostActionsTest {
         val outcome = runBlocking { actions.removeGuest(space, guest, deleteUploads = true) }
 
         assertEquals(RemoveOutcome.Removed, outcome)
-        assertEquals(setOf("upload-other"), uploadIds())
-        assertNull(runBlocking { database.media().findById("upload-guest") })
+        assertEquals(setOf(otherUpload), uploadIds())
+        assertNull(runBlocking { database.media().findById(guestUpload) })
     }
 
     @Test
@@ -159,7 +159,7 @@ class SpaceHostActionsTest {
         val outcome = runBlocking { actions.removeGuest(space, host, deleteUploads = true) }
 
         assertEquals(RemoveOutcome.HostCannotBeRemoved, outcome)
-        assertEquals(setOf("upload-guest", "upload-other"), uploadIds())
+        assertEquals(setOf(guestUpload, otherUpload), uploadIds())
         assertTrue(runBlocking { actions.participants(space) }.any { it.id == host && it.role == Role.HOST })
         assertEquals(before, actions.changes().value)
     }
@@ -205,7 +205,8 @@ class SpaceHostActionsTest {
     fun theRotatedInviteIsTheOneShownAfterARestart() {
         val fresh = runBlocking { actions.rotateInvite(space) }
 
-        val afterRestart = runBlocking { openVault().ensureInvite() }
+        // Ein Neustart des Prozesses: eine frische Instanz auf derselben Datenbank.
+        val afterRestart = runBlocking { openVault(SpaceVaults.create(database, spacesDir)).ensureInvite() }
 
         assertEquals(fresh, afterRestart.secret)
         assertFalse(afterRestart.renewed)

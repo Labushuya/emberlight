@@ -10,6 +10,7 @@ import dagger.hilt.components.SingletonComponent
 import io.github.labushuya.emberlight.feature.space.setup.SetupStore
 import io.github.labushuya.emberlight.share.server.ConnectivityWifiNetworkProvider
 import io.github.labushuya.emberlight.share.server.WifiNetworkProvider
+import io.github.labushuya.emberlight.share.space.SpaceVaults
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
@@ -36,6 +37,16 @@ object SpacesModule {
     fun provideSpacesDatabase(
         @ApplicationContext context: Context,
     ): SpacesDatabase = SpacesDatabase.shared(context)
+
+    /**
+     * Die eine Vault je Space im Prozess (Paket 3.5c). Der Server und die Oberfläche bekommen dieselbe Instanz, damit
+     * Commit-Lock und Vorschau-Worker nur einmal existieren.
+     */
+    @Provides
+    @Singleton
+    fun provideSpaceVaults(
+        @ApplicationContext context: Context,
+    ): SpaceVaults = SpaceVaults.shared(context)
 
     // Verschlüsselung des Einladungsgeheimnisses mit dem AndroidKeyStore (ADR 0018).
     @Provides
