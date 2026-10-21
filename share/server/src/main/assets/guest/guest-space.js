@@ -344,13 +344,16 @@
   }
 
   /** Das Ende ist da (Countdown, 410 oder bekanntes Ende nach Verbindungsverlust). Das merkt sich die Seite. */
-  function endSpace() {
+  function endSpace(atPlannedEnd) {
     if (state.ended || !state.session) return;
     state.ended = true;
+    // Die Uhrzeit ist das geplante Ende, wenn der Countdown es erreicht hat. Hat der Gastgeber früher beendet, ist es der
+    // Zeitpunkt, zu dem die Seite das Ende bemerkt hat (das Ende selbst meldet die API nicht, ADR 0017).
+    var reached = atPlannedEnd === true && state.endsAt !== null;
     var record = {
       spaceId: state.session.spaceId,
       spaceName: state.spaceName || state.session.spaceName || "",
-      endsAt: state.endsAt
+      endsAt: reached ? state.endsAt : new Date().toISOString()
     };
     core.saveEnd(record);
     forgetLocally(record.spaceId);
@@ -495,7 +498,7 @@
     var rem = remainingNow();
     if (rem !== null) {
       if (rem <= 0) {
-        endSpace();
+        endSpace(true);
         return;
       }
       renderCountdown(rem);
