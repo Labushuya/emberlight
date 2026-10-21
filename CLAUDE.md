@@ -58,6 +58,11 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
 - UI-Änderungen brauchen aktualisierte Screenshot-Goldens im selben PR.
 - Coverage-Untergrenze: 70 % Zeilen (Kover, in CI erzwungen); nicht ohne begründete ADR senken.
 - Gemergte Branches und vom Assistenten angelegte Test-Branches dürfen ohne Rückfrage gelöscht werden (Freigabe 17.10.2026). Tags, `main` und fremde Branches nie ohne Rückfrage.
+- Kumulierter Testkatalog in [docs/TESTKATALOG-M3.md](docs/TESTKATALOG-M3.md). Jedes Paket schreibt ihn fort, gegliedert nach Funktionen.
+- Paket-PRs werden bei grüner CI gemergt (Freigabe der Nutzerin bzw. des Nutzers vom 21.10.2026).
+- Endtest durch die Nutzerin bzw. den Nutzer beim Vorab-Release (Testkatalog in `docs/TESTKATALOG-M3.md`).
+- Gerätetests durch Agenten, wenn das Gerät angeschlossen ist.
+- Gradle-Temp für Agenten einheitlich `C:/Users/Christopher/AppData/Local/Temp/emberlight-work/gradle-tmp` (`GRADLE_OPTS=-Djava.io.tmpdir=…`), vermeidet viele Daemons.
 
 ## Meilensteine
 

@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.share.space
 
 import androidx.test.core.app.ApplicationProvider
+import io.github.labushuya.emberlight.share.space.participants.FakeInviteSecretCipher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -62,7 +63,8 @@ class SpaceVaultTest {
     private fun vault(
         limits: SpaceLimits = small,
         probe: StorageProbe = StorageProbe { freeBytes },
-    ): SpaceVault = SpaceVault(database, SpaceStorage(spacesDir, space), limits, probe) { clock++ }
+    ): SpaceVault =
+        SpaceVault(database, SpaceStorage(spacesDir, space), limits, probe, FakeInviteSecretCipher()) { clock++ }
 
     /** Dateien im Space-Ordner. Fehlt der Ordner, bricht der Test ab, damit "leer" nicht ungeprüft bestehen kann. */
     private fun storedFiles(): List<String> =

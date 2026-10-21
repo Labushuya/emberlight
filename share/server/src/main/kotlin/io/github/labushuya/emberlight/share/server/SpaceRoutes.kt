@@ -5,12 +5,19 @@ import io.github.labushuya.emberlight.share.space.IngestResult
 import io.github.labushuya.emberlight.share.space.MediaCursor
 import io.github.labushuya.emberlight.share.space.MediaId
 import io.github.labushuya.emberlight.share.space.MediaListEntry
+import io.github.labushuya.emberlight.share.space.ParticipantId
+import io.github.labushuya.emberlight.share.space.Principal
 import io.github.labushuya.emberlight.share.space.RejectReason
+import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceVault
 import io.github.labushuya.emberlight.share.space.StorageWarning
+import io.github.labushuya.emberlight.share.space.participants.JoinOutcome
+import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
+import io.github.labushuya.emberlight.share.space.participants.RemoveOutcome
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.contentType
 import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.header
@@ -20,7 +27,16 @@ import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-import kotlinx.coroutines.delay
+import io.ktor.utils.io.readBuffer
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.io.readByteArray
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -34,17 +50,38 @@ data class UploadTuning(
     val pollMillis: Long = 1_000,
 )
 
+/** Größe des Beitritts-Körpers in Bytes. Mehr ist kein gültiger Beitritt (ADR 0018). */
+internal const val JOIN_MAX_BODY_BYTES = 4_096L
+
+private val json = Json { ignoreUnknownKeys = true }
+
+/** Körper von `POST /api/v1/join`. Geheimnis und Name stehen nur hier, nie in URL oder Header (ADR 0018). */
+@Serializable
+private data class JoinRequest(
+    val inviteSecret: String,
+    val displayName: String,
+)
+
+/** Körper von `POST /api/v1/join/preview`. Das Geheimnis steht nur im Körper (ADR 0018). */
+@Serializable
+private data class PreviewRequest(
+    val inviteSecret: String,
+)
+
 /**
- * Routen der Schnittstelle v1 (ADR 0014). Alle liegen unter `/api/v1` und hinter der Zugriffskette des Servers.
+ * Routen der Schnittstelle v1 (ADR 0014, ADR 0018). Alle liegen unter `/api/v1` und hinter der Zugriffskette des Servers.
  * Der Server bedient genau einen Space. Die Pfade enthalten keine Space-ID.
+ *
+ * Rechte: GUEST darf lesen, hochladen, eigene Uploads zurückziehen und sich selbst abmelden. HOST darf zusätzlich
+ * Teilnehmer entfernen, die Einladung erneuern und jedes Medium löschen (ADR 0018, Autorisierung).
  */
 fun spaceRoutes(
-    vault: SpaceVault,
-    spaceName: String,
+    access: SpaceAccess,
     gates: ServerGates,
     tuning: UploadTuning = UploadTuning(),
 ): Route.() -> Unit =
     {
+        val vault = access.vault
         route("/api/v1") {
             get("/space") {
                 call.routeTemplate("/api/v1/space")
@@ -53,13 +90,92 @@ fun spaceRoutes(
                     HttpStatusCode.OK,
                     JsonObject(
                         mapOf(
-                            "name" to JsonPrimitive(spaceName),
+                            "name" to JsonPrimitive(access.spaceName),
                             "storageLimitBytes" to JsonPrimitive(usage.limitBytes),
                             "usedBytes" to JsonPrimitive(usage.usedBytes),
                             "warning" to JsonPrimitive(usage.warning),
                         ),
                     ),
                 )
+            }
+
+            post("/join") {
+                call.routeTemplate(JOIN_PATH)
+                call.handleJoin(access)
+            }
+
+            post("/join/preview") {
+                call.routeTemplate(JOIN_PREVIEW_PATH)
+                call.handleJoinPreview(access)
+            }
+
+            get("/me") {
+                call.routeTemplate("/api/v1/me")
+                val principal = call.principal()
+                val info = vault.participant(principal.participantId)
+                if (info == null) {
+                    call.respondError(HttpStatusCode.Unauthorized, "unauthorized")
+                    return@get
+                }
+                call.respondJson(HttpStatusCode.OK, participantJson(info, access.spaceId.value))
+            }
+
+            delete("/me") {
+                call.routeTemplate("/api/v1/me")
+                val principal = call.principal()
+                if (principal.role == Role.HOST) {
+                    call.respondError(HttpStatusCode.Forbidden, "forbidden")
+                    return@delete
+                }
+                // Abmelden: der Token ist sofort ungültig, die Uploads bleiben und zeigen „entfernt“ (ADR 0018).
+                access.removeGuest(principal.participantId, deleteUploads = false)
+                call.respond(HttpStatusCode.NoContent)
+            }
+
+            get("/participants") {
+                call.routeTemplate("/api/v1/participants")
+                if (!call.requireHost()) return@get
+                call.respondJson(
+                    HttpStatusCode.OK,
+                    JsonObject(mapOf("items" to JsonArray(vault.participants().map(::participantListJson)))),
+                )
+            }
+
+            delete("/participants/{id}") {
+                call.routeTemplate("/api/v1/participants/{id}")
+                if (!call.requireHost()) return@delete
+                val id = ParticipantId.parse(call.parameters["id"].orEmpty())
+                if (id == null) {
+                    call.respondError(HttpStatusCode.NotFound, "not_found")
+                    return@delete
+                }
+                val deleteUploads =
+                    when (call.request.queryParameters["deleteUploads"]) {
+                        null, "false" -> {
+                            false
+                        }
+
+                        "true" -> {
+                            true
+                        }
+
+                        else -> {
+                            call.respondError(HttpStatusCode.BadRequest, "bad_request")
+                            return@delete
+                        }
+                    }
+                when (access.removeGuest(id, deleteUploads)) {
+                    RemoveOutcome.Removed -> call.respond(HttpStatusCode.NoContent)
+                    RemoveOutcome.NotFound -> call.respondError(HttpStatusCode.NotFound, "not_found")
+                    RemoveOutcome.HostCannotBeRemoved -> call.respondError(HttpStatusCode.Forbidden, "forbidden")
+                }
+            }
+
+            post("/invite/rotate") {
+                call.routeTemplate("/api/v1/invite/rotate")
+                if (!call.requireHost()) return@post
+                val fresh = access.rotateInvite()
+                call.respondJson(HttpStatusCode.OK, JsonObject(mapOf("invite" to JsonPrimitive(fresh))))
             }
 
             get("/media") {
@@ -102,11 +218,11 @@ fun spaceRoutes(
                 val principal = call.principal()
                 if (!gates.tryEnterUpload(principal.participantId)) {
                     call.response.header(HttpHeaders.RetryAfter, RETRY_AFTER_SECONDS)
-                    call.refuseUpload(HttpStatusCode.TooManyRequests, "too_many_uploads")
+                    call.refuseEarly(HttpStatusCode.TooManyRequests, "too_many_uploads")
                     return@post
                 }
                 try {
-                    handleUpload(call, vault, tuning)
+                    call.runUpload(access, tuning, principal)
                 } finally {
                     gates.leaveUpload(principal.participantId)
                 }
@@ -143,18 +259,173 @@ fun spaceRoutes(
         }
     }
 
+/** Antwort 403 für Nicht-Gastgeber. Liefert `false`, wenn die Anfrage abgewiesen wurde. */
+private suspend fun ApplicationCall.requireHost(): Boolean {
+    if (principal().role == Role.HOST) return true
+    respondError(HttpStatusCode.Forbidden, "forbidden")
+    return false
+}
+
+/**
+ * Beitritt (ADR 0018). Nur `application/json`, Körper bis [JOIN_MAX_BODY_BYTES]. Eine falsche Einladung zählt als
+ * Fehlversuch für die Drosselung. Die Antwort mit dem Token kommt nur hier vor.
+ */
+private suspend fun ApplicationCall.handleJoin(access: SpaceAccess) {
+    if (request.contentType().withoutParameters() != ContentType.Application.Json) {
+        refuseEarly(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
+        return
+    }
+    val text = receiveBoundedText(JOIN_MAX_BODY_BYTES)
+    if (text == null) {
+        refuseEarly(
+            HttpStatusCode.PayloadTooLarge,
+            "payload_too_large",
+            mapOf("limit" to JsonPrimitive(JOIN_MAX_BODY_BYTES)),
+        )
+        return
+    }
+    val body =
+        try {
+            json.decodeFromString<JoinRequest>(text)
+        } catch (malformed: SerializationException) {
+            respondError(HttpStatusCode.BadRequest, "bad_request")
+            return
+        }
+    when (val outcome = access.join(body.inviteSecret, body.displayName)) {
+        is JoinOutcome.Joined -> {
+            respondJson(
+                HttpStatusCode.Created,
+                JsonObject(
+                    mapOf(
+                        "participantId" to JsonPrimitive(outcome.participantId.value),
+                        "displayName" to JsonPrimitive(outcome.displayName),
+                        "role" to JsonPrimitive(outcome.role.name),
+                        "token" to JsonPrimitive(outcome.token),
+                        "spaceId" to JsonPrimitive(access.spaceId.value),
+                    ),
+                ),
+            )
+        }
+
+        JoinOutcome.InviteInvalid -> {
+            attributes.put(JoinFailedKey, true)
+            refuseEarly(HttpStatusCode.Forbidden, "invite_invalid")
+        }
+
+        is JoinOutcome.NameInvalid -> {
+            respondError(
+                HttpStatusCode.UnprocessableEntity,
+                "name_invalid",
+                mapOf("reason" to JsonPrimitive(outcome.reason.name.lowercase())),
+            )
+        }
+
+        is JoinOutcome.NameTaken -> {
+            respondError(
+                HttpStatusCode.Conflict,
+                "name_taken",
+                mapOf("suggestion" to JsonPrimitive(outcome.suggestion)),
+            )
+        }
+
+        JoinOutcome.SpaceFull -> {
+            respondError(HttpStatusCode.Conflict, "space_full")
+        }
+    }
+}
+
+/**
+ * Vorschau vor dem Beitritt (Paket 3.4, ADR 0018). Name und Farbe gibt es nur mit gültigem Einladungsgeheimnis. Fehlversuche
+ * zählen wie beim Beitritt. Das Titelbild und die Teilnehmer bleiben außen vor.
+ */
+private suspend fun ApplicationCall.handleJoinPreview(access: SpaceAccess) {
+    if (request.contentType().withoutParameters() != ContentType.Application.Json) {
+        refuseEarly(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
+        return
+    }
+    val text = receiveBoundedText(JOIN_MAX_BODY_BYTES)
+    if (text == null) {
+        refuseEarly(
+            HttpStatusCode.PayloadTooLarge,
+            "payload_too_large",
+            mapOf("limit" to JsonPrimitive(JOIN_MAX_BODY_BYTES)),
+        )
+        return
+    }
+    val body =
+        try {
+            json.decodeFromString<PreviewRequest>(text)
+        } catch (malformed: SerializationException) {
+            respondError(HttpStatusCode.BadRequest, "bad_request")
+            return
+        }
+    if (!access.invitePreview(body.inviteSecret)) {
+        attributes.put(JoinFailedKey, true)
+        refuseEarly(HttpStatusCode.Forbidden, "invite_invalid")
+        return
+    }
+    respondJson(
+        HttpStatusCode.OK,
+        JsonObject(
+            mapOf(
+                "spaceName" to JsonPrimitive(access.spaceName),
+                "accentColor" to JsonPrimitive(access.accentColor),
+            ),
+        ),
+    )
+}
+
+/** Liest den Körper bis [limit] Bytes. Liefert `null`, wenn er größer ist (ohne ihn ganz zu lesen). */
+private suspend fun ApplicationCall.receiveBoundedText(limit: Long): String? {
+    val declared = request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+    if (declared != null && declared > limit) return null
+    val bytes = request.receiveChannel().readBuffer(limit + 1).readByteArray()
+    if (bytes.size > limit) return null
+    return bytes.toString(Charsets.UTF_8)
+}
+
+/**
+ * Upload mit Abbruchmöglichkeit (ADR 0018). Der Upload läuft als Kind-Auftrag und ist im Verzeichnis [ActiveUploads]
+ * eingetragen. Wird der Teilnehmer entfernt, bricht der Auftrag ab, die Vault räumt die Teildatei weg, und der Client
+ * bekommt `401`.
+ */
+private suspend fun ApplicationCall.runUpload(
+    access: SpaceAccess,
+    tuning: UploadTuning,
+    principal: Principal,
+) {
+    coroutineScope {
+        val work = async { handleUpload(this@runUpload, access.vault, tuning) }
+        access.uploads.add(principal.participantId, work)
+        try {
+            // Schließt das Fenster zwischen Prüfung und Eintrag: Ein schon entfernter Teilnehmer bricht hier ab.
+            if (access.vault.participant(principal.participantId) ==
+                null
+            ) {
+                work.cancel(CancellationException("Entfernt."))
+            }
+            work.await()
+        } catch (cancelled: CancellationException) {
+            if (!currentCoroutineContext().isActive) throw cancelled
+            refuseEarly(HttpStatusCode.Unauthorized, "unauthorized")
+        } finally {
+            access.uploads.remove(principal.participantId, work)
+        }
+    }
+}
+
 private suspend fun handleUpload(
-    call: io.ktor.server.application.ApplicationCall,
+    call: ApplicationCall,
     vault: SpaceVault,
     tuning: UploadTuning,
 ) {
     if (call.request.contentType().withoutParameters() != ContentType.Application.OctetStream) {
-        call.refuseUpload(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
+        call.refuseEarly(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
         return
     }
     val name = UploadFilenameHeader.decode(call.request.headers[UploadFilenameHeader.NAME])
     if (name == null) {
-        call.refuseUpload(HttpStatusCode.BadRequest, "bad_filename")
+        call.refuseEarly(HttpStatusCode.BadRequest, "bad_filename")
         return
     }
     // Einwilligung (ADR 0015): nur der exakte Wert "1" gilt. Alles andere ist ein Fehler, keine stille Annahme.
@@ -169,7 +440,7 @@ private suspend fun handleUpload(
             }
 
             else -> {
-                call.refuseUpload(HttpStatusCode.BadRequest, "bad_request")
+                call.refuseEarly(HttpStatusCode.BadRequest, "bad_request")
                 return
             }
         }
@@ -179,7 +450,7 @@ private suspend fun handleUpload(
             null
         } else {
             rawLength.toLongOrNull()?.takeIf { it >= 0 } ?: run {
-                call.refuseUpload(HttpStatusCode.BadRequest, "bad_request")
+                call.refuseEarly(HttpStatusCode.BadRequest, "bad_request")
                 return
             }
         }
@@ -188,14 +459,14 @@ private suspend fun handleUpload(
         try {
             vault.ingest(call.principal(), name, declared, source, keepLocation)
         } catch (abort: TransferAbortedException) {
-            call.refuseUpload(
+            call.refuseEarly(
                 HttpStatusCode.RequestTimeout,
                 "request_timeout",
                 mapOf("reason" to JsonPrimitive(abort.violation.wireName)),
             )
             return
         } catch (incomplete: IncompleteBodyException) {
-            call.refuseUpload(HttpStatusCode.BadRequest, "incomplete_body")
+            call.refuseEarly(HttpStatusCode.BadRequest, "incomplete_body")
             return
         }
     when (result) {
@@ -205,7 +476,7 @@ private suspend fun handleUpload(
     }
 }
 
-private suspend fun io.ktor.server.application.ApplicationCall.respondUploaded(
+private suspend fun ApplicationCall.respondUploaded(
     record: io.github.labushuya.emberlight.share.space.MediaRecord,
     warning: StorageWarning?,
     duplicate: Boolean,
@@ -226,14 +497,14 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondUploaded(
     )
 }
 
-private suspend fun io.ktor.server.application.ApplicationCall.respondRejected(reason: RejectReason) {
+private suspend fun ApplicationCall.respondRejected(reason: RejectReason) {
     when (reason) {
         RejectReason.UnsupportedType -> {
-            refuseUpload(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
+            refuseEarly(HttpStatusCode.UnsupportedMediaType, "unsupported_media_type")
         }
 
         is RejectReason.TooLarge -> {
-            refuseUpload(
+            refuseEarly(
                 HttpStatusCode.PayloadTooLarge,
                 "payload_too_large",
                 mapOf("limit" to JsonPrimitive(reason.limitBytes)),
@@ -241,15 +512,15 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondRejected(r
         }
 
         RejectReason.StorageFull -> {
-            refuseUpload(HttpStatusCode.InsufficientStorage, "storage_full")
+            refuseEarly(HttpStatusCode.InsufficientStorage, "storage_full")
         }
 
         RejectReason.DeviceStorageLow -> {
-            refuseUpload(HttpStatusCode.InsufficientStorage, "device_storage_low")
+            refuseEarly(HttpStatusCode.InsufficientStorage, "device_storage_low")
         }
 
         is RejectReason.LocationNotRemovable -> {
-            refuseUpload(
+            refuseEarly(
                 HttpStatusCode.UnprocessableEntity,
                 "location_not_removable",
                 mapOf("reason" to JsonPrimitive(reason.reason.code)),
@@ -258,34 +529,38 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondRejected(r
     }
 }
 
-/** Frist in Millisekunden, in der ein abgelehnter Upload-Körper noch fließt, damit der Client die Antwort lesen kann. */
-private const val REFUSED_BODY_LINGER_MS = 200L
-
-/**
- * Antwort auf einen abgelehnten Upload, bevor der Körper ganz gelesen ist (ADR 0014, Umsetzung 3.1a). Die Verbindung schließt
- * mit `Connection: close`. Der Körper wird danach abgebrochen, sonst liest CIO ihn vollständig vom Socket.
- */
-private suspend fun io.ktor.server.application.ApplicationCall.refuseUpload(
-    status: HttpStatusCode,
-    code: String,
-    extra: Map<String, JsonElement> = emptyMap(),
-) {
-    response.headers.append(HttpHeaders.Connection, "close")
-    respondError(status, code, extra)
-    // Dem Client Zeit für die Antwort lassen. Danach den Körper abbrechen: CIO kopiert ihn sonst ganz vom Socket. Schließt
-    // der Server mit ungelesenen Bytes, sendet er RST, und die Antwort geht verloren (Windows).
-    delay(REFUSED_BODY_LINGER_MS)
-    request.receiveChannel().cancel(null)
-}
-
 private fun listItemJson(entry: MediaListEntry): JsonElement =
     JsonObject(
         mapOf(
             "id" to JsonPrimitive(entry.id.value),
             "uploader" to (entry.uploaderName?.let { JsonPrimitive(it) } ?: JsonNull),
+            "uploaderRemoved" to JsonPrimitive(entry.uploaderRemoved),
             "type" to JsonPrimitive(entry.mime),
             "size" to JsonPrimitive(entry.sizeBytes),
             "createdAt" to JsonPrimitive(entry.createdAt),
             "locationKept" to JsonPrimitive(entry.locationKept),
+        ),
+    )
+
+private fun participantJson(
+    info: ParticipantInfo,
+    spaceId: String,
+): JsonObject =
+    JsonObject(
+        mapOf(
+            "spaceId" to JsonPrimitive(spaceId),
+            "participantId" to JsonPrimitive(info.id.value),
+            "displayName" to JsonPrimitive(info.displayName),
+            "role" to JsonPrimitive(info.role.name),
+        ),
+    )
+
+private fun participantListJson(info: ParticipantInfo): JsonElement =
+    JsonObject(
+        mapOf(
+            "id" to JsonPrimitive(info.id.value),
+            "displayName" to JsonPrimitive(info.displayName),
+            "role" to JsonPrimitive(info.role.name),
+            "joinedAt" to JsonPrimitive(info.joinedAtMillis),
         ),
     )

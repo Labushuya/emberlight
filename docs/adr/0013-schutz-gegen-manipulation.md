@@ -473,3 +473,10 @@ Grenzwerte, bestätigt am 18.10.2026: Bild 50 MiB, Video 2 GiB, Standard-Speiche
 - Unit- und Robolectric-Tests in `share:space` und `share:server` (Anzahl und Zuordnung im PR #26).
 - Drei Symlink-Tests in `SpaceStorageTest` werden lokal unter Windows übersprungen, weil das Recht zur Symlink-Anlage fehlt. Auf dem CI-Runner (Linux) laufen sie.
 - Der Gerätetest mit dem Debug-Einstieg (docs/DEBUG-SERVER.md) folgt separat.
+
+## Nachtrag (20.10.2026): Paket 3.4
+
+- **Fragment und Token.** Das Fragment der Beitrittsadresse trägt das Einladungsgeheimnis (`#i=<einladung>`), nicht den persönlichen Token. Der Token kommt erst in der Antwort auf `POST /api/v1/join`. Die Abweichung ist in [ADR 0018](0018-einladung-und-beitritt.md), Entscheidung 1, festgehalten.
+- **Reihenfolge der Prüfungen.** Host, Netz, Drosselung (nur für den Beitritt, `429`), Authorization (`401`, entfällt für den Beitritt und für die Gäste-Seite), Space-Zustand (`410`), Rolle (`403`), Route. Gegenüber 3.1 steht die Authorization vor dem Ablauf (ADR 0018, Abweichungen).
+- **Logging.** Unverändert: Route-Templates, nie Tokens, Einladungsgeheimnisse oder Header.
+- **Speicher des Tokens.** Gespeichert wird nur der SHA-256. Der Gastgeber-Token wird bei jedem Start gewürfelt und nur im Speicher der Sitzung gehalten.

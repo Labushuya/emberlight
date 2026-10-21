@@ -5,7 +5,8 @@
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
 
-# Keine -keep-Regeln für den Serverpfad (ADR 0014, ADR 0017). R8 hält die Server-Pipeline über die Erreichbarkeit: Seit
-# Paket 3.3 startet der Gastgeber den Space aus der Oberfläche des Release-Builds, der Dienst steht im Manifest von
-# share:server. Die Prüfung checkReleaseServerPipeline liest die Mapping-Datei und bricht ab, falls R8 Teile der
-# Pipeline entfernt hat.
+# Keine -keep-Regeln für den Serverpfad (ADR 0014, ADR 0017, ADR 0018). R8 hält die Server-Pipeline über die
+# Erreichbarkeit: Der Gastgeber startet den Space aus der Oberfläche des Release-Builds, der Dienst steht im Manifest von
+# share:server. R8 darf Klassen der Pipeline zusammenlegen (KtorLocalServer ist so zusammengelegt, ADR 0018). Die Prüfung
+# checkReleaseServerPipeline sucht deshalb Methoden im Mapping, nicht nur Klassennamen, und bricht ab, wenn R8 Teile der
+# Pipeline tatsächlich entfernt hat.

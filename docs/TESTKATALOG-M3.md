@@ -1,0 +1,189 @@
+# Testkatalog Meilenstein 3 (kumulativ)
+
+Stand: 21.10.2026. Dieser Katalog gehört zum Endtest der Nutzerin bzw. des Nutzers beim Vorab-Release `v0.3.0-alpha.1` (Planung zuvor „v0.3.0-alpha“, siehe [PLAN-M3.md](PLAN-M3.md)). Er wird von jedem Paket fortgeschrieben und ist nach Funktionen gegliedert, nicht nach Paketen.
+
+## So liest man den Katalog
+
+- **Checkbox**: Punkt abhaken, wenn das erwartete Ergebnis eintritt.
+- **Handlung**: was zu tun ist. **Erwartet**: was man sehen muss.
+- **Kennzeichen „seit x.y“**: der Punkt gilt ab diesem Paket. **„folgt (x.y)“**: das Paket ist noch nicht umgesetzt, der Punkt steht vorab fest.
+- **„[Entwickler]“**: Schritt mit curl bzw. adb. Ihn führen Entwickler oder Agenten bei angeschlossenem Gerät aus, nicht die Nutzerin bzw. der Nutzer.
+- **„(Ergänzung)“**: Punkt stammt nicht aus einem PR-Katalog, sondern aus dem Umfang der PR oder aus einer Entscheidung.
+
+Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Paket 3.3) und #35 (Paket 3.4), zusammengeführt und dedupliziert. Korrigiert gegenüber den PR-Texten:
+
+- **Uhr (Korrektur 3.3, PR #32, Punkt 12):** Bei vorgestellter Uhr endet der Space früher. Beschlossen ist: Das frühere von Wand-Uhr-Frist und gemessener Laufzeit gilt (ADR 0017).
+- **Zuordnung der Ende-Hinweise:** Die Hinweise für Gäste (Restzeit, Vorwarnung, Ende-Ansicht, Nachlauf, Verbindungsverlust) gehören zu 3.5a (Abschnitt 6). Die Gastgeber-Benachrichtigungen und der Hinweis im Beenden-Dialog gehören zu 3.6 (Abschnitt 10). Diese Zuordnung ist ein Vorschlag.
+- **Erneuerte Einladung (PR #35, Punkte 14, 18, 19):** Der Hinweis erscheint nur nach automatischer Erneuerung und verschwindet mit „Verstanden“ bzw. bei manueller Erneuerung (Paket 3.4b, ADR 0018).
+
+---
+
+## 1 Installation bzw. Update
+
+- [ ] **1.1 Vorab-Release installieren (folgt, Vorab-Release).** Handlung: APK `emberlight-v0.3.0-alpha.1.apk` installieren, SHA-256 mit der `.sha256`-Datei vergleichen. Erwartet: Prüfsumme stimmt, die App startet. *(Ergänzung)*
+- [ ] **1.2 Update mit bestehenden Spaces.** Handlung: Version mit Datenbank 2 bis 5 auf den aktuellen Stand aktualisieren. Erwartet: Spaces, Medien und Teilnehmer bleiben erhalten. *(seit 3.2, Migrationen 2 → 3, 3 → 4, 4 → 5; Ergänzung)*
+- [ ] **1.3 Update von Datenbank 5 (Stand 3.4 vor 3.4b).** Handlung: Version mit Datenbank 5 auf den aktuellen Stand aktualisieren, Space öffnen. Erwartet: Einmalig erscheint der Hinweis „Einladung wurde erneuert – bitte neuen QR teilen“ mit dem Knopf „Verstanden“, der QR-Code ist neu. Nach „Verstanden“ und einem Neustart der App erscheint der Hinweis nicht mehr, der QR-Code bleibt gleich. *(seit 3.4b, PR #35 Punkt 18, angepasst)*
+- [ ] **1.4 Release-Build.** Handlung: Release-Build (signiert) installieren, Space aus der Oberfläche starten. Erwartet: Start funktioniert, der Debug-Einstieg fehlt. *(seit 3.3, PR #32 Punkt 20)*
+
+## 2 Space anlegen und verwalten
+
+- [ ] **2.1 Leerzustand.** Handlung: Tab „Spaces“ öffnen. Erwartet: Erklärung und Knopf „Space anlegen“. *(seit 3.2, PR #30 Punkt 1)*
+- [ ] **2.2 Formular öffnen.** Handlung: „Space anlegen“ antippen. Erwartet: Name leer, „Speichern“ ist deaktiviert. *(seit 3.2, PR #30 Punkt 2)*
+- [ ] **2.3 Würfel bei leerem Namen.** Handlung: Namensfeld leer lassen, Würfel antippen. Erwartet: Der Name ist ein Vorschlag aus zwei Wörtern und bleibt editierbar. *(seit 3.2, PR #30 Punkt 3)*
+- [ ] **2.4 Würfel bei eigenem Namen.** Handlung: Eigenen Namen eintippen, dann Würfel antippen. Erwartet: Rückfrage „Namen ersetzen?“. „Eigenen behalten“ lässt den Namen, „Ersetzen“ übernimmt den Vorschlag. *(seit 3.2, PR #30 Punkt 4)*
+- [ ] **2.5 Namensprüfung.** Handlung: Name leeren und das Feld berühren. Dann 41 Zeichen eintippen. Erwartet: „Bitte gib einen Namen ein.“ erscheint erst nach dem Berühren. Bei 41 Zeichen: „Höchstens 40 Zeichen.“ *(seit 3.2, PR #30 Punkt 5)*
+- [ ] **2.6 Speicherlimit mit Obergrenze.** Handlung: Stufen des Speicherlimits ansehen, dann einen eigenen Wert über der Obergrenze eingeben. Erwartet: Stufen darüber sind ausgegraut mit „Nicht genug freier Speicher, max. X GiB“. Am Feld steht „max. X GiB verfügbar“. Der eigene Wert ergibt einen Fehler, Speichern ist gesperrt. *(seit 3.2, PR #30 Punkt 6)*
+- [ ] **2.7 Wenig freier Speicher.** Handlung: Bei weniger als 2,5 GiB freiem Speicher das Formular öffnen. Erwartet: Erklärung, dass kein Space angelegt werden kann. *(seit 3.2, PR #30 Punkt 7)*
+- [ ] **2.8 Festes Ende.** Handlung: Laufzeit „Eigenes Ende“. Datum über den Kalender, Uhrzeit über das Zeitauswahl-Fenster wählen. Einen Zeitpunkt in der Vergangenheit eintragen, dann im Uhrzeitfenster abbrechen. Erwartet: Datum von heute bis 30 Tage voraus. Vergangenheit ergibt „Das Ende muss in der Zukunft liegen.“. Abbrechen ändert nichts. *(seit 3.2, PR #30 Punkt 8)*
+- [ ] **2.9 Aufbewahrung nach dem Ende.** Handlung: Aufbewahrung „Eigene“ mit 0, dann 91, dann 5 eingeben. Erwartet: 0 und 91 ergeben einen Fehler, 5 ist gültig. Der Erklärtext steht unter den Auswahlen. *(seit 3.2, PR #30 Punkt 9)*
+- [ ] **2.10 Titelbild wählen.** Handlung: Titelbild aus der Fotoauswahl wählen, zuerst ein Foto, dann ein Video. Erwartet: Die Auswahl zeigt nur Bilder. Das Foto wird übernommen, die Vorschau erscheint, auch im Hochformat richtig gedreht. Das Video ergibt „kein Bild“. *(seit 3.2, PR #30 Punkt 10)*
+- [ ] **2.11 Speichern und Neustart.** Handlung: Space speichern, App neu starten. Erwartet: Karte mit Titelbild oder Farbe, Status „Entwurf“, Laufzeit, Aufbewahrung und Limit. Nach dem Neustart ist die Karte noch da. *(seit 3.2, PR #30 Punkt 12)*
+- [ ] **2.12 Detail und Titelbild verwerfen.** Handlung: Karte antippen, Titelbild ändern, dann verwerfen. Erwartet: Bearbeiten ist aktiv. Nach dem Verwerfen bleibt das alte Bild. *(seit 3.2, PR #30 Punkt 13)*
+- [ ] **2.13 Formular mit Änderungen verlassen.** Handlung: Änderungen machen, dann mit Zurück-Schaltfläche und mit der Systemgeste verlassen. Erwartet: Rückfrage. „Weiter bearbeiten“ bleibt, „Verwerfen“ kehrt ohne Änderung zurück. *(seit 3.2, PR #30 Punkt 14)*
+- [ ] **2.14 Löschen mit Bestätigung.** Handlung: Space löschen, einmal „Abbrechen“, einmal „Endgültig löschen“ wählen. Erwartet: Der Dialog nennt den Namen. „Abbrechen“ löscht nichts, „Endgültig löschen“ entfernt die Karte. *(seit 3.2, PR #30 Punkt 15)*
+- [ ] **2.15 Großes Display oder Foldable innen.** Handlung: Querformat, Space in der Liste wählen, Gerät drehen. Erwartet: Liste und Detail nebeneinander, der gewählte Space bleibt. Galerie-Tab und Galerie unverändert. *(seit 3.2, PR #30 Punkt 16)*
+- [ ] **2.16 Schriftgröße und TalkBack.** Handlung: Schriftgröße „Größte“ einstellen, TalkBack einschalten, Liste und Formular durchgehen. Erwartet: Texte brechen um, keine abgeschnittenen Schaltflächen. Farbkreise, Würfel („Namen vorschlagen“) und Karten werden mit Namen vorgelesen. *(seit 3.2, PR #30 Punkt 17)*
+
+## 3 Einrichtung
+
+- [ ] **3.1 Einrichtung öffnen.** Handlung: Detail eines Entwurfs öffnen, „Einrichtung“ wählen. Erwartet: Die Punkte erscheinen. „Lokales Netzwerk“ ist auf Android 16 ausgeblendet. *(seit 3.3, PR #32 Punkt 1)*
+- [ ] **3.2 Benachrichtigungen verweigern.** Handlung: Benachrichtigungen verweigern, Einrichtung prüfen. Erwartet: Der Punkt zeigt „Abgelehnt“. Der Start mit „Trotzdem starten“ ist möglich. *(seit 3.3, PR #32 Punkt 2)*
+- [ ] **3.3 Hersteller-Freigabe (Honor).** Handlung: „Einstellung öffnen“ antippen. Erwartet: Die Honor-Liste „App-Start“ öffnet sich, oder die App-Info, falls die Komponente fehlt. Nach „Erledigt“ bleibt der Haken nach einem Neustart der App gespeichert. *(seit 3.3, PR #32 Punkt 3)*
+- [ ] **3.4 Akku-Ausnahme.** Handlung: Akku-Ausnahme erlauben, im System-Dialog bestätigen, zurückkehren. Erwartet: Der Punkt aktualisiert sich nach der Rückkehr. *(seit 3.3, PR #32 Punkt 4)*
+- [ ] **3.5 Start ohne Pflicht-Punkt.** Handlung: Nur auf Android 17 mit targetSdk 37: „Lokales Netzwerk“ nicht erlauben, dann Start versuchen. Erwartet: Der Start-Knopf ist gesperrt. *(seit 3.3, PR #32 Punkt 5)*
+- [ ] **3.6 Hintergrundnutzung eingeschränkt.** Handlung: In den Akku-Einstellungen der App die Hintergrundnutzung einschränken, Einrichtung öffnen. Erwartet: Der Punkt „Hintergrundnutzung“ erscheint. *(seit 3.3, PR #32 Punkt 16)*
+
+## 4 Betrieb
+
+### Start
+
+- [ ] **4.1 Space starten.** Handlung: Detail eines Entwurfs, „Space starten“ mit allen Einrichtungspunkten. Erwartet: Laufender Space mit „Läuft · noch X“, Serveradresse und Speicherbalken. *(seit 3.3, PR #32 Punkt 6)*
+- [ ] **4.2 Zweiter Start.** Handlung: Bei laufendem Space einen anderen Space starten. Erwartet: „Ein anderer Space läuft bereits.“ *(seit 3.3, PR #32 Punkt 7)*
+- [ ] **4.3 Speicherlimit zu hoch.** Handlung: Limit über „frei minus 2 GiB“ setzen, dann starten. Erwartet: Startfehler mit dem Weg „Bearbeiten“. *(seit 3.3, PR #32 Punkt 8)*
+- [ ] **4.4 Eigenes Ende in der Vergangenheit.** Handlung: Laufzeit „Eigenes Ende“ mit einem Zeitpunkt in der Vergangenheit starten. Erwartet: Fehlermeldung, der Space startet nicht. *(seit 3.3, PR #32, Umfang Punkt 3)*
+- [ ] **4.5 Bearbeiten im laufenden Space.** Handlung: Laufenden Space öffnen, „Bearbeiten“ ansehen. Erwartet: Der Knopf ist deaktiviert, ein Hinweis ist sichtbar. *(seit 3.3, PR #32 Punkt 18)*
+
+### Benachrichtigung
+
+- [ ] **4.6 Dauermeldung.** Handlung: Space starten, die Benachrichtigung ansehen, dann antippen. Erwartet: „Space ‚Name‘ läuft · noch X“. Antippen öffnet den laufenden Space. *(seit 3.3, PR #32, Umfang Punkt 6)*
+- [ ] **4.7 Beenden über die Benachrichtigung.** Handlung: In der Benachrichtigung „Beenden“ antippen. Erwartet: Die App öffnet sich mit einer Bestätigung. Der Space endet nicht direkt. *(seit 3.3, PR #32 Punkt 10)*
+- [ ] **4.8 Beenden über den Knopf.** Handlung: „Space beenden“ wählen, bestätigen. Erwartet: „Beendet am …“, die Dauermeldung verschwindet. *(seit 3.3, PR #32 Punkt 9)*
+
+### Pause
+
+- [ ] **4.9 Pausen-Banner.** Handlung: Bildschirm ausschalten, Gerät mindestens 10 Minuten ruhen lassen. Erwartet: Banner „Android hat emberlight ca. X Min. pausiert“ und eine Benachrichtigung, falls erlaubt. *(seit 3.3, PR #32 Punkt 15)*
+- [ ] **4.10 [Entwickler] Pause simulieren.** Handlung: `adb shell dumpsys deviceidle force-idle`, danach `adb logcat -s EmberlightServer:I`. Erwartet: Eintrag zur Pause im Log, das Banner wie in 4.9. *(seit 3.3, PR #32, Entwickler-Prüfung)*
+- [ ] **4.11 [Entwickler] Benachrichtigungs-Ziel.** Handlung: `adb shell am start -n io.github.labushuya.emberlight.debug/io.github.labushuya.emberlight.MainActivity --es io.github.labushuya.emberlight.share.server.ROUTE confirm_end`. Erwartet: Die App öffnet die Bestätigung zum Beenden, der Space endet nicht direkt. *(seit 3.3, PR #32, Entwickler-Prüfung)*
+
+### WLAN
+
+- [ ] **4.12 WLAN aus und wieder an.** Handlung: WLAN am Gerät ausschalten, nach einer Weile wieder einschalten (gleiches Netz). Erwartet: Der Space pausiert, der Status bleibt „Läuft“, ein Banner erscheint. Nach der Rückkehr setzt der Space automatisch fort. Adresse und QR-Code bleiben gleich, ohne Hinweis. *(seit 3.3, PR #32 Punkt 13, mit PR #35 Punkt 16)*
+- [ ] **4.13 Anderes WLAN.** Handlung: Gerät in ein anderes WLAN wechseln. Erwartet: Benachrichtigung „Neues WLAN erkannt – Space hier fortsetzen?“. Erst die Bestätigung in der App ändert die Adresse. *(seit 3.3, PR #32 Punkt 14)*
+- [ ] **4.14 [Entwickler] WLAN-Verlust.** Handlung: `adb shell svc wifi disable`, dann `adb shell svc wifi enable`, Log prüfen. Erwartet: Pause und Fortsetzen im Log, Adresse unverändert. *(seit 3.3, PR #32, Entwickler-Prüfung)*
+
+### Neustart nach Prozess-Tod
+
+- [ ] **4.15 Prozess-Tod mit Akku-Ausnahme.** Handlung: Bei laufendem Space die App-Prozesse beenden (Wegwischen oder `adb shell kill <pid>`, nicht `am force-stop`), App wieder öffnen. Erwartet: Der Space läuft weiter, die Adresse bleibt gleich. *(seit 3.3b, PR #32 Punkt 19)*
+- [ ] **4.16 Prozess-Tod ohne Akku-Ausnahme.** Handlung: Akku-Ausnahme für die App entziehen, App-Prozess beenden, App öffnen. Erwartet: Der Space zeigt „unterbrochen“ mit „Fortsetzen“. „Fortsetzen“ startet den Server, die Adresse bleibt gleich, die Unterbrechung erscheint im Pausen-Banner. *(seit 3.3b, PR #32 Punkte 19 und 21)*
+- [ ] **4.17 Frist während der Unterbrechung.** Handlung: Wie 4.16, aber die Frist abwarten, dann die App öffnen. Erwartet: Der Space steht auf „Beendet“, das Ende liegt bei der Frist. *(seit 3.3b, PR #32 Punkt 22)*
+- [ ] **4.18 App beenden und neu öffnen.** Handlung: App über die Einstellungen beenden, während der Space läuft, dann wieder öffnen. Erwartet: Der Space bleibt aktiv (gegebenenfalls über „Fortsetzen“) und zeigt denselben QR-Code und Link. Ein angemeldeter Gast bleibt angemeldet und kann ohne neuen Code weitermachen. *(seit 3.4, PR #35 Punkt 17)*
+
+### Ende
+
+- [ ] **4.19 [Entwickler] Ablauf.** Handlung: Frist (10 Minuten im Testlauf) abwarten, danach eine Gast-Anfrage per curl. Erwartet: Antwort `410` mit `space_closed`, der Status ist „Beendet“. *(seit 3.3, PR #32 Punkt 11, Entwickler-Prüfung)*
+- [ ] **4.20 Uhr vorstellen.** Handlung: Bei laufendem Space die Systemuhr um eine Stunde vorstellen. Erwartet: Der Space endet früher, sofort bzw. vor seiner Frist. Es gilt das frühere Ergebnis aus Wand-Uhr-Frist und gemessener Laufzeit. *(seit 3.3, PR #32 Punkt 12, korrigiert)*
+- [ ] **4.21 Uhr zurückstellen.** Handlung: Bei laufendem Space die Systemuhr um eine Stunde zurückstellen. Erwartet: Der Space endet nicht später als seine gemessene Frist. Es gilt das frühere Ergebnis. *(seit 3.3, PR #32 Punkt 12, korrigiert)*
+- [ ] **4.22 Speicherwarnung ab 80 %.** Handlung: Upload über den Browser bis 80 % des Limits. Erwartet: Warnung im laufenden Space. *(seit 3.3, PR #32 Punkt 17; Upload im Browser braucht 3.5b)*
+
+## 5 Einladung und Beitritt (App und Browser)
+
+### In der App
+
+- [ ] **5.1 Einladung anzeigen.** Handlung: Space starten, den Bereich „Einladung“ ansehen. Erwartet: QR-Code mit dem Link darunter. Der QR-Code ist mindestens 70 % der Breite breit. *(seit 3.4, PR #35 Punkt 1)*
+- [ ] **5.2 Bildschirm bleibt hell.** Handlung: QR-Ansicht offen lassen, dann verlassen. Erwartet: Der Bildschirm bleibt während der QR-Anzeige an und hell. Danach gelten die früheren Einstellungen wieder. *(seit 3.4, PR #35 Punkt 2)*
+- [ ] **5.3 Teilen und Kopieren.** Handlung: „Link teilen“, dann „Kopieren“ antippen. Erwartet: Das Teilen-Menü öffnet sich mit dem Link. „Kopieren“ zeigt „Link kopiert“, der Link liegt in der Zwischenablage. *(seit 3.4, PR #35 Punkt 3)*
+- [ ] **5.4 Gastgeber in der Liste.** Handlung: Teilnehmerliste ansehen. Erwartet: Der Gastgeber trägt das Kennzeichen „Gastgeber“ und hat keinen Entfernen-Knopf. *(seit 3.4, PR #35 Punkt 8)*
+- [ ] **5.5 Gast entfernen ohne Häkchen.** Handlung: Gast entfernen, das Häkchen „Auch alle Uploads … löschen“ bleibt aus. Erwartet: Der Gast verschwindet. Seine Uploads bleiben und zeigen „(entfernt)“. Seine nächste Anfrage im Browser meldet, dass die Sitzung nicht mehr gültig ist. *(seit 3.4, PR #35 Punkt 12)*
+- [ ] **5.6 Gast entfernen mit Uploads.** Handlung: Gast entfernen, das Häkchen „Auch alle Uploads … löschen“ setzen. Erwartet: Seine Medien verschwinden aus der Liste und aus dem Speicher. *(seit 3.4, PR #35 Punkt 13)*
+- [ ] **5.7 Einladung manuell erneuern.** Handlung: „Einladung erneuern“, bestätigen. Erwartet: Der alte Link meldet „nicht mehr gültig“. Der neue QR-Code funktioniert. Beigetretene Gäste bleiben angemeldet. Der Hinweis „Einladung wurde erneuert“ erscheint dabei nicht. *(seit 3.4, PR #35 Punkt 14, bestätigt mit 3.4b)*
+- [ ] **5.8 Hinweis nach automatischer Erneuerung.** Handlung: Die Einladung wurde automatisch erneuert (nur nach Restore oder Gerätewechsel, sonst Unit-Test `aLostKeyRenewsTheInviteAndSaysSo`). Erwartet: Der Hinweis „Einladung wurde erneuert – bitte neuen QR teilen“ mit dem Knopf „Verstanden“ bleibt stehen, auch wenn man die Ansicht wechselt. *(seit 3.4b, PR #35 Punkt 19, angepasst)*
+- [ ] **5.9 Hinweis bestätigen.** Handlung: Bei dem Hinweis aus 5.8 „Verstanden“ antippen, dann die App neu starten. Erwartet: Der Hinweis verschwindet sofort, nach dem Neustart erscheint er nicht wieder. *(seit 3.4b, Ergänzung)*
+- [ ] **5.10 Hinweis durch manuelle Erneuerung.** Handlung: Bei dem Hinweis aus 5.8 „Einladung erneuern“ wählen und bestätigen, ohne vorher „Verstanden“ zu tippen. Erwartet: Der Hinweis verschwindet, der neue QR-Code gilt. *(seit 3.4b, Ergänzung)*
+- [ ] **5.11 Link nach Neustart der App.** Handlung: Gastgeber startet den Space, Gast tritt bei, Gastgeber beendet die App und öffnet sie wieder (Space gegebenenfalls über „Fortsetzen“), dann der alte Link im Browser. Erwartet: Der Link funktioniert weiterhin, die Vorschau zeigt den Space. *(seit 3.4b, Einladung übersteht den Neustart, PR #35 Umfang)*
+- [ ] **5.12 Sprache und Tablet.** Handlung: Telefon auf Deutsch und auf Englisch, Tablet im Querformat. Erwartet: Texte, Dialoge und Hinweise in der Sprache des Geräts. Auf dem Tablet ist die QR-Ansicht vollständig sichtbar. *(seit 3.4, PR #35 Punkt 20)*
+
+### Im Browser
+
+- [ ] **5.13 Link am PC öffnen.** Handlung: Link `http://<ip>:<port>/#i=…` im Browser öffnen. Erwartet: Zuerst der Hinweis „Verbindung läuft direkt im WLAN zum Handy des Gastgebers, nicht über das Internet. Verschlüsselung folgt in einer späteren Version.“, dann „Du trittst ‚<Name>‘ bei“ in der Akzentfarbe. In der Adresse steht danach kein `#i=` mehr. *(seit 3.4, PR #35 Punkt 4)*
+- [ ] **5.14 Vorschau mit ungültigem Link.** Handlung: Link mit einem anderen Geheimnis (43 Zeichen) öffnen. Erwartet: „Diese Einladung ist nicht (mehr) gültig.“ Der Fehlversuch zählt für die Drosselung. *(seit 3.4, PR #35 Punkt 5)*
+- [ ] **5.15 Namensprüfung.** Handlung: Beitritt mit leerem Namen, mit `<` oder `>` im Namen, dann mit 25 Zeichen versuchen. Erwartet: Je Fall erscheint ein Hinweis, der Beitritt gelingt nicht. *(seit 3.4, PR #35 Punkt 6)*
+- [ ] **5.16 Gültiger Name.** Handlung: Gültigen Namen eingeben, beitreten. Erwartet: „Du bist dabei, <Name>“ und der Name des Space. Auf dem Gerät erscheint der Gast in der Teilnehmerliste. *(seit 3.4, PR #35 Punkt 7)*
+- [ ] **5.17 Name schon vergeben.** Handlung: Zweiter Browser oder Inkognito, mit „ANNA“ beitreten, wenn „Anna“ schon vergeben ist. Erwartet: „schon vergeben“, der Vorschlag „Anna 2“ steht im Feld. *(seit 3.4, PR #35 Punkt 9)*
+- [ ] **5.18 Seite neu laden.** Handlung: Nach dem Beitritt die Seite neu laden. Erwartet: Der Gast bleibt angemeldet, ohne neuen QR-Code. *(seit 3.4, PR #35 Punkt 10)*
+- [ ] **5.19 Abmelden.** Handlung: „Abmelden“ antippen. Erwartet: „Du bist abgemeldet.“. Neuladen ohne Einladung ermöglicht keinen Beitritt. *(seit 3.4, PR #35 Punkt 11)*
+- [ ] **5.20 Zu viele Versuche.** Handlung: Zehn falsche Einladungen hintereinander von einem Gerät (Beitritt oder Vorschau), dann einen elften Versuch. Erwartet: „Zu viele Versuche“. Nach zehn Minuten ist der Beitritt wieder möglich. *(seit 3.4, PR #35 Punkt 15)*
+- [ ] **5.21 Seite ohne Einladung.** Handlung: Die Adresse ohne `#i=` öffnen. Erwartet: Der Text „Dem Space beitreten“, keine Daten des Space. *(seit 3.4b, Ergänzung aus ADR 0018)*
+
+### Entwickler
+
+- [ ] **5.22 [Entwickler] curl-Prüfung.** Handlung: Die Befehle aus `docs/DEBUG-SERVER.md` ausführen. Erwartet: Beitritt mit gültiger Einladung `201`. Vorschau mit gültigem Geheimnis `200` mit genau `spaceName` und `accentColor`. Falsche Einladung bei Beitritt und Vorschau `403` (`invite_invalid`). Falscher Content-Type `415`. Gast auf `/participants` `403`. *(seit 3.4, PR #35 Punkt 21, Entwickler-Prüfung)*
+
+## 6 Medien im Browser (3.5a, folgt)
+
+- [ ] **6.1 Medienliste im Browser.** Handlung: Gast öffnet den Space im Browser. Erwartet: Bilder und Videos mit Uploader und Zeitpunkt. HEIC erscheint als JPEG-Ansicht. *(folgt 3.5a)*
+- [ ] **6.2 [Entwickler] Signierte Medien-URLs.** Handlung: Eine Medien-URL abrufen, nach Ablauf erneut abrufen. Erwartet: Eine abgelaufene URL wird abgewiesen, eine neue Abfrage liefert eine neue, gültige URL. *(folgt 3.5a, Entwickler-Prüfung)*
+- [ ] **6.3 Video mit langer Wiedergabe.** Handlung: Video über mehr als 30 Minuten abspielen. Erwartet: Die Wiedergabe läuft weiter. Die URL erneuert sich still, ohne Unterbrechung und ohne Hinweis. *(folgt 3.5a)*
+- [ ] **6.4 Aktualisierung der Liste.** Handlung: Die Seite offen lassen, während ein anderer Gast hochlädt. Erwartet: Der neue Upload erscheint innerhalb von 10 bis 15 Sekunden, ohne Neuladen. *(folgt 3.5a)*
+- [ ] **6.5 Restzeit sichtbar.** Handlung: Im Space die Seite ansehen. Erwartet: Die Restzeit ist immer sichtbar. *(folgt 3.5a)*
+- [ ] **6.6 Vorwarnung 10 Minuten.** Handlung: Warten, bis noch 10 Minuten übrig sind. Erwartet: Banner mit der Vorwarnung. Die Seite bleibt benutzbar. *(folgt 3.5a)*
+- [ ] **6.7 Vorwarnung 1 Minute.** Handlung: Warten, bis noch 1 Minute übrig ist. Erwartet: Dialog mit der Vorwarnung. *(folgt 3.5a)*
+- [ ] **6.8 Ende-Ansicht.** Handlung: Das Ende abwarten, dann die Seite neu laden. Erwartet: Ganzseitige Ende-Ansicht. Die Seite merkt sich die Ende-Ansicht, auch nach dem Neuladen. *(folgt 3.5a)*
+- [ ] **6.9 [Entwickler] Nachlauf 60 Sekunden.** Handlung: Kurz nach dem Ende eine Anfrage senden, dann nach 60 Sekunden erneut. Erwartet: In den ersten 60 Sekunden antwortet der Server mit `410`, danach beendet er sich. Die Seite zeigt die Ende-Ansicht ohne Verbindungsfehler. *(folgt 3.5a, Entwickler-Prüfung)*
+- [ ] **6.10 Verbindungsverlust.** Handlung: WLAN am Handy des Gasts ausschalten, Seite bedienen, dann wieder einschalten. Erwartet: Klarer Text statt einer Fehlerseite. Nach der Rückkehr des WLAN lädt die Seite weiter. *(folgt 3.5a)*
+
+## 7 Upload im Browser (3.5b, folgt)
+
+- [ ] **7.1 Fortschritt je Datei.** Handlung: Mehrere Dateien auswählen und hochladen. Erwartet: Eine Fortschrittsanzeige je Datei. *(folgt 3.5b)*
+- [ ] **7.2 Vorabprüfung Größe.** Handlung: Eine Datei über der Größengrenze auswählen. Erwartet: Die Datei wird vor dem Senden mit Grund abgewiesen, kein Upload startet. *(folgt 3.5b)*
+- [ ] **7.3 Vorabprüfung Speicher.** Handlung: Eine Datei auswählen, die größer als der freie Speicher des Space ist. Erwartet: Die Datei wird vor dem Senden abgewiesen. *(folgt 3.5b)*
+- [ ] **7.4 Wiederholung.** Handlung: Während eines Uploads das WLAN ausschalten, danach „Wiederholen“ antippen. Erwartet: Die Datei wird erneut gesendet und erscheint danach nur einmal in der Liste. *(folgt 3.5b)*
+- [ ] **7.5 Standort-Rückfrage pro Datei.** Handlung: Eine eigene Aufnahme mit Standort hochladen, deren Standort nicht entfernt werden kann. Erwartet: Rückfrage je Datei mit „Mit Standort hochladen“ und „Nicht hochladen“. *(folgt 3.5b)*
+- [ ] **7.6 Nicht hochladen.** Handlung: Bei 7.5 „Nicht hochladen“ wählen, bei einer zweiten Datei „Mit Standort hochladen“. Erwartet: Die erste Datei wird nicht übertragen, die zweite schon. *(folgt 3.5b)*
+- [ ] **7.7 Eigene Uploads zurückziehen.** Handlung: Den eigenen Upload zurückziehen. Erwartet: Kurze Bestätigung, danach verschwindet der Upload. Fremde Uploads lassen sich nicht zurückziehen. *(folgt 3.5b, Designentscheidung (e))*
+
+## 8 Gastgeber-Upload und Medien in der App (3.5c, folgt)
+
+- [ ] **8.1 Medien hinzufügen.** Handlung: Im laufenden Space Medien über die System-Fotoauswahl hinzufügen. Erwartet: Die Auswahl erscheint, die Kopie liegt im Space-Speicher, ohne Standort (Prüfung in 9.5). *(folgt 3.5c)*
+- [ ] **8.2 Uploader Gastgeber.** Handlung: Medien hinzufügen, dann die Liste ansehen. Erwartet: Die Medien tragen den Gastgeber als Uploader. *(folgt 3.5c)*
+- [ ] **8.3 Medien ansehen.** Handlung: Ein Medium aus der Liste im laufenden Space öffnen. Erwartet: Vorschau und Vollbild. *(folgt 3.5c)*
+- [ ] **8.4 Galerie bleibt getrennt.** Handlung: Die Galerie öffnen, nachdem Space-Medien hochgeladen wurden. Erwartet: Die Space-Medien erscheinen nicht in der Galerie. *(folgt 3.5c, Trennung nach KONZEPT)*
+
+## 9 Standort-Entfernung (Prüfung mit eigenen Kameraaufnahmen)
+
+- [ ] **9.1 Titelbild mit Standort.** Handlung: Eigenes Foto mit aktiviertem Standort als Titelbild wählen, speichern. Erwartet: Das Titelbild wird übernommen. *(seit 3.2, PR #30 Punkt 10, Titelbild-Pipeline)*
+- [ ] **9.2 [Entwickler] Titelbild ohne Standort.** Handlung: Titelbild im Space-Speicher des Debug-Builds prüfen (`adb shell run-as …`, dann ExifTool). Erwartet: Keine GPS-Angaben in EXIF und XMP. *(seit 3.2, Entwickler-Prüfung)*
+- [ ] **9.3 Nicht bereinigbares Titelbild.** Handlung: Titelbild mit einem Standort wählen, den die Bereinigung nicht entfernen kann (falls verfügbar). Erwartet: Meldung mit Hinweis. Eine Einwilligungsoption gibt es nicht. *(seit 3.2, PR #30 Punkt 11)*
+- [ ] **9.4 Video mit Standort.** Handlung: Eigenes Video mit Standort über den Browser hochladen. Erwartet: Der Standort ist entfernt, das Video bleibt abspielbar. *(seit 3.1b, folgt Upload im Browser 3.5b)*
+- [ ] **9.5 [Entwickler] Foto mit Standort.** Handlung: Eigenes Foto mit Standort über den Gast-Upload oder 8.1 hochladen, dann die Kopie prüfen. Erwartet: Keine GPS-Angaben, die Bildgröße bleibt erhalten. *(seit 3.1b, folgt 3.5b/3.5c, Entwickler-Prüfung)*
+- [ ] **9.6 Markierung „Standort enthalten“.** Handlung: Bei nicht bereinigbarer Datei „Mit Standort hochladen“ wählen. Erwartet: Die Datei trägt in der Medienliste die Markierung „Standort enthalten“. *(folgt 3.5b, ADR 0015)*
+
+## 10 Ende bzw. Aufbewahrung bzw. Verlängern bzw. Vorlage (3.6, folgt)
+
+Die Hinweise für Gäste zum Ende stehen in Abschnitt 6 (Vorgabe 3.5a). Die Punkte hier betreffen den Gastgeber, die Aufbewahrung und das Verlängern.
+
+- [ ] **10.1 Aufbewahrung nach dem Ende.** Handlung: Nach dem Ende die Medien ansehen. Erwartet: Die Medien bleiben nur in der App, die Aufbewahrungsfrist steht dabei. *(folgt 3.6)*
+- [ ] **10.2 Erinnerung mit Aktionen.** Handlung: Die Erinnerung zum Ende der Aufbewahrung öffnen. Erwartet: Vorauswahl „nichts behalten“, „Alles auswählen“ und „Nichts auswählen“ sind vorhanden. *(folgt 3.6)*
+- [ ] **10.3 Jetzt löschen mit Bestätigung.** Handlung: In der Erinnerung „Jetzt löschen“ wählen. Erwartet: Erst nach einer Bestätigung wird gelöscht. *(folgt 3.6, Designentscheidung (a))*
+- [ ] **10.4 Sofort löschen.** Handlung: Aufbewahrung „Sofort löschen“ wählen, den Space beenden. Erwartet: Die Erinnerung kommt kurz vor dem Ende. *(folgt 3.6, Designentscheidung (f))*
+- [ ] **10.5 Automatische Löschung.** Handlung: Die Aufbewahrungsfrist abwarten. Erwartet: Die nicht behaltenen Medien sind gelöscht, der Speicher ist frei. *(folgt 3.6)*
+- [ ] **10.6 Gastgeber-Benachrichtigung.** Handlung: Auf eine Benachrichtigung 10 Minuten vor dem Ende und auf eine beim Ende warten. Erwartet: Zwei Benachrichtigungen zum richtigen Zeitpunkt. *(folgt 3.6)*
+- [ ] **10.7 Hinweis im Beenden-Dialog.** Handlung: „Space beenden“ wählen. Erwartet: Der Dialog weist auf die Folgen für die Medien und die Aufbewahrung hin. *(folgt 3.6)*
+- [ ] **10.8 Verlängern.** Handlung: Während der Laufzeit den Space verlängern. Erwartet: Die neue Frist gilt. Gäste sehen ein Banner mit der Verlängerung. *(folgt 3.6)*
+- [ ] **10.9 Als Vorlage für neuen Space.** Handlung: Nach dem Ende „Als Vorlage für neuen Space“ wählen. Erwartet: Ein neuer Entwurf mit den Einstellungen des Space, ohne Medien. *(folgt 3.6)*
+- [ ] **10.10 Beendeter Space bleibt geschlossen.** Handlung: Einen beendeten Space öffnen und versuchen, ihn zu starten oder zu verlängern. Erwartet: Beides ist nicht möglich, der Space bleibt geschlossen. *(folgt 3.6, Nutzerentscheidung „a“ vom 21.10.2026)*
+
+## 11 Übernahme in die Galerie (3.7, folgt)
+
+- [ ] **11.1 Ausgewählte Medien übernehmen.** Handlung: Medien im Space auswählen, übernehmen. Erwartet: Nur die ausgewählten Medien liegen in `Pictures/Emberlight/<Space>` und erscheinen in der Galerie. *(folgt 3.7)*
+- [ ] **11.2 Über/Lizenzen.** Handlung: „Über/Lizenzen“ öffnen. Erwartet: Lizenzhinweise aller mitgelieferten Bibliotheken, der Hinweis auf GPL-3.0, ein Link auf den Quellcode, die OFL-Hinweise für Fraunces und Inter. *(folgt 3.7)*
+- [ ] **11.3 Release v0.3.0.** Handlung: Die signierte Endversion installieren, SHA-256 prüfen, die App starten. Erwartet: Die Prüfsumme stimmt, die Endversion ersetzt die Vorab-Version. *(folgt 3.7)*

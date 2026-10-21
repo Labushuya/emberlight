@@ -16,6 +16,10 @@ sealed interface RunState {
         val startedAtMillis: Long,
         /** Geplantes Ende in UTC-Millisekunden, `null` ohne Ende (Debug-Einstieg). */
         val expiresAtMillis: Long?,
+        /** `true`, wenn der feste Port belegt war und der Server auf einem neuen läuft. Gäste brauchen dann den neuen QR-Code (Paket 3.4). */
+        val addressChanged: Boolean = false,
+        /** `true`, wenn die Einladung nach einem Neustart neu entstand, weil das Geheimnis nicht lesbar war (ADR 0018). */
+        val inviteRenewed: Boolean = false,
     ) : RunState
 
     /**

@@ -26,6 +26,8 @@ import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
+import io.github.labushuya.emberlight.share.space.participants.AndroidKeyStoreInviteSecretCipher
+import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
 import io.github.labushuya.emberlight.share.space.run.ActiveSpan
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
 import io.github.labushuya.emberlight.share.space.run.PrefsRunBeatStore
@@ -104,6 +106,13 @@ class SpaceServerService : Service() {
                 runner.submit(RunCommand.ConfirmNetwork)
                 return START_STICKY
             }
+
+            ACTION_INVITE_SETTLED -> {
+                runner.submit(RunCommand.InviteSettled)
+                // Ohne laufenden Space gibt es nichts zu quittieren. Der Dienst endet dann gleich wieder.
+                if (runState.value is RunState.Idle) stopSelf(startId)
+                return START_STICKY
+            }
         }
         // Vordergrund zuerst: Android verlangt den Aufruf kurz nach startForegroundService. Auch unbekannte Aufrufe
         // erfüllen diese Pflicht, bevor der Dienst wieder endet.
@@ -168,11 +177,18 @@ class SpaceServerService : Service() {
             }
             serverSetupProvider()?.let { return it }
             val record = runs.findActive()?.takeIf { it.id == spaceId } ?: return null
-            return record.toServerSetup()
+            return record.toServerSetup(port = runs.portOf(spaceId))
         }
 
         override suspend fun activeSpan(): ActiveSpan? =
             runs.findActive()?.let { ActiveSpan(it.id, it.startedAt, it.expiresAt) }
+
+        override suspend fun savePort(
+            spaceId: SpaceId,
+            port: Int,
+        ) {
+            runs.savePort(spaceId, port)
+        }
 
         override fun batteryExempt(): Boolean = batteryExemptFactory(this@SpaceServerService)
 
@@ -180,8 +196,13 @@ class SpaceServerService : Service() {
             setup: ServerSetup,
             closure: SpaceClosure,
         ): OpenedServer {
-            val runtime = SpaceRuntime.open(applicationContext, setup)
-            return OpenedServer(serverFactory(runtime, setup, closure), release = {})
+            val runtime = SpaceRuntime.open(applicationContext, setup, inviteCipherFactory())
+            ActiveSpaces.publish(runtime.access)
+            return OpenedServer(
+                serverFactory(runtime, setup, closure),
+                release = { ActiveSpaces.clear(setup.spaceId) },
+                inviteRenewed = runtime.access.inviteRenewed,
+            )
         }
 
         override fun currentWifi(): WifiAddress? = networkProvider.currentAddress()
@@ -277,14 +298,16 @@ class SpaceServerService : Service() {
     }
 
     /** Einrichtung eines gespeicherten, aktiven Space für den Server. */
-    private fun SpaceRecord.toServerSetup(): ServerSetup =
+    private fun SpaceRecord.toServerSetup(port: Int?): ServerSetup =
         ServerSetup(
             spaceId = id,
             spaceName = settings.name,
+            colorIndex = settings.colorIndex,
             limits = SpaceLimits(storageLimitBytes = settings.storageLimitBytes),
             startedAtMillis = startedAt,
             expiresAtMillis = expiresAt,
             persisted = true,
+            port = port,
         )
 
     /**
@@ -490,6 +513,7 @@ class SpaceServerService : Service() {
         const val ACTION_STOP = "io.github.labushuya.emberlight.share.server.STOP"
         const val ACTION_EXPIRE = "io.github.labushuya.emberlight.share.server.EXPIRE"
         const val ACTION_CONFIRM_NETWORK = "io.github.labushuya.emberlight.share.server.CONFIRM_NETWORK"
+        const val ACTION_INVITE_SETTLED = "io.github.labushuya.emberlight.share.server.INVITE_SETTLED"
         const val EXTRA_PORT = "io.github.labushuya.emberlight.share.server.PORT"
         const val EXTRA_SPACE_ID = "io.github.labushuya.emberlight.share.server.SPACE_ID"
         const val EXTRA_RESUME = "io.github.labushuya.emberlight.share.server.RESUME"
@@ -527,13 +551,16 @@ class SpaceServerService : Service() {
         @Volatile
         var serverSetupProvider: () -> ServerSetup? = { null }
 
+        // Verschlüsselung des Einladungsgeheimnisses (ADR 0018). Tests setzen ein Fake, weil Robolectric keinen Keystore hat.
+        internal var inviteCipherFactory: () -> InviteSecretCipher = { AndroidKeyStoreInviteSecretCipher() }
+
         /** Test-Nähte. Produktion nutzt die Standardwerte. */
         internal var serverFactory: (SpaceRuntime, ServerSetup, SpaceClosure) -> LocalServer =
             { runtime, setup, closure ->
                 val gates = ServerGates()
                 KtorLocalServer(
-                    routes = spaceRoutes(runtime.spaceVault, setup.spaceName, gates),
-                    authorizer = runtime.authorizer,
+                    routes = serverRoutes(runtime.access, runtime.guestAssets, gates),
+                    authorizer = runtime.access.live,
                     requestLog = { line -> if (setup.debugLogging) Log.i(TAG, line) },
                     gates = gates,
                     closure = closure,
@@ -583,6 +610,10 @@ class SpaceServerService : Service() {
         /** Bestätigt den Wechsel in ein neues WLAN, wenn der Dienst darauf wartet. */
         fun confirmNetworkIntent(context: Context): Intent =
             Intent(context, SpaceServerService::class.java).setAction(ACTION_CONFIRM_NETWORK)
+
+        /** Quittiert den Hinweis zur erneuerten Einladung. Kein Start, kein Vordergrund nötig. */
+        fun inviteSettledIntent(context: Context): Intent =
+            Intent(context, SpaceServerService::class.java).setAction(ACTION_INVITE_SETTLED)
 
         private fun minutesOf(event: PauseEvent): Long =
             (event.durationMillis + MILLIS_PER_MINUTE / 2) / MILLIS_PER_MINUTE

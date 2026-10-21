@@ -3,11 +3,16 @@ package io.github.labushuya.emberlight.share.server
 import android.annotation.SuppressLint
 import android.content.Context
 import io.github.labushuya.emberlight.share.space.Principal
+import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
+import io.github.labushuya.emberlight.share.space.management.SpaceAccentPalette
+import io.github.labushuya.emberlight.share.space.participants.AndroidKeyStoreInviteSecretCipher
+import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
+import io.github.labushuya.emberlight.share.space.participants.Secrets
 import java.io.File
 
 /** Ein Teilnehmer des Space mit dem Hash seines Zugangsschlüssels (ADR 0013). Der Schlüssel selbst bleibt außen. */
@@ -30,8 +35,8 @@ data class ParticipantSeed(
  * Einrichtung eines Serverlaufs: welcher Space, welche Grenzen, welche Teilnehmer. Der Dienst startet nur mit einer
  * Einrichtung (ADR 0014, ein aktiver Space pro Serverlauf).
  *
- * Ohne Teilnehmer lehnt der Server jede Anfrage ab ([RequestAuthorizer.DenyAll]). So ist der Stand bis Paket 3.4: Der
- * Gastgeber bedient den Space nur über die App, Gäste kommen nicht hinein (ADR 0017).
+ * Teilnehmer kommen aus der Datenbank (ADR 0018). [participants] ist nur für den Debug-Einstieg gedacht und wird vor dem
+ * Start dort eingetragen. Der Gastgeber bekommt beim Start einen frischen Token, Gäste treten über die Einladung bei.
  *
  * [startedAtMillis], [expiresAtMillis] und [persisted] gehören zum Betrieb (Paket 3.3). Der Debug-Einstieg setzt sie nicht.
  */
@@ -47,31 +52,27 @@ data class ServerSetup(
     val expiresAtMillis: Long? = null,
     /** `true`, wenn der Space in `spaces.db` steht und Start, Ende und Pausen dort festgehalten werden. */
     val persisted: Boolean = false,
-) {
-    internal fun authorizer(): RequestAuthorizer =
-        if (participants.isEmpty()) {
-            RequestAuthorizer.DenyAll
-        } else {
-            TokenAuthorizer(
-                participants.associate { seed -> hexToBytes(seed.tokenSha256Hex) to seed.principal },
-            )
-        }
-
-    private fun hexToBytes(hex: String): ByteArray =
-        ByteArray(hex.length / 2) { i -> hex.substring(2 * i, 2 * i + 2).toInt(16).toByte() }
-}
+    /** Fester Port des Space (ADR 0017, Paket 3.4). `null` vor dem ersten Start, dann wählt der Server einen freien. */
+    val port: Int? = null,
+    /** Farbe des Space als Index in die feste Palette (Paket 3.4, ADR 0018). */
+    val colorIndex: Int = 0,
+)
 
 /**
- * Laufzeit eines Serverlaufs: Space-Vault (Speicher und Index) und Zugriffsprüfung. Der Index ist die prozessweit geteilte
+ * Laufzeit eines Serverlaufs: die Sitzung mit Vault, Zugriffsprüfung und Einladung. Der Index ist die prozessweit geteilte
  * Datenbank ([SpacesDatabase.shared]). Sie gehört nicht dem Serverlauf und wird hier nicht geschlossen (Paket 3.3).
  */
 internal class SpaceRuntime private constructor(
-    val spaceVault: SpaceVault,
-    val authorizer: RequestAuthorizer,
+    val access: SpaceAccess,
+    /** Statische Gäste-Dateien aus den App-Assets. */
+    val guestAssets: GuestAssets,
 ) {
+    val spaceVault: SpaceVault get() = access.vault
+
     companion object {
         /**
-         * Öffnet den Space, registriert die Teilnehmer und räumt Reste eines Absturzes auf.
+         * Öffnet den Space, registriert die Teilnehmer und räumt Reste eines Absturzes auf. Danach stehen Gastgeber und
+         * Einladung fest. Die Einladung bleibt über Pausen im selben Prozess gleich (ADR 0013, Netz).
          *
          * Der Mindest-Restspeicher nutzt [File.getUsableSpace]. Das zählt nur freien Speicher ohne löschbare Caches. Das
          * ist der konservative Wert: Er unterschätzt den Platz eher, als ihn zu überschätzen.
@@ -80,11 +81,19 @@ internal class SpaceRuntime private constructor(
         suspend fun open(
             context: Context,
             setup: ServerSetup,
+            inviteCipher: InviteSecretCipher = AndroidKeyStoreInviteSecretCipher(),
         ): SpaceRuntime {
             val spacesDir = SpacesDatabase.spacesDirectory(context)
             val probe = StorageProbe { File(spacesDir, setup.spaceId.value).usableSpace }
             val vault =
-                SpaceVault.open(SpacesDatabase.shared(context), spacesDir, setup.spaceId, setup.limits, probe)
+                SpaceVault.open(
+                    SpacesDatabase.shared(context),
+                    spacesDir,
+                    setup.spaceId,
+                    setup.limits,
+                    probe,
+                    inviteCipher,
+                )
             setup.participants.forEach { seed ->
                 vault.registerParticipant(
                     seed.principal.participantId,
@@ -94,7 +103,28 @@ internal class SpaceRuntime private constructor(
                 )
             }
             vault.recover()
-            return SpaceRuntime(vault, setup.authorizer())
+            // Der Token des Gastgebers ist zufällig und nur im Speicher. In der Datenbank steht sein Hash (ADR 0018). Mit einem
+            // Gastgeber aus dem Debug-Einstieg gilt dessen Hash. Ein neuer Token würde den Test-Token des PCs ungültig machen.
+            val hostToken =
+                if (setup.participants.any { it.principal.role == Role.HOST }) {
+                    null
+                } else {
+                    Secrets.generate().also { vault.ensureHost(Secrets.hashHex(it)) }
+                }
+            val invite = vault.ensureInvite()
+            val access =
+                SpaceAccess(
+                    vault = vault,
+                    spaceId = setup.spaceId,
+                    spaceName = setup.spaceName,
+                    live = LiveAuthorizer(vault.credentials()),
+                    uploads = ActiveUploads(),
+                    invite = invite.secret,
+                    inviteRenewed = invite.renewed,
+                    accentColor = SpaceAccentPalette.hexAt(setup.colorIndex),
+                    hostToken = hostToken,
+                )
+            return SpaceRuntime(access, AssetGuestAssets(context.applicationContext.assets))
         }
     }
 }

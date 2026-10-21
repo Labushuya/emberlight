@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title data-i18n="title">emberlight</title>
+    <link rel="stylesheet" href="/guest.css">
+  </head>
+  <body>
+    <main class="card">
+      <h1 id="heading" data-i18n="heading">Join the space</h1>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section id="join-section" hidden>
+        <p id="preview" class="preview" aria-live="polite" hidden></p>
+        <p class="note" data-i18n="note">Connection runs directly over the Wi-Fi to the host's phone, not over the internet. Encryption will follow in a later version.</p>
+        <form id="join-form" novalidate>
+          <label for="name" data-i18n="nameLabel">Your name</label>
+          <input id="name" name="name" type="text" maxlength="96" autocomplete="off" autocapitalize="words" required aria-describedby="name-error">
+          <p id="name-error" class="error" role="alert" hidden></p>
+          <button type="submit" id="join-button" data-i18n="join">Join</button>
+        </form>
+      </section>
+
+      <section id="joined-section" hidden>
+        <p id="welcome" class="welcome"></p>
+        <p id="space-name" class="space-name"></p>
+        <p class="note" data-i18n="joinedNote">Uploads and downloads will be available in the next version of this page.</p>
+        <button type="button" id="leave-button" class="secondary" data-i18n="leave">Leave</button>
+      </section>
+    </main>
+    <script src="/guest.js"></script>
+  </body>
+</html>

@@ -50,6 +50,9 @@ class SpaceRunningBannerTest {
                     onAcknowledgePause = {},
                     onSetup = {},
                     onResume = { resumed++ },
+                    onRemoveRequest = {},
+                    onRotateRequest = {},
+                    onAcknowledgeInvite = {},
                 )
             }
         }
@@ -71,6 +74,9 @@ class SpaceRunningBannerTest {
                     onAcknowledgePause = {},
                     onSetup = {},
                     onResume = {},
+                    onRemoveRequest = {},
+                    onRotateRequest = {},
+                    onAcknowledgeInvite = {},
                 )
             }
         }
@@ -93,6 +99,9 @@ class SpaceRunningBannerTest {
                     onAcknowledgePause = {},
                     onSetup = {},
                     onResume = {},
+                    onRemoveRequest = {},
+                    onRotateRequest = {},
+                    onAcknowledgeInvite = {},
                 )
             }
         }
@@ -111,6 +120,9 @@ class SpaceRunningBannerTest {
                     onAcknowledgePause = {},
                     onSetup = {},
                     onResume = {},
+                    onRemoveRequest = {},
+                    onRotateRequest = {},
+                    onAcknowledgeInvite = {},
                 )
             }
         }

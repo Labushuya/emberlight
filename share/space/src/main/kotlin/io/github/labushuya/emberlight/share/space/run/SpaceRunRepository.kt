@@ -36,6 +36,17 @@ class SpaceRunRepository(
     private val spaces = database.spaces()
     private val pauses = database.pauses()
 
+    /** Fester Port des Space, `null` vor dem ersten Start (ADR 0017, Paket 3.4). */
+    suspend fun portOf(id: SpaceId): Int? = spaces.find(id.value)?.port
+
+    /** Speichert den gebundenen Port. Gilt bei jedem späteren Start des Space. */
+    suspend fun savePort(
+        id: SpaceId,
+        port: Int,
+    ) {
+        spaces.setPort(id.value, port)
+    }
+
     /** Der aktive Space oder `null`. Die Oberfläche zeigt damit den laufenden Space. */
     fun observeActive(): Flow<SpaceRecord?> = spaces.observeActive().map { row -> row?.toSpaceRecord() }
 

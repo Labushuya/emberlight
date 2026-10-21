@@ -285,7 +285,6 @@
     <string name="space_running_remaining_m">%1$d min</string>
     <string name="space_running_remaining_hm">%1$d h %2$d min</string>
     <string name="space_running_address_label">Address on the Wi-Fi</string>
-    <string name="space_running_address_hint">QR code follows. Until then guests type the address into the browser.</string>
     <string name="space_running_storage_label">Storage</string>
     <string name="space_running_storage_value">%1$s of %2$s used</string>
     <string name="space_running_storage_warning">Storage is 80 % or more full. Uploads will soon be refused.</string>
@@ -311,4 +310,25 @@
     <string name="space_interrupted_text">emberlight was stopped in the background. Guests can reach the space again once you resume it.</string>
     <string name="space_interrupted_resume">Resume</string>
     <string name="space_running_status_interrupted">Interrupted · resume needed</string>
+    <string name="space_invite_title">Invitation</string>
+    <string name="space_invite_qr_description">QR code to join the space</string>
+    <string name="space_invite_hint">Guests scan the code or open the link in the browser on the same Wi-Fi.</string>
+    <string name="space_invite_share">Share link</string>
+    <string name="space_invite_copy">Copy</string>
+    <string name="space_invite_copied">Link copied</string>
+    <string name="space_invite_rotate">Renew invitation</string>
+    <string name="space_invite_rotate_title">Renew the invitation?</string>
+    <string name="space_invite_rotate_text">The current QR code and link stop working. Guests who have already joined stay in the space.</string>
+    <string name="space_invite_rotate_confirm">Renew</string>
+    <string name="space_invite_address_changed">New address. Guests need the new QR code.</string>
+    <string name="space_invite_renewed">Invitation was renewed. Please share the new QR code.</string>
+    <string name="space_invite_renewed_ok">Got it</string>
+    <string name="space_participants_title">Participants (%1$d)</string>
+    <string name="space_participant_host">Host</string>
+    <string name="space_participant_remove">Remove</string>
+    <string name="space_participant_remove_title">Remove %1$s?</string>
+    <string name="space_participant_remove_text">Access ends at once and running uploads are cancelled. Uploads stay in the space and are marked as removed.</string>
+    <string name="space_participant_remove_uploads">Also delete all uploads from %1$s</string>
+    <string name="space_participant_remove_confirm">Remove</string>
+    <string name="space_running_media_uploader_removed">%1$s (removed)</string>
 </resources>

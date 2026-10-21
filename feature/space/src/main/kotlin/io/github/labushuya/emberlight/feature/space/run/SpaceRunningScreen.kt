@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -49,6 +50,7 @@ import io.github.labushuya.emberlight.share.server.RunState
 import io.github.labushuya.emberlight.share.space.MediaRow
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
+import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
 
 /**
@@ -66,6 +68,8 @@ internal fun SpaceRunningScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showEndDialog by rememberSaveable { mutableStateOf(false) }
+    var removing by remember { mutableStateOf<ParticipantInfo?>(null) }
+    var rotating by rememberSaveable { mutableStateOf(false) }
     // Ein Tippen auf „Beenden“ in der Benachrichtigung öffnet nur die Bestätigung, nie das Ende selbst.
     LaunchedEffect(confirmEnd) {
         if (confirmEnd) showEndDialog = true
@@ -98,7 +102,29 @@ internal fun SpaceRunningScreen(
                     ?.value
                     ?.let(onSetup)
             },
+            onRemoveRequest = { removing = it },
+            onRotateRequest = { rotating = true },
+            onAcknowledgeInvite = viewModel::acknowledgeInvite,
             modifier = Modifier.padding(padding),
+        )
+    }
+    removing?.let { target ->
+        RemoveParticipantDialog(
+            participant = target,
+            onConfirm = { deleteUploads ->
+                viewModel.removeGuest(target, deleteUploads)
+                removing = null
+            },
+            onDismiss = { removing = null },
+        )
+    }
+    if (rotating) {
+        RotateInviteDialog(
+            onConfirm = {
+                viewModel.rotateInvite()
+                rotating = false
+            },
+            onDismiss = { rotating = false },
         )
     }
     if (showEndDialog) {
@@ -130,6 +156,9 @@ internal fun SpaceRunningContent(
     onAcknowledgePause: () -> Unit,
     onSetup: () -> Unit,
     onResume: () -> Unit,
+    onRemoveRequest: (ParticipantInfo) -> Unit,
+    onRotateRequest: () -> Unit,
+    onAcknowledgeInvite: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -187,21 +216,29 @@ internal fun SpaceRunningContent(
 
             val address = (state.runState as? RunState.Running)
             if (address != null) {
-                Text(
-                    text = stringResource(R.string.space_running_address_label),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = "http://${address.address.ipv4}:${address.port}",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = stringResource(R.string.space_running_address_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                val link = state.invite
+                if (link != null) {
+                    InviteSection(
+                        link = link,
+                        addressChanged = state.addressChanged,
+                        onRotate = onRotateRequest,
+                        inviteRenewed = state.inviteRenewed,
+                        onAcknowledgeInvite = onAcknowledgeInvite,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.space_running_address_label),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = "http://${address.address.ipv4}:${address.port}",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Spacer(Modifier.height(24.dp))
+                ParticipantsSection(participants = state.participants, onRemove = onRemoveRequest)
                 Spacer(Modifier.height(16.dp))
             }
 
@@ -389,7 +426,7 @@ private fun MediaLine(
             text =
                 stringResource(
                     R.string.space_running_media_item,
-                    row.uploaderName ?: stringResource(R.string.space_running_media_unknown),
+                    mediaUploaderText(row),
                     sizeText,
                 ),
             style = MaterialTheme.typography.bodyMedium,
@@ -403,6 +440,13 @@ private fun MediaLine(
             )
         }
     }
+}
+
+/** Name des Uploaders. Entfernte Teilnehmer bleiben sichtbar, mit dem Vermerk âentferntâ (ADR 0018). */
+@Composable
+private fun mediaUploaderText(row: MediaRow): String {
+    val name = row.uploaderName ?: return stringResource(R.string.space_running_media_unknown)
+    return if (row.uploaderRevoked) stringResource(R.string.space_running_media_uploader_removed, name) else name
 }
 
 @Composable

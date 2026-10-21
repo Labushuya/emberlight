@@ -32,6 +32,13 @@ class SpaceRunControllerTest {
     }
 
     @Test
+    fun acknowledgingTheRenewedInviteSendsTheSettledCommand() {
+        SpaceRunController(context).acknowledgeInvite()
+
+        assertEquals(SpaceServerService.ACTION_INVITE_SETTLED, shadow.nextStartedService.action)
+    }
+
+    @Test
     fun expireSendsTheExpiryCommand() {
         SpaceRunController(context).expire()
 

@@ -39,6 +39,99 @@ class SpaceRunnerTest {
     private val expires = START + HOUR
 
     @Test
+    fun theFixedPortOfTheSpaceIsUsedAndNotSavedAgain() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup().copy(port = FIXED_PORT)
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            val running = env.state.value as RunState.Running
+            assertEquals(FIXED_PORT, running.port)
+            assertFalse(running.addressChanged)
+            assertTrue(env.host.savedPorts.isEmpty())
+        }
+
+    @Test
+    fun aBusyFixedPortMovesTheSpaceToANewAddressAndSavesIt() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup().copy(port = FIXED_PORT)
+            env.busyPort = FIXED_PORT
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            val running = env.state.value as RunState.Running
+            assertEquals(FAKE_PORT, running.port)
+            assertTrue("Die Adressänderung muss sichtbar sein.", running.addressChanged)
+            assertEquals(listOf(FAKE_PORT), env.host.savedPorts)
+        }
+
+    @Test
+    fun aRenewedInviteIsShownAsAStatusOfTheRunningSpace() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.inviteRenewed = true
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertTrue((env.state.value as RunState.Running).inviteRenewed)
+        }
+
+    @Test
+    fun aSettledRenewedInviteHidesTheHintAndTheHeartbeatDoesNotBringItBack() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.inviteRenewed = true
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.submit(RunCommand.InviteSettled)
+            runCurrent()
+            assertFalse((env.state.value as RunState.Running).inviteRenewed)
+
+            advanceTimeBy(SpaceRunPolicy.HEARTBEAT_INTERVAL_MS)
+            runCurrent()
+
+            val running = env.state.value as RunState.Running
+            assertFalse(running.inviteRenewed)
+            assertEquals(1, env.servers.single().starts)
+        }
+
+    @Test
+    fun settlingWithoutARenewedInviteChangesNothing() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            val before = env.state.value
+
+            env.submit(RunCommand.InviteSettled)
+            runCurrent()
+
+            assertEquals(before, env.state.value)
+        }
+
+    @Test
+    fun aFirstStartWithoutAFixedPortSavesTheBoundPort() =
+        runTest {
+            val env = Env(this)
+            env.setup = persistedSetup()
+
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertEquals(listOf(FAKE_PORT), env.host.savedPorts)
+            assertFalse((env.state.value as RunState.Running).addressChanged)
+        }
+
+    @Test
     fun aStartBindsTheServerTakesTheLocksAndSchedulesTheEnd() =
         runTest {
             val env = Env(this)
@@ -567,6 +660,10 @@ class SpaceRunnerTest {
         var wifiNow: WifiAddress? = WIFI
         var setup: ServerSetup? = null
         var failStart = false
+
+        /** Ein Port, der belegt ist: Bindung schlägt fehl. */
+        var busyPort: Int? = null
+        var inviteRenewed: Boolean = false
         private val stateFlow = MutableStateFlow<RunState>(RunState.Idle)
         val state: StateFlow<RunState> get() = stateFlow.asStateFlow()
         val beats = MemoryRunBeatStore()
@@ -612,6 +709,15 @@ class SpaceRunnerTest {
 
     private inner class FakeHost : RunHost {
         lateinit var env: Env
+        val savedPorts = mutableListOf<Int>()
+
+        override suspend fun savePort(
+            spaceId: SpaceId,
+            port: Int,
+        ) {
+            savedPorts += port
+        }
+
         var locksAcquired = 0
         var locksReleased = 0
         var locksHeldNow = 0
@@ -642,7 +748,7 @@ class SpaceRunnerTest {
         override suspend fun openServer(
             setup: ServerSetup,
             closure: SpaceClosure,
-        ): OpenedServer = OpenedServer(env.newServer(), release = {})
+        ): OpenedServer = OpenedServer(env.newServer(), release = {}, inviteRenewed = env.inviteRenewed)
 
         override fun currentWifi(): WifiAddress? = env.wifiNow
 
@@ -711,8 +817,10 @@ class SpaceRunnerTest {
         override suspend fun start(config: ServerConfig): Int {
             startCount.incrementAndGet()
             if (env.failStart || refuseStarts) throw IllegalStateException("Bindung verweigert")
-            running.value = ServerState.Running(FAKE_PORT)
-            return FAKE_PORT
+            if (config.port != 0 && config.port == env.busyPort) throw IllegalStateException("Port belegt")
+            val port = if (config.port != 0) config.port else FAKE_PORT
+            running.value = ServerState.Running(port)
+            return port
         }
 
         override suspend fun stop() {
@@ -748,6 +856,7 @@ class SpaceRunnerTest {
         const val MINUTE = 60_000L
         const val HOUR = 60 * MINUTE
         const val FAKE_PORT = 8787
+        const val FIXED_PORT = 5_000
         val WIFI = WifiAddress("192.168.1.20", 24, gateway = "192.168.1.1")
     }
 }

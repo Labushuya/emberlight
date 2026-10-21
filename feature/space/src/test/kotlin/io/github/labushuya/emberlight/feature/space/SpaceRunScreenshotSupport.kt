@@ -2,17 +2,24 @@ package io.github.labushuya.emberlight.feature.space
 
 import android.os.Looper
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
+import io.github.labushuya.emberlight.feature.space.run.InviteLink
 import io.github.labushuya.emberlight.feature.space.run.SpaceRunningContent
 import io.github.labushuya.emberlight.feature.space.run.SpaceRunningUiState
 import io.github.labushuya.emberlight.feature.space.run.StartOutcome
@@ -29,9 +36,12 @@ import io.github.labushuya.emberlight.share.server.PauseCause
 import io.github.labushuya.emberlight.share.server.RunState
 import io.github.labushuya.emberlight.share.server.WifiAddress
 import io.github.labushuya.emberlight.share.space.MediaRow
+import io.github.labushuya.emberlight.share.space.ParticipantId
+import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
+import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
 import org.junit.After
 import org.junit.Before
@@ -123,6 +133,9 @@ abstract class SpaceRunScreenshotSupport {
             onAcknowledgePause = {},
             onSetup = {},
             onResume = {},
+            onRemoveRequest = {},
+            onRotateRequest = {},
+            onAcknowledgeInvite = {},
             modifier = Modifier.fillMaxSize(),
         )
     }
@@ -142,7 +155,10 @@ abstract class SpaceRunScreenshotSupport {
             nowMillis = SpaceFixtures.NOW,
         )
 
-    protected fun runningState(): RunState.Running =
+    protected fun runningState(
+        addressChanged: Boolean = false,
+        inviteRenewed: Boolean = false,
+    ): RunState.Running =
         RunState.Running(
             spaceId = SPACE_ID,
             spaceName = SPACE_NAME,
@@ -150,6 +166,8 @@ abstract class SpaceRunScreenshotSupport {
             address = WifiAddress("192.168.1.20", 24, "192.168.1.1"),
             startedAtMillis = SpaceFixtures.NOW - HOUR,
             expiresAtMillis = SpaceFixtures.NOW + 2 * HOUR,
+            addressChanged = addressChanged,
+            inviteRenewed = inviteRenewed,
         )
 
     protected fun pausedNetworkChanged(): RunState.Paused =
@@ -182,6 +200,45 @@ abstract class SpaceRunScreenshotSupport {
             MediaRow("m2", "video/mp4", 120 * MIB, SpaceFixtures.NOW - 30 * 60_000L, "Tom", false),
             MediaRow("m3", "image/png", 2 * MIB, SpaceFixtures.NOW - 50 * 60_000L, null, true),
         )
+
+    /** Zustand des laufenden Space mit Einladung und Teilnehmern (Paket 3.4). */
+    protected fun hostState(
+        addressChanged: Boolean = false,
+        inviteRenewed: Boolean = false,
+    ): SpaceRunningUiState =
+        state(usedBytes = 1 * GIB, runState = runningState(addressChanged, inviteRenewed)).copy(
+            invite = InviteLink.of("192.168.1.20", 8787, INVITE),
+            participants = participants(),
+        )
+
+    /** Teilnehmer mit festen Kennungen. Gastgeberin zuerst, dann zwei GÃ¤ste. */
+    protected fun participants(): List<ParticipantInfo> =
+        listOf(
+            ParticipantInfo(ParticipantId(HOST_ID), "Lena", Role.HOST, SpaceFixtures.NOW - HOUR),
+            ParticipantInfo(ParticipantId(GUEST_ID), "Tom", Role.GUEST, SpaceFixtures.NOW - HOUR / 2),
+            ParticipantInfo(ParticipantId(OTHER_ID), "Mia", Role.GUEST, SpaceFixtures.NOW - HOUR / 4),
+        )
+
+    /** Dialoginhalt mit Titel, ohne Dialogfenster. Die Goldens zeigen so den Aufbau. */
+    @Composable
+    protected fun DialogBody(
+        title: String,
+        body: @Composable () -> Unit,
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Surface(
+                shape = AlertDialogDefaults.shape,
+                color = AlertDialogDefaults.containerColor,
+                modifier = Modifier.padding(16.dp),
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(text = title, style = MaterialTheme.typography.headlineSmall)
+                    Spacer(Modifier.height(16.dp))
+                    body()
+                }
+            }
+        }
+    }
 
     /** Fehler des Startversuchs als Inhalt, ohne Dialogfenster. Der Dialog selbst hat eine Abdunkelung. */
     protected fun captureOutcome(
@@ -225,5 +282,11 @@ abstract class SpaceRunScreenshotSupport {
     private companion object {
         val SPACE_ID: SpaceId = SpaceId.parse(SpaceFixtures.ID_WANDERUNG)!!
         const val SPACE_NAME = "Wanderung am Sonntag"
+
+        /** Festes Geheimnis für die Goldens, 43 Zeichen wie der echte Schlüssel. */
+        const val INVITE = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ"
+        const val HOST_ID = "HHHHHHHHHHHHHHHHHHHHHH"
+        const val GUEST_ID = "GGGGGGGGGGGGGGGGGGGGGG"
+        const val OTHER_ID = "MMMMMMMMMMMMMMMMMMMMMM"
     }
 }

@@ -285,3 +285,16 @@ Offen: Die Messung zeigt, dass die Verbindung nach der Antwort oft schon 1 bis 4
 ## Nachtrag (20.10.2026): Neustart nach Prozess-Tod
 
 Die Entscheidung `START_NOT_STICKY` aus diesem ADR ist ersetzt. Der Dienst läuft mit `START_STICKY`. Ein Prozess-Tod beendet einen aktiven Space nicht, der Neustart entscheidet darüber (ADR 0017, Abschnitt „Neustart nach Prozess-Tod“). Die Festlegungen dieses ADR zur Datenbank und zur Server-API bleiben unverändert.
+
+## Nachtrag (20.10.2026): Paket 3.4, API und lingering close
+
+- **Neue Endpunkte**: `POST /api/v1/join` (`201`, `403 invite_invalid`, `409 name_taken` mit `suggestion`, `409 space_full`, `422 name_invalid` mit `reason`, `429 rate_limited`, `415`, `413`, `400`), `GET /api/v1/me`, `DELETE /api/v1/me` (`204`, Gastgeber `403`), `GET /api/v1/participants` und `DELETE /api/v1/participants/{id}?deleteUploads=true|false` (nur Gastgeber), `POST /api/v1/invite/rotate` (nur Gastgeber, Antwort mit der neuen Einladung).
+- **Liste**: Jeder Eintrag trägt `uploaderRemoved`. Entfernte Uploader bleiben sichtbar.
+- **Gäste-Seite**: Die statischen Dateien unter `/` sind die einzigen Pfade ohne Zugriffsprüfung. Sie tragen die CSP aus ADR 0018, Entscheidung 15.
+- **lingering close**: Jede frühe Ablehnung läuft über `refuseEarly`. Die Antwort trägt `Connection: close`. Danach wird der Körper bis 64 MiB oder 2 s verworfen. Die Grenze von 1 MiB aus dem Entwurf ist verworfen, weil die Statuszeile damit auf dem Windows-Loopback verloren ging. Die Gegenprobe ohne Verwerfen belegt die Ursache. Der Widerspruch „64 MiB in 0,14 s“ gegen „Stau ab ca. 1 MiB“ ist in [ADR 0018](0018-einladung-und-beitritt.md), Messung, aufgelöst.
+- **Version**: `SERVER_API_VERSION` bleibt 1. Die neuen Routen sind vor dem ersten Release mit Routen, daher keine Erhöhung.
+
+## Nachtrag (Paket 3.4b): Vorschau vor dem Beitritt
+
+- `POST /api/v1/join/preview` mit JSON-Körper `{"inviteSecret": "…"}`. Antwort `200` mit `{"spaceName", "accentColor"}`, `accentColor` ist ein Hex-Wert aus der festen Palette. Ohne gültiges Geheimnis `403 invite_invalid`. Fehlversuche zählen im selben Drosselungszähler wie der Beitritt. Körpergrenze, Content-Type-Prüfung und Torwache gelten wie beim Beitritt. Begründung und Abweichung zu ADR 0018, Entscheidung 19.
+- Die Pfade `join` und `join/preview` teilen die Ausnahme von der Zugriffsprüfung (`isInviteRequest`). Der Ablauf (`410`) gilt für beide.

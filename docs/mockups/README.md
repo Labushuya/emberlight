@@ -38,7 +38,7 @@ Die Abschnitte stehen in der Reihenfolge der HTML-Datei.
 
 | Abschnitt | Paket |
 |---|---|
-| W1 Beitritt (zeigt noch nicht den Hinweis aus (d), der in 3.4 kommt) | 3.4 |
+| W1 Beitritt (mit dem Hinweis aus (d), umgesetzt in 3.4; ohne Farbe und Titelbild vor dem Beitritt, siehe [ADR 0018](../adr/0018-einladung-und-beitritt.md)) | 3.4 |
 | W2 Hauptseite | 3.5 |
 | W3 Upload mit Standort-Rückfrage (zusätzlich Paket 3.1b) | 3.5 |
 | W4 Detail | 3.5 |

@@ -34,7 +34,7 @@ class ReleaseManifestConventionPlugin : Plugin<Project> {
                             group = "verification"
                             description = "Bricht ab, wenn R8 die Server-Pipeline aus dem Release entfernt hat."
                             this.mapping.set(variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE))
-                            requiredClasses.set(ReleaseMappingGuard.SERVER_PIPELINE_CLASSES)
+                            requiredSymbols.set(ReleaseMappingGuard.SERVER_PIPELINE_REQUIREMENTS)
                         }
                     target.tasks.named("check") { it.dependsOn(mapping) }
                 }

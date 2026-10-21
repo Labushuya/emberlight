@@ -11,6 +11,7 @@ import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
+import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
 import io.github.labushuya.emberlight.share.space.run.PauseEvent
 import io.github.labushuya.emberlight.share.space.run.RunClock
 import io.github.labushuya.emberlight.share.space.run.SpaceRunRepository
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -40,7 +42,17 @@ data class SpaceRunningUiState(
     val nowMillis: Long = 0L,
     /** Ergebnis des letzten Fortsetzen-Versuchs, wenn er scheiterte. `null` sonst. */
     val resumeFailure: StartOutcome? = null,
+    /** Aktive Teilnehmer, Gastgeber zuerst (ADR 0018). */
+    val participants: List<ParticipantInfo> = emptyList(),
+    /** Beitrittsadresse mit Einladung, nur solange der Server läuft. */
+    val invite: String? = null,
 ) {
+    /** Die Adresse hat sich geändert, weil der feste Port belegt war (Paket 3.4). */
+    val addressChanged: Boolean get() = (runState as? RunState.Running)?.addressChanged == true
+
+    /** Die Einladung entstand neu, weil das gespeicherte Geheimnis nicht lesbar war. Der QR-Code muss neu geteilt werden (ADR 0018). */
+    val inviteRenewed: Boolean get() = (runState as? RunState.Running)?.inviteRenewed == true
+
     /** Speicher in Prozent des Limits, am Ende bei 100. Ohne Limit `0`. */
     val usedPercent: Int
         get() {
@@ -85,6 +97,7 @@ class SpaceRunningViewModel
         private val controller: SpaceRunController,
         private val starter: SpaceStarter,
         private val clock: RunClock,
+        private val hostActions: SpaceHostActions,
     ) : ViewModel() {
         private val spaceId: SpaceId? = savedStateHandle.get<String>(ARG_ID)?.let { SpaceId.parse(it) }
         private val resumeFailure = MutableStateFlow<StartOutcome?>(null)
@@ -106,27 +119,68 @@ class SpaceRunningViewModel
             viewModelScope.launch { closeIfExpired() }
         }
 
-        private fun observeSpace(id: SpaceId): Flow<SpaceRunningUiState> =
-            combine(
-                combine(spaces.observe(id), runs.observeUsedBytes(id)) { record, used -> record to used },
-                combine(runs.observeMedia(id, MEDIA_LIMIT), runs.observePauses(id)) { media, pauses ->
-                    media to pauses
-                },
-                SpaceServerService.runState,
-                ticker(),
-                resumeFailure,
-            ) { (record, used), (media, pauses), runState, now, failure ->
-                SpaceRunningUiState(
-                    record = record,
-                    loaded = true,
-                    usedBytes = used,
-                    media = media,
-                    runState = runState,
-                    pause = pauses.firstOrNull { !it.acknowledged },
-                    nowMillis = now,
-                    resumeFailure = failure,
-                )
+        @OptIn(ExperimentalCoroutinesApi::class)
+        private fun observeSpace(id: SpaceId): Flow<SpaceRunningUiState> {
+            val base =
+                combine(
+                    combine(spaces.observe(id), runs.observeUsedBytes(id)) { record, used -> record to used },
+                    combine(runs.observeMedia(id, MEDIA_LIMIT), runs.observePauses(id)) { media, pauses ->
+                        media to pauses
+                    },
+                    SpaceServerService.runState,
+                    ticker(),
+                    resumeFailure,
+                ) { (record, used), (media, pauses), runState, now, failure ->
+                    SpaceRunningUiState(
+                        record = record,
+                        loaded = true,
+                        usedBytes = used,
+                        media = media,
+                        runState = runState,
+                        pause = pauses.firstOrNull { !it.acknowledged },
+                        nowMillis = now,
+                        resumeFailure = failure,
+                    )
+                }
+            // Teilnehmer laden neu bei jeder Änderung (ADR 0018). Die Einladung folgt dem Betriebszustand.
+            val hostPart = hostActions.changes().mapLatest { hostActions.participants(id) }
+            return combine(base, hostPart) { state, participants ->
+                state.copy(participants = participants, invite = inviteFor(state.runState, id))
             }
+        }
+
+        private fun inviteFor(
+            runState: RunState,
+            id: SpaceId,
+        ): String? {
+            val running = runState as? RunState.Running ?: return null
+            val secret = hostActions.currentInvite(id) ?: return null
+            return InviteLink.of(running.address.ipv4, running.port, secret)
+        }
+
+        /** Entfernt einen Gast. Mit [deleteUploads] verschwinden auch seine Medien (ADR 0018). */
+        fun removeGuest(
+            participant: ParticipantInfo,
+            deleteUploads: Boolean,
+        ) {
+            val id = state.value.record?.id ?: spaceId ?: return
+            viewModelScope.launch { hostActions.removeGuest(id, participant.id, deleteUploads) }
+        }
+
+        /** Erneuert die Einladung. Alte QR-Codes sind danach ungültig, Beigetretene bleiben. */
+        fun rotateInvite() {
+            val id = state.value.record?.id ?: spaceId ?: return
+            viewModelScope.launch {
+                hostActions.rotateInvite(id)
+                // Eine manuelle Erneuerung beantwortet den Hinweis zur automatischen Erneuerung gleich mit.
+                if (state.value.inviteRenewed) controller.acknowledgeInvite()
+            }
+        }
+
+        /** Der Gastgeber bestätigt den Hinweis zur automatisch erneuerten Einladung. */
+        fun acknowledgeInvite() {
+            controller.acknowledgeInvite()
+        }
 
         /**
          * Ein Space, dessen Frist um ist, aber ohne Server, endet beim Öffnen der Ansicht. Der Dienst hält die Unterbrechung

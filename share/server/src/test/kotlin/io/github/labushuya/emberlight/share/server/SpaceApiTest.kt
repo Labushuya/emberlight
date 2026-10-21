@@ -9,6 +9,8 @@ import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
+import io.github.labushuya.emberlight.share.space.participants.Credential
+import io.github.labushuya.emberlight.share.space.participants.Secrets
 import io.ktor.client.HttpClient
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -75,7 +77,15 @@ class SpaceApiTest {
         spacesDir = folder.newFolder("spaces")
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         database = SpacesDatabase.open(context, spacesDir)
-        vault = SpaceVault.open(database, spacesDir, spaceId, limits, StorageProbe { Long.MAX_VALUE / 4 })
+        vault =
+            SpaceVault.open(
+                database,
+                spacesDir,
+                spaceId,
+                limits,
+                StorageProbe { Long.MAX_VALUE / 4 },
+                InviteSecretCipherFake(),
+            )
         runBlocking {
             vault.registerParticipant(host.participantId, "Gastgeberin", Role.HOST, "0".repeat(64))
             vault.registerParticipant(guest.participantId, "Gast", Role.GUEST, "0".repeat(64))
@@ -89,11 +99,15 @@ class SpaceApiTest {
     }
 
     private fun ApplicationTestBuilder.install() {
-        val authorizer = TokenAuthorizer(tokens.mapKeys { sha(it.key) })
+        val credentials =
+            tokens.map { (token, principal) ->
+                Credential(Secrets.hashHex(token), principal.participantId, principal.role)
+            }
+        val access = testAccess(vault, spaceId, credentials, "Test-Space")
         application {
             installEmberlightModule(
                 ServerEnvironment(
-                    authorizer = authorizer,
+                    authorizer = access.live,
                     expectedHost = { "localhost" },
                     senderAllowed = { true },
                     gates = gates,
@@ -101,7 +115,7 @@ class SpaceApiTest {
                     closure = SpaceClosure.Open,
                     debugLogging = false,
                 ),
-                routes = spaceRoutes(vault, "Test-Space", gates, UploadTuning(pollMillis = 1)),
+                routes = spaceRoutes(access, gates, UploadTuning(pollMillis = 1)),
             )
         }
     }

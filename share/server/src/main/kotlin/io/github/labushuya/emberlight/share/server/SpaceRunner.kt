@@ -51,6 +51,12 @@ internal sealed interface RunCommand {
 
     /** Der Gastgeber bestätigt den Wechsel in ein neues Netz. */
     data object ConfirmNetwork : RunCommand
+
+    /**
+     * Der Gastgeber hat den Hinweis zur automatisch erneuerten Einladung bestätigt oder die Einladung selbst erneuert. Der
+     * Hinweis kehrt bis zum nächsten Start nicht zurück (Paket 3.4b).
+     */
+    data object InviteSettled : RunCommand
 }
 
 internal enum class StopReason {
@@ -147,6 +153,12 @@ internal interface RunHost {
         event: PauseEvent,
     )
 
+    /** Merkt den gebundenen Port am Space, damit er beim nächsten Start gilt (Paket 3.4). */
+    suspend fun savePort(
+        spaceId: SpaceId,
+        port: Int,
+    ) {}
+
     fun onEvent(event: RunEvent)
 
     /** Aktualisiert die Dauermeldung des laufenden Space (z. B. „noch 2 Std.“). */
@@ -160,6 +172,8 @@ internal interface RunHost {
 internal class OpenedServer(
     val server: LocalServer,
     val release: () -> Unit,
+    /** `true`, wenn die Einladung nach einem Neustart neu entstand (Paket 3.4, ADR 0018). */
+    val inviteRenewed: Boolean = false,
 )
 
 /**
@@ -183,6 +197,12 @@ internal class SpaceRunner(
     private val pauses = PauseDetector()
     private var phase: Phase = Phase.Idle
     private var jobs: Jobs? = null
+
+    /** Der feste Port war belegt, der Space läuft auf einer neuen Adresse (Paket 3.4). */
+    private var addressChanged = false
+
+    /** Die Einladung entstand neu, weil das gespeicherte Geheimnis nicht lesbar war (ADR 0018). */
+    private var inviteRenewed = false
 
     /** Der letzte Stand des laufenden, dauerhaften Space. Er wird bei jedem Herzschlag in [beats] festgehalten. */
     private var runBeat: RunBeat? = null
@@ -229,6 +249,7 @@ internal class SpaceRunner(
             RunCommand.Restart -> restart()
             is RunCommand.Network -> network(command.address)
             RunCommand.ConfirmNetwork -> confirm()
+            RunCommand.InviteSettled -> settleInvite()
         }
     }
 
@@ -262,18 +283,18 @@ internal class SpaceRunner(
                 fail(setup, RunEvent.StartFailed, revert = revert)
                 return
             }
+        inviteRenewed = opened.inviteRenewed
         val nowElapsed = clock.elapsedMillis()
         val prior = if (command.resume) beats.load()?.takeIf { it.spaceId == setup.spaceId } else null
         val port =
             try {
-                // Eine Wiederaufnahme nimmt den Port von vorher, damit die Adresse für die Gäste gleich bleibt.
+                // Der feste Port des Space gilt bei jedem Start (ADR 0017, Paket 3.4). Eine Wiederaufnahme nimmt den Port von
+                // vorher, damit die Adresse für die Gäste gleich bleibt. Ist der Port belegt, nimmt der Server einen freien.
+                val preferred = prior?.port ?: setup.port ?: command.port
                 val bound =
-                    if (command.resume) {
-                        bind(opened.server, wifi, prior?.port ?: command.port, setup)
-                            ?: throw IllegalStateException("Bindung verweigert.")
-                    } else {
-                        opened.server.start(serverConfig(command.port, wifi, setup))
-                    }
+                    bind(opened.server, wifi, preferred, setup) ?: throw IllegalStateException("Bindung verweigert.")
+                addressChanged = setup.port != null && bound != setup.port
+                if (setup.persisted && bound != setup.port) host.savePort(setup.spaceId, bound)
                 host.acquireLocks()
                 bound
             } catch (failure: Exception) {
@@ -524,6 +545,21 @@ internal class SpaceRunner(
         resume(paused, current)
     }
 
+    /** Der Gastgeber hat den Hinweis zur erneuerten Einladung beantwortet. Der Lauf selbst bleibt unverändert. */
+    private fun settleInvite() {
+        if (!inviteRenewed) return
+        inviteRenewed = false
+        val running = phase as? Phase.Running ?: return
+        publish(
+            runningState(
+                running.setup,
+                running.port,
+                running.address,
+                running.setup.startedAtMillis ?: clock.wallMillis(),
+            ),
+        )
+    }
+
     private suspend fun pauseRunning(
         running: Phase.Running,
         cause: PauseCause,
@@ -567,6 +603,8 @@ internal class SpaceRunner(
             address = address,
             startedAtMillis = startedAtMillis,
             expiresAtMillis = setup.expiresAtMillis,
+            addressChanged = addressChanged,
+            inviteRenewed = inviteRenewed,
         )
 
     /** Bindet an die Adresse. Gelingt der alte Port nicht, nimmt der Server einen freien. Liefert `null` bei Misserfolg. */
