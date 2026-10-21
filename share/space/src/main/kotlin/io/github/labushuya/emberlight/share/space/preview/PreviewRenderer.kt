@@ -10,6 +10,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.exifinterface.media.ExifInterface
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -134,6 +135,7 @@ class AndroidPreviewRenderer : PreviewRenderer {
             decodeWithBitmapFactory(source, longEdge)
         }
 
+    @RequiresApi(Build.VERSION_CODES.P)
     private fun decodeWithImageDecoder(
         source: File,
         longEdge: Int,

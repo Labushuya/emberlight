@@ -192,7 +192,7 @@ class SpaceStorage(
         /** Präfix der Titelbilder (Paket 3.2). Medien tragen nur den Hash, Titelbilder dieses Präfix. */
         const val COVER_PREFIX = "cover-"
 
-        /** Unterordner der Vorschauen (Paket 3.5a-2, ADR 0019). Nie im MediaStore, nie im Coil-Cache. */
+        /** Unterordner der Vorschauen (Paket 3.5a-2, ADR 0019). Liegt nur im App-internen Space-Speicher, nie in der Galerie und nie im Bild-Cache. */
         const val PREVIEW_DIR = "previews"
 
         /** Kantenlängen der Vorschau-Dateien: 320 px für Bilder und Videos, 1600 px für die HEIC-Ansicht. */
