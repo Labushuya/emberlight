@@ -52,6 +52,11 @@ internal class PreviewService(
     private val renderer: PreviewRenderer,
     /** `true`, sobald eine Löschung des Space läuft. Dann wird nichts mehr geschrieben (ADR 0021). */
     private val purging: suspend () -> Boolean = { false },
+    /**
+     * Wird nach jedem Wechsel einer Vorschau oder Ansicht nach `READY` oder `FAILED` aufgerufen (ADR 0019). Der Aufruf
+     * geschieht unter [lock] und darf daher nicht blockieren.
+     */
+    private val settled: () -> Unit = {},
 ) {
     private val queue = Channel<String>(Channel.UNLIMITED)
     private var worker: Job? = null
@@ -268,6 +273,7 @@ internal class PreviewService(
         bytes: Long,
         reason: String?,
     ) {
+        val before = media.findById(id)?.let { if (view) it.viewState else it.previewState }
         if (view) {
             media.setViewState(id, state, bytes)
             media.setViewReason(id, reason)
@@ -275,6 +281,8 @@ internal class PreviewService(
             media.setPreviewState(id, state, bytes)
             media.setPreviewReason(id, reason)
         }
+        // Die Gäste-Seite soll fertige Vorschauen ohne neuen Upload sehen (ADR 0019). Gemeldet wird nur ein echter Wechsel.
+        if (before != state && (state == PreviewState.READY || state == PreviewState.FAILED)) settled()
     }
 
     /** Nach einem Fehler: offene Zustände werden `failed`. Bereite und schon fehlgeschlagene bleiben. */

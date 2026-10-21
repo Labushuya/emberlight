@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.share.server
 
 import androidx.test.core.app.ApplicationProvider
+import io.github.labushuya.emberlight.share.space.MediaId
 import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.Principal
 import io.github.labushuya.emberlight.share.space.Role
@@ -491,6 +492,38 @@ class SignedMediaApiTest {
             val limits = after.getValue("limits").jsonObject
             assertEquals(2_000L, limits.getValue("imageMaxBytes").jsonPrimitive.long)
             assertEquals(6_000L, limits.getValue("videoMaxBytes").jsonPrimitive.long)
+        }
+
+    @Test
+    fun aPreviewThatSettlesRaisesTheRevisionOnceWithoutANewUpload() =
+        testApplication {
+            install()
+
+            suspend fun revision(): Long {
+                val text =
+                    client.get("/api/v1/space") {
+                        header(HttpHeaders.Host, "localhost")
+                        header(HttpHeaders.Authorization, "Bearer $GUEST_TOKEN")
+                    }
+                return Json
+                    .parseToJsonElement(text.bodyAsText())
+                    .jsonObject
+                    .getValue("revision")
+                    .jsonPrimitive.long
+            }
+            val id = client.upload(MediaFixtures.jpeg(300), "bild.jpg")
+            val afterUpload = revision()
+
+            // Der Worker beendet die Vorschau: READY oder FAILED. Die Gäste-Seite soll die Liste neu laden.
+            vault.renderPreviews(MediaId(id))
+            val settled = vault.entry(MediaId(id))?.previewState
+            assertTrue("Vorschau sollte beendet sein, war $settled", settled == "READY" || settled == "FAILED")
+            val afterSettled = revision()
+            assertTrue(afterSettled > afterUpload)
+
+            // Kein Wechsel mehr, also keine weitere Erhöhung.
+            vault.renderPreviews(MediaId(id))
+            assertEquals(afterSettled, revision())
         }
 
     private suspend fun HttpResponse.bodyAsBytesSize(): Int = bodyAsBytes().size

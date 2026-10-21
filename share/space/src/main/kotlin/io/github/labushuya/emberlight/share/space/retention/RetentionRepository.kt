@@ -95,14 +95,19 @@ class RetentionRepository(
      */
     suspend fun purgeDue(now: Long): List<SpaceId> {
         val done = mutableListOf<SpaceId>()
-        for (id in plan(now).purgeDue) {
+        // Ein Space mit `purging` ist für die Planung nicht mehr fällig. Ohne diese Zeile bliebe eine gescheiterte Löschung bis
+        // zum nächsten Start der App liegen, obwohl dieser Lauf sie fortsetzen soll (Paket 3.6d).
+        val stuck = spaces.allPurging().map { SpaceId(it.id) }
+        for (id in (stuck + plan(now).purgeDue).distinct()) {
             try {
                 purge.purge(id)
+                RetentionLog.purgeSucceeded(id)
                 done += id
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failed: Exception) {
                 // Die Löschung bleibt mit `purging` stehen und wird beim nächsten Prüfen fortgesetzt.
+                RetentionLog.purgeFailed(id, failed)
             }
         }
         return done

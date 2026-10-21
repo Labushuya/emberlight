@@ -192,7 +192,19 @@ class SpaceVault internal constructor(
     private val previews =
         PreviewService(media, storage, limits, probe, commitLock, renderer, purging = {
             database.spaces().find(storage.spaceId.value)?.purging == true
-        })
+        }, settled = { onPreviewSettled() })
+
+    /** Gesetzt von [retire]. Ab dann übernimmt diese Vault keinen Upload mehr. Schreibzugriff nur unter [commitLock]. */
+    @Volatile
+    private var retired = false
+
+    /**
+     * Wird nach jedem Wechsel einer Vorschau oder Ansicht nach `READY` oder `FAILED` aufgerufen (ADR 0019). Der Server
+     * setzt ihn und erhöht die Revision, damit die Gäste-Seite die fertige Vorschau ohne neuen Upload sieht. Läuft unter dem
+     * Commit-Lock und darf nicht blockieren.
+     */
+    @Volatile
+    var onPreviewSettled: () -> Unit = {}
 
     /**
      * Nimmt einen Upload entgegen. Die Reihenfolge entspricht ADR 0013 und ADR 0015: Kopf lesen und erkennen, Größe und
@@ -209,7 +221,7 @@ class SpaceVault internal constructor(
         source: ChunkSource,
         keepLocation: Boolean = false,
     ): IngestResult {
-        if (deletingNow()) return IngestResult.Rejected(RejectReason.SpaceDeleting)
+        if (closedForUploads()) return IngestResult.Rejected(RejectReason.SpaceDeleting)
         val buffer = ByteArray(BUFFER_BYTES)
         val head = fillHead(source, buffer)
         val format =
@@ -226,6 +238,8 @@ class SpaceVault internal constructor(
         try {
             // Der Hash des Stroms entsteht beim Schreiben. Bleibt die Datei unverändert, gilt er weiter (ADR 0015).
             val (size, streamedSha256) = writeBody(temp, source, buffer, head, Limit(maxBytes, budget))
+            // Eine Löschung kann während des Stroms begonnen haben. Dann wird die Teildatei nicht weiter verarbeitet.
+            if (closedForUploads()) throw Rejection(RejectReason.SpaceDeleting)
             if (!structureIsValid(format, temp, size)) throw Rejection(RejectReason.UnsupportedType)
             val outcome = removeLocationOrKeep(temp, format, keepLocation, streamedSha256)
             // Nach dem Abschneiden von Anhängen zählt die Länge auf dem Speicher, nicht die des Stroms (ADR 0015).
@@ -384,7 +398,10 @@ class SpaceVault internal constructor(
     fun stopPreviews() = previews.stop()
 
     /** Gibt die Vorschauen frei, bevor die Dateien des Space gelöscht werden (ADR 0021). Danach schreibt diese Vault nichts mehr. */
-    suspend fun retire() = previews.retire()
+    suspend fun retire() {
+        commitLock.withLock { retired = true }
+        previews.retire()
+    }
 
     /** Erzeugt die Vorschauen eines Mediums im Aufrufer. Der Worker tut dasselbe, Tests nutzen es ebenfalls. */
     suspend fun renderPreviews(id: MediaId) = previews.process(id.value)
@@ -567,6 +584,9 @@ class SpaceVault internal constructor(
         codec: String?,
     ): IngestResult =
         commitLock.withLock {
+            // Ein Upload, der vor dem Ende begann, darf nach dem Retire oder einer Löschung nichts mehr übernehmen (ADR 0021).
+            // Die Prüfung liegt unter dem Commit-Lock: Die Löschung wartet dort auf [retire], bevor sie Dateien entfernt.
+            if (closedForUploads()) throw Rejection(RejectReason.SpaceDeleting)
             val spaceId = storage.spaceId.value
             val existing = media.findReadyBySha256(spaceId, sha256)
             if (existing != null) {
@@ -630,6 +650,12 @@ class SpaceVault internal constructor(
     private suspend fun deletingNow(): Boolean =
         database.spaces().find(storage.spaceId.value)?.let { it.purging || it.status == SpaceStatus.DELETED.name } ==
             true
+
+    /**
+     * Darf diese Vault keine Uploads mehr übernehmen? Nach [retire] oder während einer Löschung des Space ja (ADR 0021). Die
+     * Prüfung läuft am Anfang, nach dem Strom und unter dem Commit-Lock, weil eine Löschung mitten im Strom beginnen kann.
+     */
+    private suspend fun closedForUploads(): Boolean = retired || deletingNow()
 
     private suspend fun readyRow(id: MediaId): MediaEntity? =
         media.findById(id.value)?.takeIf { it.state == STATE_READY }
