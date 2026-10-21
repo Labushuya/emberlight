@@ -1,6 +1,8 @@
 package io.github.labushuya.emberlight.feature.space.run
 
-import android.text.format.Formatter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -33,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -46,9 +46,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.labushuya.emberlight.feature.space.R
 import io.github.labushuya.emberlight.feature.space.formatDate
 import io.github.labushuya.emberlight.feature.space.formatGib
+import io.github.labushuya.emberlight.feature.space.media.HostMediaItem
+import io.github.labushuya.emberlight.feature.space.media.HostMediaUiState
+import io.github.labushuya.emberlight.feature.space.media.HostMediaViewModel
+import io.github.labushuya.emberlight.feature.space.media.MediaFilter
+import io.github.labushuya.emberlight.feature.space.upload.HostUploadUiState
+import io.github.labushuya.emberlight.feature.space.upload.HostUploadViewModel
 import io.github.labushuya.emberlight.share.server.PauseCause
 import io.github.labushuya.emberlight.share.server.RunState
-import io.github.labushuya.emberlight.share.space.MediaRow
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import io.github.labushuya.emberlight.share.space.participants.ParticipantInfo
@@ -66,15 +71,31 @@ internal fun SpaceRunningScreen(
     onBack: () -> Unit,
     onSetup: (String) -> Unit,
     viewModel: SpaceRunningViewModel = hiltViewModel(),
+    uploadViewModel: HostUploadViewModel = hiltViewModel(),
+    mediaViewModel: HostMediaViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val upload by uploadViewModel.state.collectAsStateWithLifecycle()
+    val media by mediaViewModel.state.collectAsStateWithLifecycle()
     var showEndDialog by rememberSaveable { mutableStateOf(false) }
     var removing by remember { mutableStateOf<ParticipantInfo?>(null) }
     var rotating by rememberSaveable { mutableStateOf(false) }
+    var openMediaId by rememberSaveable { mutableStateOf<String?>(null) }
     // Ein Tippen auf „Beenden“ in der Benachrichtigung öffnet nur die Bestätigung, nie das Ende selbst.
     LaunchedEffect(confirmEnd) {
         if (confirmEnd) showEndDialog = true
     }
+    // Die Medienansicht folgt dem Space, der gerade angezeigt wird (auch ohne Kennung aus der Benachrichtigung).
+    val spaceId = state.record?.id
+    LaunchedEffect(spaceId) {
+        spaceId?.let(mediaViewModel::show)
+    }
+    val pickMedia =
+        rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+            val space = spaceId ?: return@rememberLauncherForActivityResult
+            uploadViewModel.enqueue(space, uris.map { it.toString() })
+        }
+    val canUpload = state.record?.status == SpaceStatus.ACTIVE && state.runState is RunState.Running
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -106,8 +127,41 @@ internal fun SpaceRunningScreen(
             onRemoveRequest = { removing = it },
             onRotateRequest = { rotating = true },
             onAcknowledgeInvite = viewModel::acknowledgeInvite,
+            upload = upload,
+            media = media,
+            onPickMedia =
+                if (canUpload) {
+                    { pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }
+                } else {
+                    null
+                },
+            onUploadCancel = uploadViewModel::cancel,
+            onMediaFilter = mediaViewModel::setFilter,
+            onMediaOpen = { openMediaId = it.id },
             modifier = Modifier.padding(padding),
         )
+    }
+    upload.locationQuestion?.let { name ->
+        LocationQuestionDialog(
+            fileName = name,
+            onKeep = { uploadViewModel.answerLocation(true) },
+            onSkip = { uploadViewModel.answerLocation(false) },
+        )
+    }
+    openMediaId?.let { mediaId ->
+        media.items.firstOrNull { it.id == mediaId }?.let { item ->
+            HostMediaDetail(
+                item = item,
+                loadDetail = { mediaViewModel.detailOf(mediaId) },
+                // Entfernen gilt bis zum Ende, auch in einer Pause. Nach dem Ende bleibt die Ansicht nur lesbar (ADR 0019).
+                editable = state.record?.status == SpaceStatus.ACTIVE,
+                onDelete = {
+                    mediaViewModel.delete(mediaId)
+                    openMediaId = null
+                },
+                onDismiss = { openMediaId = null },
+            )
+        }
     }
     removing?.let { target ->
         RemoveParticipantDialog(
@@ -148,7 +202,11 @@ internal fun SpaceRunningScreen(
     }
 }
 
-/** Inhalt des laufenden Space ohne Zustand. Die Goldens rufen diesen Teil direkt auf. */
+/**
+ * Inhalt des laufenden Space ohne Zustand. Die Goldens rufen diesen Teil direkt auf. [upload] und [media] sind die Zustände
+ * des Gastgeber-Uploads und der Medienansicht (Paket 3.5c). [onPickMedia] ist `null`, wenn gerade nicht hochgeladen werden
+ * darf. Dann fehlt der Knopf.
+ */
 @Composable
 internal fun SpaceRunningContent(
     state: SpaceRunningUiState,
@@ -161,6 +219,12 @@ internal fun SpaceRunningContent(
     onRotateRequest: () -> Unit,
     onAcknowledgeInvite: () -> Unit,
     modifier: Modifier = Modifier,
+    upload: HostUploadUiState = HostUploadUiState(),
+    media: HostMediaUiState = HostMediaUiState(),
+    onPickMedia: (() -> Unit)? = null,
+    onUploadCancel: () -> Unit = {},
+    onMediaFilter: (MediaFilter) -> Unit = {},
+    onMediaOpen: (HostMediaItem) -> Unit = {},
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         val record = state.record
@@ -174,7 +238,6 @@ internal fun SpaceRunningContent(
             )
             return@Surface
         }
-        val context = LocalContext.current
         val running = record.status == SpaceStatus.ACTIVE
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -278,18 +341,15 @@ internal fun SpaceRunningContent(
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.height(8.dp))
-            if (state.media.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.space_running_media_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                state.media.forEachIndexed { index, row ->
-                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    MediaLine(row = row, sizeText = Formatter.formatShortFileSize(context, row.sizeBytes))
-                }
+            if (onPickMedia != null) {
+                HostUploadAddRow(onAdd = onPickMedia)
+                Spacer(Modifier.height(8.dp))
             }
+            if (upload.items.isNotEmpty()) {
+                HostUploadSection(state = upload, onCancel = onUploadCancel)
+                Spacer(Modifier.height(12.dp))
+            }
+            HostMediaSection(state = media, onFilter = onMediaFilter, onOpen = onMediaOpen)
             Spacer(Modifier.height(24.dp))
 
             if (running) {
@@ -415,39 +475,6 @@ private fun NetworkChangedCard(onConfirm: () -> Unit) {
             Button(onClick = onConfirm) { Text(stringResource(R.string.space_running_network_continue)) }
         }
     }
-}
-
-@Composable
-private fun MediaLine(
-    row: MediaRow,
-    sizeText: String,
-) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Text(
-            text =
-                stringResource(
-                    R.string.space_running_media_item,
-                    mediaUploaderText(row),
-                    sizeText,
-                ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (row.locationKept) {
-            Text(
-                text = stringResource(R.string.space_running_media_location),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-    }
-}
-
-/** Name des Uploaders. Entfernte Teilnehmer bleiben sichtbar, mit dem Vermerk âentferntâ (ADR 0018). */
-@Composable
-private fun mediaUploaderText(row: MediaRow): String {
-    val name = row.uploaderName ?: return stringResource(R.string.space_running_media_unknown)
-    return if (row.uploaderRevoked) stringResource(R.string.space_running_media_uploader_removed, name) else name
 }
 
 @Composable

@@ -1,6 +1,9 @@
 package io.github.labushuya.emberlight.share.server
 
+import io.github.labushuya.emberlight.share.space.DeleteOutcome
+import io.github.labushuya.emberlight.share.space.MediaId
 import io.github.labushuya.emberlight.share.space.ParticipantId
+import io.github.labushuya.emberlight.share.space.Principal
 import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
@@ -93,6 +96,19 @@ class SpaceAccess internal constructor(
             live.replace(vault.credentials())
             bumpRevision()
         }
+        return outcome
+    }
+
+    /**
+     * Löscht ein Medium für den Gastgeber aus der App. Läuft über die Sitzung, damit die Revision steigt und die Gäste-Seite
+     * die Liste neu lädt (ADR 0019, Paket 3.5c).
+     */
+    suspend fun deleteMedia(
+        principal: Principal,
+        id: MediaId,
+    ): DeleteOutcome {
+        val outcome = vault.delete(principal, id)
+        if (outcome == DeleteOutcome.Deleted) bumpRevision()
         return outcome
     }
 

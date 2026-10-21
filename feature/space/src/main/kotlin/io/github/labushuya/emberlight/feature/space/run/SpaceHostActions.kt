@@ -1,7 +1,11 @@
 package io.github.labushuya.emberlight.feature.space.run
 
 import io.github.labushuya.emberlight.share.server.ActiveSpaces
+import io.github.labushuya.emberlight.share.space.DeleteOutcome
+import io.github.labushuya.emberlight.share.space.MediaId
 import io.github.labushuya.emberlight.share.space.ParticipantId
+import io.github.labushuya.emberlight.share.space.Principal
+import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceVault
 import io.github.labushuya.emberlight.share.space.SpaceVaults
@@ -58,6 +62,20 @@ class SpaceHostActions
                     ?: checkNotNull(vaultFor(spaceId)) { "Der Space $spaceId ist nicht gespeichert." }.rotateInvite()
             changes.value += 1
             return fresh
+        }
+
+        /**
+         * Entfernt ein Medium als Gastgeber. Der Gastgeber darf alles (ADR 0014, Löschen). Läuft ein Server, geht der Weg über
+         * die Sitzung, damit die Gäste-Seite die Änderung sofort sieht (Paket 3.5c).
+         */
+        suspend fun deleteMedia(
+            spaceId: SpaceId,
+            media: MediaId,
+        ): DeleteOutcome {
+            val vault = vaultFor(spaceId) ?: return DeleteOutcome.NotFound
+            val host = vault.participants().firstOrNull { it.role == Role.HOST } ?: return DeleteOutcome.NotFound
+            val principal = Principal(host.id, Role.HOST)
+            return runningFor(spaceId)?.deleteMedia(principal, media) ?: vault.delete(principal, media)
         }
 
         private fun runningFor(spaceId: SpaceId) = ActiveSpaces.current()?.takeIf { it.spaceId == spaceId }

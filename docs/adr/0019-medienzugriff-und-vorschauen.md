@@ -125,4 +125,40 @@ Der Vertrag oben bleibt unverändert. Dieser Nachtrag hält fest, wie die Seite 
 ## Offen
 
 - Gerätetest der Vorschauen (HEIC ab API 28, Videobild und Drehung, Speicherzählung), Testkatalog 6.16 bis 6.20.
-- Vorschau in der Gastgeber-App (Medienliste im laufenden Space, heute nur Text), vorgemerkt für 3.5c.
+- Vorschau in der Gastgeber-App: umgesetzt in 3.5c (Nachtrag 3.5c unten). Offen sind Nachladen über 200 Medien, Zweispaltenansicht auf großen Displays und die Extraktion des Viewers nach `core:viewer`.
+
+## Nachtrag 3.5c: Gemeinsame Vault, Gastgeber-Upload, Medienansicht (21.10.2026)
+
+Dieser Nachtrag hält fest, wie 3.5c die Entscheidungen oben nutzt. Die Schnittstelle für Medien-URLs und Vorschauen bleibt unverändert.
+
+**Eine Vault je Space im Prozess.** `SpaceVaults` (`share:space`) hält die eine `SpaceVault` je Space. Zwei Vaults auf derselben Datei hätten zwei Commit-Sperren. Dedupe hätte dann einen Wettlauf, und zwei Vorschau-Worker hätten dieselben Dateien angefasst. Die Verwaltung ist ein Singleton: `SpaceVaults.shared(context)` für den Server, eine Hilt-Bindung in `SpacesModule` für die Oberfläche. Beide bekommen dieselbe Instanz.
+- Die Grenzen einer Vault kommen von der ersten Öffnung. Das ist sicher, weil Grenzen nur im Entwurf geändert werden (ADR 0016) und ein aktiver Space sie nicht mehr ändert.
+- Die Wiederaufnahme (`recover`) läuft einmal pro Vault, nicht bei jedem Serverstart. Der alte Ablauf hätte beim zweiten Start die Teildatei eines laufenden Uploads gelöscht.
+- Der Vorschau-Worker läuft prozessweit. Ein Gastgeber-Upload bekommt seine Vorschau auch ohne laufenden Server.
+- Das Schließen des Servers schließt die Vault nicht mehr (`SpaceRuntime.close` entfällt). Die Vault gehört dem Prozess, so wie der Index.
+- Tests: `SpaceVaultsTest` (gleiche Instanz für Server und App, gleichzeitige Gast- und Gastgeber-Uploads ohne Doppelspeicherung, Vorschau ohne Neustart, Wiederaufnahme einmal pro Vault).
+
+**Gastgeber-Upload aus der App.** Die Oberfläche öffnet den Stream über den Inhaltsresolver (`ContentHostUploadPort`, `feature:space`). `share:space` bekommt nur den `ChunkSource` (die Quelltext-Sperre schließt `ContentResolver` in `share:space` aus).
+- Auswahl: `PickMultipleVisualMedia` mit Bildern und Videos. Die Fallback-Kette von AndroidX 1.13.0 wurde am Quelltext geprüft (Bytecode von `ActivityResultContracts`): Gibt es keine System-Foto-Auswahl, sucht die Bibliothek einen Fallback-Anbieter mit der Aktion `androidx.activity.result.contract.action.PICK_IMAGES`. Gibt es auch den nicht, öffnet sie `android.intent.action.OPEN_DOCUMENT` mit `EXTRA_ALLOW_MULTIPLE` und dem Typ `image/*` bzw. `video/*`. Die Bibliothek erledigt das automatisch, die App braucht keine eigene Kette. Abweichung zum Auftrag: Dort stand der Fallback auf `ACTION_OPEN_DOCUMENT`. Das stimmt für den letzten Schritt, davor kann ein Fallback-Anbieter treten. Der Build hängt von keinem Google-Play-Dienst ab.
+- Pipeline: dieselbe wie beim HTTP-Upload (`SpaceVault.ingest`). Grenzen, Signatur, Standort-Entfernung, Dedupe, Speicherlimit und 507 kommen aus der Vault. Uploader ist der Gastgeber, die Revision steigt, damit die Gäste-Seite neu lädt.
+- Reihe: Die Dateien laufen nacheinander. Der Fortschritt zählt Bytes (Größe aus `OpenableColumns.SIZE`). Ohne bekannte Größe bleibt er unbestimmt. Abbrechen bricht die Coroutine ab, die Vault räumt die Teildatei.
+- Standort: Ist der Standort einer Datei nicht entfernbar, fragt die Oberfläche je Datei („Mit Standort hochladen“ bzw. „Nicht hochladen“, Designentscheidung (e)). Bei Ja läuft die Datei mit Einwilligung. Das Original in der Galerie bleibt unberührt.
+- Speicher voll (507) stoppt die Reihe. Eine Datei in falschem Format, zu groß oder unlesbar scheitert nur selbst.
+- Ein Lesefehler mitten im Strom (etwa entzogener Zugriff) wird als „nicht lesbar“ gemeldet, nicht als Absturz.
+- Nur im laufenden Space: Der Space ist aktiv, nicht abgelaufen und der Server läuft (`HostUploadRules.canUpload`). In einer Pause und nach dem Ende gibt es keine Auswahl.
+
+**Medienansicht im laufenden Space.** Die Textliste wird durch ein Raster ersetzt. `HostMediaViewModel` folgt dem Index (Room-Flow), also erscheinen Änderungen ohne Zutun.
+- Vorschau: Kacheln bekommen die 320-px-Datei aus dem Space-Speicher über die Vault. Coil lädt mit `diskCachePolicy = DISABLED`. Kein MediaStore, kein Coil-Plattencache.
+- Filter „Alle“ und „Meine“. Kennzeichen „Video“, Vermerk „Standort enthalten“ und „(entfernt)“ bei entferntem Uploader. Ohne Vorschau steht „Vorschau folgt“ bzw. „Keine Vorschau“.
+- Raster ohne Lazy-Liste, weil die Ansicht im scrollenden Bildschirm steht. Drei Spalten, ab 600 dp fünf.
+- Detail: eigene Ansicht in `feature:space`, nicht der Galerie-Viewer. Bilder mit Zoom (Coil, auf 1600 px dekodiert), Videos über Media3 mit `file://` aus dem App-Speicher (kein FileProvider). Angaben: Uploader, Zeit, Größe, Standort-Vermerk. Entfernen mit Bestätigung, nur im aktiven Space.
+- Entfernen geht über `SpaceAccess.deleteMedia`, wenn ein Server läuft. Die Revision steigt, die Gäste-Seite lädt neu.
+- Ersetzt: `SpaceRunningUiState.media` und die Textliste. Die Anzeige liest nur noch den Index.
+
+**Abweichungen und offene Punkte.**
+- Die Ansicht zeigt die ersten 200 Medien (`MEDIA_LIMIT`). Nachladen über Cursor folgt.
+- Keine Zweispaltenansicht mit Detail auf großen Displays. Das Raster passt sich an, das Detail bleibt ein Vollbild-Dialog.
+- Die Auswahl nutzt die Adresse der Auswahl erneut, wenn der Standort nachgefragt wird. Ob das Recht die Rückfrage übersteht, prüft der Gerätetest.
+- Verlässt der Gastgeber den Bildschirm, endet die Reihe (das ViewModel endet). Die laufende Datei wird verworfen, schon gespeicherte Dateien bleiben. Ein Hintergrund-Upload gibt es nicht.
+- Der Galerie-Viewer wird nicht wiederverwendet. Die Extraktion nach `core:viewer` bleibt offen.
+- Gerätetests (Fotoauswahl, Fortschritt, Abbrechen, Standort, Video, Zoom, Entfernen) stehen im Testkatalog, Abschnitt 8.
