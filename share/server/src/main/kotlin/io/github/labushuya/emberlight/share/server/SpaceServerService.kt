@@ -306,7 +306,12 @@ class SpaceServerService : Service() {
                 }
 
                 RunEvent.StartQueued -> {
+                    startQueuedFlow.value = true
                     postAlert(getString(R.string.space_server_start_queued))
+                }
+
+                RunEvent.StartQueueEnded -> {
+                    startQueuedFlow.value = false
                 }
             }
         }
@@ -599,6 +604,15 @@ class SpaceServerService : Service() {
 
         /** Zustand des Betriebs. Die Oberfläche beobachtet ihn für die Anzeige und den Netzwechsel-Hinweis. */
         val runState: StateFlow<RunState> = runStateFlow.asStateFlow()
+
+        /** `true`, solange ein Start im Nachlauf des vorigen Space wartet (ADR 0017, Nachtrag 21.10.2026). Prozessweit. */
+        private val startQueuedFlow = MutableStateFlow(false)
+
+        /** Ein neuer Space wartet auf den Nachlauf des vorigen. Die Oberfläche zeigt dann einen Hinweis statt „Unterbrochen“. */
+        val startQueued: StateFlow<Boolean> = startQueuedFlow.asStateFlow()
+
+        /** Dauer des Nachlaufs in ganzen Sekunden, für Texte der Oberfläche. Quelle ist [SpaceRunner.CLOSE_GRACE_MILLIS]. */
+        val closeGraceSeconds: Int = (SpaceRunner.CLOSE_GRACE_MILLIS / 1000L).toInt()
 
         /**
          * Einrichtung des Serverlaufs ohne gespeicherten Space. Nur der Debug-Einstieg setzt sie (ADR 0014). Ist sie

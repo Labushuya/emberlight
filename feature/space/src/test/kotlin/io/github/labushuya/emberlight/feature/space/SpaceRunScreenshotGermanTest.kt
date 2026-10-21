@@ -38,6 +38,14 @@ class SpaceRunScreenshotGermanTest : SpaceRunScreenshotSupport() {
     }
 
     @Test
+    fun runningStartQueuedPhoneGerman() {
+        capture(
+            { Running(state(usedBytes = 0L, runState = RunState.Idle, startQueued = true)) },
+            "src/test/screenshots/SpaceRunning_startQueued_phone_de.png",
+        )
+    }
+
+    @Test
     fun runningStorageWarningPhoneGerman() {
         capture(
             { Running(state(usedBytes = (3.5 * GIB_BYTES).toLong())) },

@@ -150,6 +150,7 @@ abstract class SpaceRunScreenshotSupport {
         usedBytes: Long,
         runState: RunState = runningState(),
         pause: PauseEvent? = null,
+        startQueued: Boolean = false,
     ): SpaceRunningUiState =
         SpaceRunningUiState(
             record = active(),
@@ -158,6 +159,7 @@ abstract class SpaceRunScreenshotSupport {
             runState = runState,
             pause = pause,
             nowMillis = SpaceFixtures.NOW,
+            startQueued = startQueued,
         )
 
     protected fun runningState(
