@@ -1,8 +1,9 @@
 package io.github.labushuya.emberlight.feature.space.run
 
+import android.graphics.Bitmap
 import com.google.zxing.BinaryBitmap
-import com.google.zxing.LuminanceSource
-import com.google.zxing.common.BitMatrix
+import com.google.zxing.DecodeHintType
+import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
 import io.github.labushuya.emberlight.share.space.participants.Secrets
@@ -13,7 +14,14 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** QR-Code und Beitrittsadresse (ADR 0018): Inhalt, Ruhezone, Lesbarkeit. */
+/**
+ * QR-Code und Beitrittsadresse (ADR 0018): Inhalt, Ruhezone, Lesbarkeit.
+ *
+ * Lesbarkeit prüft der Test am Bitmap, das die Oberfläche zeigt, mit `PURE_BARCODE`. Ohne diesen Hinweis sucht ZXing
+ * Finder- und Ausrichtungsmuster selbst. Auf dem scharfen, synthetischen Bild scheiterte das bei rund einem von hundert
+ * Zufallsgeheimnissen (`NotFoundException` oder `ChecksumException`), unabhängig von der Pixelgröße. Mit `PURE_BARCODE` liest
+ * ZXing das Modulraster direkt. Die Aussage bleibt: Der Code enthält genau die Einladungs-URL.
+ */
 @RunWith(RobolectricTestRunner::class)
 class InviteQrTest {
     private val secret = Secrets.generate()
@@ -28,9 +36,7 @@ class InviteQrTest {
 
     @Test
     fun theCodeDecodesBackToTheSameLink() {
-        val matrix = InviteQr.matrix(link)
-
-        assertEquals(link, decode(matrix))
+        assertEquals(link, decode(InviteQr.bitmap(link)))
     }
 
     @Test
@@ -57,43 +63,12 @@ class InviteQrTest {
         assertTrue(bitmap.width >= matrix.width)
     }
 
-    private fun decode(matrix: BitMatrix): String {
-        val source = MatrixSource(matrix)
-        return QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source))).text
-    }
-
-    /** Graustufen aus der Matrix, ohne Bild-Bibliothek. Schwarz ist ein Modul. */
-    private class MatrixSource(
-        private val matrix: BitMatrix,
-        private val scale: Int = SCALE,
-    ) : LuminanceSource(matrix.width * scale, matrix.height * scale) {
-        override fun getRow(
-            y: Int,
-            row: ByteArray?,
-        ): ByteArray {
-            val out = if (row != null && row.size >= width) row else ByteArray(width)
-            for (x in 0 until width) out[x] = luminance(x, y)
-            return out
-        }
-
-        override fun getMatrix(): ByteArray =
-            ByteArray(width * height) { index ->
-                luminance(
-                    index % width,
-                    index / width,
-                )
-            }
-
-        private fun luminance(
-            x: Int,
-            y: Int,
-        ): Byte = if (matrix.get(x / scale, y / scale)) BLACK else WHITE
-
-        private companion object {
-            /** Pixel je Modul. Zu kleine Bilder mit einem Pixel je Modul lassen den Binarisierer scheitern. */
-            const val SCALE = 8
-            const val BLACK: Byte = 0
-            val WHITE: Byte = (-1).toByte()
-        }
+    /** Dekodiert das Bitmap der Oberfläche. `PURE_BARCODE`: kein Suchen nach Mustern, nur das Modulraster. */
+    private fun decode(bitmap: Bitmap): String {
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
+        val hints = mapOf<DecodeHintType, Any>(DecodeHintType.PURE_BARCODE to true)
+        return QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source)), hints).text
     }
 }
