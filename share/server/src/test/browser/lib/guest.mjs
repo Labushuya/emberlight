@@ -11,28 +11,56 @@ export async function seedSession(page, config, session) {
 }
 
 /** Öffnet die Seite mit gespeicherter Sitzung und wartet, bis der Space angezeigt wird. */
+// Protokoll der gespeicherten Sitzungen im Tab (nur Schlüssel und Zeitpunkt, nie Werte). Liegt im sessionStorage des Tabs,
+// also über Neuladen hinweg, aber nicht in den anderen Tabs. Dient der Fehlersuche des Beitritts-Flakes.
+const STORAGE_LOG = `(() => {
+  if (window.__guestStorageLogInstalled) return;
+  window.__guestStorageLogInstalled = true;
+  const append = (entry) => {
+    try {
+      const list = JSON.parse(sessionStorage.getItem('__guestStorageLog') || '[]');
+      list.push(entry);
+      sessionStorage.setItem('__guestStorageLog', JSON.stringify(list.slice(-30)));
+    } catch (ignored) {}
+  };
+  const where = () => ((new Error().stack || '').split('\\n')[3] || '').trim().slice(0, 120);
+  const setItem = Storage.prototype.setItem;
+  const removeItem = Storage.prototype.removeItem;
+  Storage.prototype.setItem = function (key, value) {
+    if (String(key).startsWith('emberlight.guest:')) append(['set', Date.now(), where()]);
+    return setItem.call(this, key, value);
+  };
+  Storage.prototype.removeItem = function (key) {
+    if (String(key).startsWith('emberlight.guest:')) append(['remove', Date.now(), where()]);
+    return removeItem.call(this, key);
+  };
+})();`;
+
+/** Befund für die Fehlersuche: Antworten der Seite auf /api/v1/me, Speicherprotokoll, Statuszeile. Ohne Tokens. */
+async function diagnose(page, config, session) {
+  const me = await apiGet(config, "/api/v1/me", session.token).catch((failure) => ({ status: String(failure.message) }));
+  const seen = await page.eval(`({
+    sessions: Object.keys(localStorage).filter((key) => key.startsWith('emberlight.guest:')).length,
+    storageLog: JSON.parse(sessionStorage.getItem('__guestStorageLog') || '[]'),
+    status: document.getElementById('status').textContent,
+  })`);
+  return `Node: /api/v1/me ${me.status}. Seite: ${JSON.stringify(page.apiEvents)}, ${JSON.stringify(seen)}`;
+}
+
 export async function openSpace(page, config, session) {
+  await page.enableNetwork();
+  await page.onNewDocument(STORAGE_LOG);
   await seedSession(page, config, session);
-  // Zeigt die Seite nach dem Start nicht den Space, hat `GET /api/v1/me` nicht mit dem Space geantwortet (etwa `503`,
-  // wenn die Parallelität des Servers voll ist). Die Antwort wird dann gemessen und die Seite neu geladen, bis zu dreimal.
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    await page.goto(`${config.base}/`);
-    const shown = await page
-      .waitFor("!document.getElementById('space-section').hidden", { what: "Space-Ansicht", timeout: 8000 })
-      .catch(() => null);
-    if (shown !== null) break;
-    const me = await apiGet(config, "/api/v1/me", session.token);
-    // Befund für die Fehlersuche: Sitzungen im Speicher der Seite, Antwort der Seite auf /api/v1/me, Statuszeile.
-    const seen = await page.eval(`({
-      sessions: Object.keys(localStorage).filter((key) => key.startsWith('emberlight.guest:')).length,
-      me: performance.getEntriesByType('resource').filter((entry) => entry.name.includes('/api/v1/me')).map((entry) => entry.responseStatus),
-      status: document.getElementById('status').textContent,
-    })`);
-    console.log(
-      `Messung: Beitritt statt Space (Versuch ${attempt}): /api/v1/me von Node ${me.status}, von der Seite ${JSON.stringify(seen)}`,
-    );
+  page.apiEvents.length = 0;
+  await page.goto(`${config.base}/`);
+  try {
+    await page.waitFor("!document.getElementById('space-section').hidden", { what: "Space-Ansicht", timeout: 30000 });
+  } catch (failure) {
+    // Befund für die Fehlersuche (Messung), dann der Fehler des Tests.
+    const finding = await diagnose(page, config, session).catch((error) => `Befund fehlt: ${error.message}`);
+    console.log(`Messung: Beitritt statt Space: ${finding}`);
+    throw new Error(`${failure.message}\n${finding}`);
   }
-  await page.waitFor("!document.getElementById('space-section').hidden", { what: "Space-Ansicht", timeout: 30000 });
   await page.waitFor("document.getElementById('space-name').textContent.length > 0", { what: "Name des Space" });
 }
 

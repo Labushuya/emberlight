@@ -17,6 +17,9 @@ const CHROME_CANDIDATES = [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 ];
 
+// Adresse der Sitzungsprüfung der Gäste-Seite (ADR 0018, Wiederaufnahme).
+const API_ME = /\/api\/v1\/me(\?|$)/;
+
 /** Pfad des Chrome: `EMBERLIGHT_CHROME`, sonst die bekannten Orte. `null`, wenn es keinen gibt. */
 export function findChrome(env = process.env) {
   const fromEnv = env.EMBERLIGHT_CHROME;
@@ -184,6 +187,7 @@ export class Page {
   }
 
   #onEvent(method, params) {
+    this.#recordApi(method, params);
     if (method === "Network.requestWillBeSent") {
       const url = params.request?.url ?? "";
       this.networkLog.push({ method: params.request?.method ?? "", url });
@@ -208,10 +212,20 @@ export class Page {
     } else if (method === "Fetch.requestPaused") {
       const decision = this.#interceptor ? this.#interceptor(params.request?.url ?? "") : "continue";
       const requestId = params.requestId;
-      const reply =
-        decision === "fail"
-          ? this.send("Fetch.failRequest", { requestId, errorReason: "Failed" })
-          : this.send("Fetch.continueRequest", { requestId });
+      let reply;
+      if (decision === "fail") {
+        reply = this.send("Fetch.failRequest", { requestId, errorReason: "Failed" });
+      } else if (decision && typeof decision === "object") {
+        // Eine Antwort ohne Server: Statuscode, Kopfzeilen und JSON-Körper (base64 nach CDP).
+        reply = this.send("Fetch.fulfillRequest", {
+          requestId,
+          responseCode: decision.status,
+          responseHeaders: [{ name: "Content-Type", value: "application/json" }, ...(decision.headers ?? [])],
+          body: Buffer.from(JSON.stringify(decision.body ?? {})).toString("base64"),
+        });
+      } else {
+        reply = this.send("Fetch.continueRequest", { requestId });
+      }
       reply.catch(() => {});
     } else if (method === "Runtime.exceptionThrown") {
       const details = params.exceptionDetails ?? {};
@@ -228,9 +242,39 @@ export class Page {
     return this.#cdp.send(method, params, this.#sessionId);
   }
 
-  /** Schaltet das Netzwerk-Protokoll der Seite ein. Danach füllt sich `networkLog`. */
+  /** Schaltet das Netzwerk-Protokoll der Seite ein. Danach füllt sich `networkLog` und `apiEvents`. */
   async enableNetwork() {
     await this.send("Network.enable");
+  }
+
+  /**
+   * Was die Seite für `GET /api/v1/me` gesendet und bekommen hat, in dieser Reihenfolge: `anfrage` (mit `auth`, ob ein
+   * Authorization-Header ging; der Wert selbst wird nie gespeichert), `antwort` (Statuscode) und `fehler` (Netzfehler).
+   * Nur nach enableNetwork() gefüllt. Der Test leert die Liste, wenn er einen Versuch beginnt.
+   */
+  apiEvents = [];
+  #apiIds = new Set();
+
+  #recordApi(method, params) {
+    if (method === "Network.requestWillBeSent") {
+      if (!API_ME.test(params.request?.url ?? "")) return;
+      const headers = params.request?.headers ?? {};
+      const auth = Object.keys(headers).some((name) => name.toLowerCase() === "authorization");
+      this.#apiIds.add(params.requestId);
+      this.apiEvents.push({ event: "anfrage", auth });
+    } else if (method === "Network.responseReceived") {
+      if (this.#apiIds.has(params.requestId)) this.apiEvents.push({ event: "antwort", status: params.response?.status ?? 0 });
+    } else if (method === "Network.loadingFinished") {
+      // Wie viele Bytes der Körper hatte. Ein leerer Körper bei 200 erklärt eine Antwort ohne lesbare Daten.
+      if (this.#apiIds.delete(params.requestId)) this.apiEvents.push({ event: "fertig", bytes: params.encodedDataLength ?? -1 });
+    } else if (method === "Network.loadingFailed") {
+      if (this.#apiIds.delete(params.requestId)) this.apiEvents.push({ event: "fehler", error: params.errorText ?? "unbekannt" });
+    }
+  }
+
+  /** Ein Skript, das vor jedem Dokument dieser Seite läuft (vor den Skripten der Seite). */
+  async onNewDocument(source) {
+    await this.send("Page.addScriptToEvaluateOnNewDocument", { source });
   }
 
   /**
@@ -244,8 +288,9 @@ export class Page {
   }
 
   /**
-   * Lässt Anfragen mit `pattern` über `decide(url)` entscheiden: "fail" bricht sie ab, sonst laufen sie normal. Nur für
-   * Tests (Fehler eines Bildes), das Netzwerk bleibt sonst unverändert.
+   * Lässt Anfragen mit `pattern` über `decide(url)` entscheiden: "fail" bricht sie ab (Netzfehler), ein Objekt
+   * `{ status, body, headers? }` beantwortet sie ohne Server, sonst laufen sie normal. Nur für Tests (Fehler eines Bildes,
+   * Antworten 503 oder Netzfehler), das Netzwerk bleibt sonst unverändert.
    */
   async intercept(pattern, decide) {
     this.#interceptor = decide;
