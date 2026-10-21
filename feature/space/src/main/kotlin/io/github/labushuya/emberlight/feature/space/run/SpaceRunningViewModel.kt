@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -146,9 +145,9 @@ class SpaceRunningViewModel
                         startQueued = queued,
                     )
                 }
-            // Teilnehmer laden neu bei jeder Änderung (ADR 0018). Die Einladung folgt dem Betriebszustand.
-            val hostPart = hostActions.changes().mapLatest { hostActions.participants(id) }
-            return combine(base, hostPart) { state, participants ->
+            // Teilnehmer kommen live aus dem Index, damit ein Beitritt über den Server sofort erscheint (ADR 0018, ADR 0019).
+            // Die Einladung folgt dem Betriebszustand und einer Erneuerung ([SpaceHostActions.changes]).
+            return combine(base, runs.observeParticipants(id), hostActions.changes()) { state, participants, _ ->
                 state.copy(participants = participants, invite = inviteFor(state.runState, id))
             }
         }
