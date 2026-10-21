@@ -26,6 +26,16 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 | 3.7 | Gezielte Übernahme in `Pictures/Emberlight/<Space>`, danach Release `v0.3.0`. Pflicht (vorgezogen und umgesetzt, ADR 0020): „Über/Lizenzen“-Seite in der App mit Lizenzhinweisen aller mitgelieferten Bibliotheken (Apache-2.0 verlangt Lizenz bzw. NOTICE bei Weitergabe; ohne Play-Services-Plugin, z. B. AboutLibraries, prüfen), Hinweis auf GPL-3.0 und Link auf den Quellcode. Ausdrücklich nennen: die OFL-Schriften Fraunces und Inter (SIL OFL 1.1) mit Copyright-Zeile und Lizenztext aus `core/design/src/main/assets/licenses`. |
 | nach 3.5c (nur geplant, nicht umgesetzt) | Vorab-Release `v0.3.0-alpha.1` nach den Paketen 3.5a bis 3.5c, damit die Gäste-Webseite früh auf Geräten erprobt werden kann. Mit einem Endtest durch die Nutzerin bzw. den Nutzer anhand von [TESTKATALOG-M3.md](TESTKATALOG-M3.md). Die Versionslogik für Vorab-Tags ist umgesetzt (CLAUDE.md, ADR 0004, Nachtrag): `versionName` führt das Suffix (`0.3.0-alpha.1`), `versionCode` bleibt monoton. Der Release-Workflow (`release.yml`) setzt Vorab-Tags als GitHub-Prerelease, ohne „latest“. Der Probelauf per Dispatch bleibt. |
 
+## Stand Paket 3.6 (21.10.2026)
+
+Branch `feature/m3-3.6-ende-aufbewahrung`, Draft-PR vor der Umsetzung. Der Umfang von 3.6 (Verlängern, Aufbewahrung mit Frist und Erinnerung, automatisches Löschen mit WorkManager und Alarm, `DELETED`-Status, Vorlage, Migration, Browser-Test, Goldens) ist zu groß für einen PR mit grüner CI. Vorschlag zur Aufteilung, noch nicht entschieden:
+
+- **3.6a** Verlängern (Gastgeber-Dialog, `revision`, Benachrichtigungen neu planen, Gäste-Banner und Countdown mit Browser-Test).
+- **3.6b** Aufbewahrung nach dem Ende (`retentionUntil`, Frist ändern, Jetzt löschen mit Bestätigung, Erinnerung inkl. „Sofort löschen“ vor dem Ende, Migration).
+- **3.6c** Automatisches Löschen (Start, WorkManager, inexakter Alarm, Wiederaufnahme), `DELETED`-Eintrag, Aus Liste entfernen, Vorlage.
+
+Die Übernehmen-Schaltfläche bleibt bis 3.7 ausgeblendet.
+
 ## Festgelegt
 
 - In M3 nehmen alle Teilnehmer über die Gäste-Webseite teil. App-zu-App-Beitritt kommt später, weil er Zertifikats-Pinning (siehe [KONZEPT.md](KONZEPT.md), Verschlüsselung) voraussetzt.
