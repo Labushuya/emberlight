@@ -62,6 +62,7 @@ Modular aufbauen, damit Galerie und Sharing unabhängig wachsen:
 - Paket-PRs werden bei grüner CI gemergt (Freigabe der Nutzerin bzw. des Nutzers vom 21.10.2026).
 - Endtest durch die Nutzerin bzw. den Nutzer beim Vorab-Release (Testkatalog in `docs/TESTKATALOG-M3.md`).
 - Gerätetests durch Agenten, wenn das Gerät angeschlossen ist.
+- Chrome bzw. Edge für Browser-Tests nur headless starten (`--headless=new`), auch nicht `--version` ohne Headless-Flags.
 - Gradle-Temp für Agenten einheitlich `C:/Users/Christopher/AppData/Local/Temp/emberlight-work/gradle-tmp` (`GRADLE_OPTS=-Djava.io.tmpdir=…`), vermeidet viele Daemons.
 
 ## Meilensteine
