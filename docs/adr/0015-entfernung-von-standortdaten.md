@@ -4,6 +4,8 @@ Status: Angenommen, 19.10.2026. Umsetzung in Paket 3.1b. Die Festlegungen 1 bis 
 
 Nachtrag 19.10.2026 (gleiche Umsetzung): HEIC, HEIF und AVIF sind umgesetzt (Item-Walker). Die Sicherungskopie entfällt zugunsten von Plan/Apply. Standort-Boxen unter `udta` werden in `free` umbenannt. Prüfung und Hash laufen in einem Lesedurchgang. Die Abschnitte „HEIC, HEIF, AVIF“, „Plan und Apply“, „Kein Null Island“, „Lesedurchgänge“ und „Fehlerbehandlung“ sind neu.
 
+Nachtrag 21.10.2026 (Hotfix 2, Abschnitt „Hotfix 2“ unten): Ein Honor-Kamerafoto hatte den GPS-Block in einem zweiten Exif-Block in APP10 behalten. Jeder APPn-Block mit Exif-Kennung geht jetzt durch den TIFF-Walker. Unbekannte APPn-Segmente und COM werden längenerhaltend genullt. Eine strenge Gegenprobe (`StrictLocationProbe`) läuft in der Nachkontrolle über den Rohstrom und schlägt fail closed an.
+
 Die Festlegungen 1 bis 3 und die Reihenfolge der Prüfungen stammen aus der Nutzerentscheidung vom 19.10.2026. Die Fundorte stammen aus der Recherche vom selben Tag. Was in dieser Umsetzung nicht erreicht wurde, steht unter „Abweichungen und offene Punkte“.
 
 ## Kontext
@@ -124,10 +126,11 @@ Gemessen mit einem zählenden Speicher (`PlanApplyTest.readPassesPerUploadMatchT
 | Plan (Walker) | 0 vollständig, außer JPEG | MP4, PNG, HEIC und die anderen Walker lesen nur Metadaten |
 | Plan (JPEG) | 1 | Die Suche nach dem nächsten Marker streamt die Entropiedaten |
 | Prüfung des Plans (Detektor) | 0 vollständig, außer JPEG | JPEG streamt die Entropiedaten erneut |
+| Strenge Gegenprobe (Rohstrom, Hotfix 2) | 1 | Liest den Plan einmal im Fensterdurchlauf: TIFF-Header und Textmuster zugleich |
 | Scan und Hash (ein Durchgang) | 1 | Nur bei Änderung wird der Hash hier berechnet; sonst wird der Stream-Hash übernommen |
 | Mit Einwilligung, nicht bereinigbar | 0 zusätzlich | Scan und Hash entfallen, Datei bleibt unverändert |
 
-**Ergebnis:** Pro Upload gibt es **einen** vollständigen Lesedurchgang (Scan mit Hash). Gemessen ist das für MP4 und PNG. Für HEIC, HEIF, AVIF, WebP, GIF, MOV und 3GP liest der Code nach Lektüre nur Metadaten, das ist aber nicht eigens gemessen. Bei JPEG sind es **drei**, weil die Entropiedaten im Plan und in der Prüfung gestreamt werden (gemessen). Eine Verkürzung auf zwei ist möglich, indem der Plan die Entropiegrenzen merkt. Das ist offen und nicht umgesetzt.
+**Ergebnis:** Pro Upload gibt es seit Hotfix 2 **einen** zusätzlichen Lesedurchgang für die strenge Gegenprobe. Gemessen (`PlanApplyTest`): Bei JPEG sind es **vier** (Plan, Prüfung, Gegenprobe, Scan), bei PNG und MP4 **zwei** (Gegenprobe, Scan). Für HEIC, HEIF, AVIF, WebP, GIF, MOV und 3GP liest der Code nach Lektüre nur Metadaten; die Gegenprobe liest jeweils einmal den ganzen Strom. Eine Verkürzung ist möglich, indem Gegenprobe und Scan zusammengelegt werden. Das ist offen und nicht umgesetzt.
 
 ## XMP (gemeinsam)
 
@@ -201,6 +204,32 @@ Für HEIF liest ExifInterface (Robolectric) das synthetische Item nicht. metadat
 7. **Hinweis an die Nutzerin bzw. den Nutzer** über abgeschnittene Anhänge ist nicht umgesetzt. Die Gästeseite (Paket 3.5) existiert noch nicht. Die Einwilligung wirkt nur bei nicht bereinigbaren Dateien. Für einen Widerspruch gegen das Abschneiden gibt es deshalb noch keinen Weg. Das ist eine offene Produktentscheidung.
 8. **XMP-Verweise** (`GCamera:MicroVideoOffset`, `Container:Directory`) werden nicht ausgewertet. Das angehängte MP4 wird über seinen `ftyp` gefunden, mit Suche nur direkt nach dem EOI bzw. hinter dem Marker `MotionPhoto_Data`.
 9. **Gegenprobe mit ffmpeg-MP4 plus Anhang** (Fall `mp4-anhang` in `ExternalToolCrossCheckTest`) ist lokal nicht ausgeführt. ExifTool und ffmpeg fehlen lokal, und die CI-Läufe sind gesperrt. Der Nachweis steht aus, bis die CI wieder läuft. Die Logik ist durch `TrailingCutTest` und `SpaceVaultTest` mit synthetischen MP4 abgedeckt.
+
+## Hotfix 2 (21.10.2026): APPn, unbekannte Segmente, strenge Gegenprobe
+
+Anlass: Ein echtes Honor-Kamerafoto trug einen zweiten Exif-Block in APP10 mit GPS-IFD. Der Scrubber behandelte nur APP1, APP2 und APP13. Die Gegenprobe mit metadata-extractor meldete fälschlich „kein Standort“, weil es binäre GPS-Felder in APP10 nicht liest.
+
+Festlegungen:
+
+1. **Exif in jedem APPn.** Ein APPn-Segment (`0xE0` bis `0xEF`) mit `Exif\0\0` am Anfang geht durch den TIFF-Walker, unabhängig vom Marker. Im TIFF-Walker zählt jedes GPS-IFD.
+2. **Unbekannte Segmente genullt.** Alles außer APP0 JFIF/JFXX, APP1 Exif/XMP/ExtXMP, APP2 ICC/MPF, APP13 Photoshop und APP14 Adobe wird längenerhaltend mit `0x00` überschrieben. Marker und Länge bleiben. Dasselbe gilt für COM (`0xFE`). Decoder ignorieren diese Inhalte; der Inhalt ist unbekannt und kann Standort tragen.
+3. **Photoshop-IRB.** Die Ressourcen 0x0422 und 0x0423 (Exif) gehen durch den TIFF-Walker. Andere IRB-Ressourcen werden genullt, außer IPTC (0x0404) und XMP (0x0424), die wie bisher behandelt werden.
+4. **Strenge Gegenprobe** (`StrictLocationProbe`, Hauptcode, unabhängig von den Walkern). In der Nachkontrolle nach dem Plan, vor dem Apply, fail closed:
+   - sucht im Rohstrom nach jedem TIFF-Header (`II*\0`, `MM\0*`), auch in eingebetteten Strukturen, und liest dessen IFD0; zu einem GPS-Zeiger wird das GPS-IFD gelesen; jedes Byte ungleich null darin ist ein Befund (`gps_ifd_nonzero`); ein nicht lesbares GPS-IFD ist ein Befund (`gps_ifd_unreadable`);
+   - Textmuster: ISO-6709-Koordinaten und GPS-Eigenschaften mit Ziffern im Wert (`location_text`);
+   - die TIFF-Suche gilt nur für Formate mit zusammenhängendem TIFF (JPEG, PNG, WebP, GIF). In HEIF liegt ein Exif-Item oft in verstreuten Extents; dort würde ein Rohparsen falsch lesen. Dort gilt nur die Textsuche.
+   - Ein Kandidat, der kein TIFF ist (zufällige Bytes in komprimierten Daten), wird nicht gewertet.
+5. **PNG.** Andere `Raw profile type …` (iptc, app1 und ähnliche) werden unkomprimiert in `tEXt` und `iTXt` durch Ersetzen der Hex-Ziffern mit `0` genullt. Die Länge bleibt gleich. Komprimierte Varianten bleiben bei Standortfund `compressed_text`.
+6. **WebP.** Unbekannte Chunks werden genullt (außer `VP8 `, `VP8L`, `VP8X`, `ALPH`, `ANIM`, `ICCP`). `ANMF` wird rekursiv durchlaufen, damit EXIF und XMP in Animationsbildern erfasst werden.
+
+Verifikation: `JpegSegmentScrubTest` (Honor-Aufbau, unbekannte Segmente, ICC bleibt, APP10-Exif, IRB, COM, Gegenprobe), `ContainerGapScrubTest` (PNG-Raw-Profile, WebP-ANMF), `LocationScrubberTest` und `HeifScrubberTest` unverändert grün. Am echten Honor-Foto (lokal, nur lesend, Kopie im Hotfix-Temp-Ordner): Gegenprobe vorher `gps_ifd_nonzero`, nachher kein Befund; metadata-extractor meldet keinen Standort; ImageIO dekodiert die bereinigte Kopie.
+
+**Restrisiko und offene Punkte (Hotfix 2):**
+
+- Hex-kodierte TIFFs in PNG-Text mit unbekanntem Schlüsselwort (nicht `Raw profile type`) erkennt die strenge Gegenprobe nicht; sie greift nur bei Textmustern.
+- HEIF-Items mit unbekanntem Typ und MP4-Boxen unter `udta` oder `meta`, die unbekannt sind, werden nicht genullt. Enthalten sie Standort als Text, lehnt die Gegenprobe ab (fail closed). Binär codierte Standortwerte in unbekannten Boxen erkennt sie nicht.
+- Eine TIFF-Struktur in komprimierten Bilddaten kann zufällig wie ein gültiges IFD0 mit GPS-Zeiger aussehen. Die Wahrscheinlichkeit ist sehr gering, aber nicht null.
+- Verschachtelte Strukturen in unbekannten Segmenten werden nicht rekursiv geprüft, weil sie genullt werden.
 
 ## Quellen
 

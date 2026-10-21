@@ -4,9 +4,14 @@ package io.github.labushuya.emberlight.share.space.location
  * JPEG-Scrubber (ADR 0015, Fundorte). Segment-Walker über die Marker. Gelesen werden nur die Segmente mit
  * Metadaten. Entropie-kodierte Bilddaten werden bis zum nächsten Marker nur gestreamt durchlaufen, nie geladen.
  *
- * - APP1 `Exif`: TIFF-Walker. APP1 XMP: XMP-Scrubber. APP1 Extended XMP: nur prüfen, bei Standort nicht bereinigbar.
- * - APP13 Photoshop-IRB mit IPTC-IIM: Ortsfelder 2:90, 2:92, 2:95, 2:100, 2:101 mit 0x20 überschreiben.
- * - APP2 MPF: Zusatzbilder über die MPF-Offsets rekursiv als JPEG.
+ * - Jeder APPn-Block mit Exif-Kennung (`Exif\0\0`, in beliebigem APPn, etwa APP10 bei Honor): TIFF-Walker.
+ * - APP1 XMP: XMP-Scrubber. APP1 Extended XMP: nur prüfen, bei Standort nicht bereinigbar.
+ * - APP13 Photoshop-IRB mit IPTC-IIM: Ortsfelder 2:90, 2:92, 2:95, 2:100, 2:101 mit 0x20 überschreiben. Die IRB-Ressourcen
+ *   Exif (0x0422, 0x0423) gehen durch den TIFF-Walker, andere IRB-Ressourcen werden genullt.
+ * - APP2 MPF: Zusatzbilder über die MPF-Offsets rekursiv als JPEG. APP2 ICC bleibt unverändert.
+ * - Unbekannte oder herstellerspezifische APPn-Segmente (alles außer APP0 JFIF/JFXX, APP1 Exif/XMP/ExtXMP, APP2 ICC/MPF,
+ *   APP13 Photoshop, APP14 Adobe) und COM-Segmente werden längenerhaltend mit 0x00 überschrieben (ADR 0015, Nachtrag).
+ *   Decoder ignorieren den Inhalt dieser Segmente; der Inhalt ist unbekannt und kann Standort tragen.
  * - Daten nach EOI: ein angehängtes MP4 (Motion Photo) über den MP4-Scrubber, bis zu seinem logischen Ende. Alles danach
  *   wird abgeschnitten (ADR 0015, Anhänge). Lücken zwischen zwei bekannten Teilen bleiben `trailing_data`.
  */
@@ -16,9 +21,15 @@ internal object JpegScrubber {
     private val XMP_EXTENSION_ID = ascii("http://ns.adobe.com/xmp/extension/\u0000")
     private val MPF_ID = ascii("MPF\u0000")
     private val PHOTOSHOP_ID = ascii("Photoshop 3.0\u0000")
+    private val JFIF_ID = ascii("JFIF\u0000")
+    private val JFXX_ID = ascii("JFXX\u0000")
+    private val ADOBE_ID = ascii("Adobe")
+    private val ICC_ID = ascii("ICC_PROFILE\u0000")
     private val SOI = byteArrayOf(0xFF.toByte(), 0xD8.toByte())
     private const val IRB_IPTC = 0x0404
     private const val IRB_XMP = 0x0424
+    private const val IRB_EXIF_1 = 0x0422
+    private const val IRB_EXIF_3 = 0x0423
     private const val MPF_INDEX_TAG = 0xB002
     private const val MP_ENTRY_SIZE = 16L
     private const val SCAN_CHUNK = 64 * 1024
@@ -131,10 +142,41 @@ internal object JpegScrubber {
         end: Long,
         depth: Int,
     ) {
+        // Jeder APPn-Block mit Exif-Kennung ist ein TIFF, unabhängig vom Marker (Honor: zweiter Exif-Block in APP10).
+        if (marker in 0xE0..0xEF && pass.startsWith(payload, end, EXIF_ID)) {
+            TiffScrubber.scrub(pass, payload + EXIF_ID.size, end, depth + 1)
+            return
+        }
         when (marker) {
-            0xE1 -> app1(pass, payload, end, depth)
-            0xE2 -> app2Mpf(pass, payload, end, depth)
-            0xED -> if (pass.startsWith(payload, end, PHOTOSHOP_ID)) irb(pass, payload + PHOTOSHOP_ID.size, end)
+            0xE0 -> {
+                if (!pass.startsWith(payload, end, JFIF_ID) && !pass.startsWith(payload, end, JFXX_ID)) {
+                    unknown(pass, payload, end)
+                }
+            }
+
+            0xE1 -> {
+                app1(pass, payload, end)
+            }
+
+            0xE2 -> {
+                app2(pass, payload, end, depth)
+            }
+
+            0xED -> {
+                app13(pass, payload, end, depth)
+            }
+
+            0xEE -> {
+                if (!pass.startsWith(payload, end, ADOBE_ID)) unknown(pass, payload, end)
+            }
+
+            0xFE -> {
+                unknown(pass, payload, end)
+            }
+
+            in 0xE3..0xEF -> {
+                unknown(pass, payload, end)
+            }
         }
     }
 
@@ -142,13 +184,8 @@ internal object JpegScrubber {
         pass: ScrubPass,
         payload: Long,
         end: Long,
-        depth: Int,
     ) {
         when {
-            pass.startsWith(payload, end, EXIF_ID) -> {
-                TiffScrubber.scrub(pass, payload + EXIF_ID.size, end, depth + 1)
-            }
-
             pass.startsWith(payload, end, XMP_ID) -> {
                 XmpScrubber.scrubRegion(pass, payload + XMP_ID.size, end)
             }
@@ -159,14 +196,57 @@ internal object JpegScrubber {
                 XmpScrubber.scrubRegion(check, payload + XMP_EXTENSION_ID.size, end)
                 if (check.findings.isNotEmpty()) bail(NotRemovableReason.EXTENDED_XMP)
             }
+
+            else -> {
+                unknown(pass, payload, end)
+            }
         }
     }
 
-    /** Photoshop-Ressourcen (8BIM): IPTC-IIM (0x0404) und XMP (0x0424). */
+    private fun app2(
+        pass: ScrubPass,
+        payload: Long,
+        end: Long,
+        depth: Int,
+    ) {
+        when {
+            pass.startsWith(payload, end, MPF_ID) -> app2Mpf(pass, payload, end, depth)
+            pass.startsWith(payload, end, ICC_ID) -> Unit
+            else -> unknown(pass, payload, end)
+        }
+    }
+
+    private fun app13(
+        pass: ScrubPass,
+        payload: Long,
+        end: Long,
+        depth: Int,
+    ) {
+        if (pass.startsWith(payload, end, PHOTOSHOP_ID)) {
+            irb(pass, payload + PHOTOSHOP_ID.size, end, depth)
+        } else {
+            unknown(pass, payload, end)
+        }
+    }
+
+    /**
+     * Unbekanntes oder herstellerspezifisches Segment: Der Inhalt wird längenerhaltend mit 0x00 überschrieben. Marker und
+     * Länge bleiben, damit die Struktur gültig bleibt. Decoder ignorieren den Inhalt dieser Segmente.
+     */
+    private fun unknown(
+        pass: ScrubPass,
+        payload: Long,
+        end: Long,
+    ) {
+        pass.blank(payload, end - payload, 0x00, "app_unknown")
+    }
+
+    /** Photoshop-Ressourcen (8BIM): IPTC-IIM (0x0404), XMP (0x0424), Exif (0x0422/0x0423), übrige werden genullt. */
     private fun irb(
         pass: ScrubPass,
         first: Long,
         end: Long,
+        depth: Int,
     ) {
         var p = first
         while (p < end) {
@@ -181,8 +261,25 @@ internal object JpegScrubber {
             val dataStart = sizeAt + 4
             pass.bounds(dataStart, size, end)
             when (id) {
-                IRB_IPTC -> iptc(pass, dataStart, dataStart + size)
-                IRB_XMP -> XmpScrubber.scrubRegion(pass, dataStart, dataStart + size)
+                IRB_IPTC -> {
+                    iptc(pass, dataStart, dataStart + size)
+                }
+
+                IRB_XMP -> {
+                    XmpScrubber.scrubRegion(pass, dataStart, dataStart + size)
+                }
+
+                IRB_EXIF_1, IRB_EXIF_3 -> {
+                    if (TiffScrubber.hasHeader(pass, dataStart, dataStart + size)) {
+                        TiffScrubber.scrub(pass, dataStart, dataStart + size, depth + 1)
+                    } else {
+                        pass.blank(dataStart, size, 0x00, "irb_unknown")
+                    }
+                }
+
+                else -> {
+                    pass.blank(dataStart, size, 0x00, "irb_unknown")
+                }
             }
             p = dataStart + size + (size % 2)
         }
@@ -226,7 +323,6 @@ internal object JpegScrubber {
         end: Long,
         depth: Int,
     ) {
-        if (!pass.startsWith(payload, end, MPF_ID)) return
         val base = payload + MPF_ID.size
         val big = pass.bytes(base, 2, end).toString(Charsets.ISO_8859_1).let { it == "MM" }
         val ifd = base + pass.u32(base + 4, end, big)

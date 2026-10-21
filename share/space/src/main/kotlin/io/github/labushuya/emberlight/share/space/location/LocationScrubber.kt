@@ -115,6 +115,11 @@ object LocationScrubber {
         val check = ScrubPass(plan, mutate = false)
         dispatch(check, format.mimeType)
         if (check.findings.isNotEmpty()) return Verdict.Refused(NotRemovableReason.VERIFICATION_FAILED)
+        // Strenge Gegenprobe über den Rohstrom, unabhängig von den Walkern (ADR 0015, Nachkontrolle, fail closed).
+        val tiffContiguous = format.mimeType in TIFF_CONTIGUOUS_MIME_TYPES
+        if (StrictLocationProbe.findings(plan, scanTiff = tiffContiguous).isNotEmpty()) {
+            return Verdict.Refused(NotRemovableReason.VERIFICATION_FAILED)
+        }
         if (!plan.hasChanges) {
             return if (LocationText.scanAll(plan, digest = null)) {
                 Verdict.Refused(NotRemovableReason.VERIFICATION_FAILED)
@@ -146,6 +151,9 @@ object LocationScrubber {
     }
 
     private const val SHA_256 = "SHA-256"
+
+    /** Formate, in denen ein TIFF am Stück im Strom liegt. Dort sucht die strenge Gegenprobe nach TIFF-Headern. */
+    internal val TIFF_CONTIGUOUS_MIME_TYPES = setOf("image/jpeg", "image/png", "image/webp", "image/gif")
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 }
