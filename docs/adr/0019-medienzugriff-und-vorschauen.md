@@ -1,6 +1,6 @@
 # ADR 0019: Medienzugriff und Vorschauen (Meilenstein 3, Paket 3.5a)
 
-Status: angenommen (21.10.2026, Nutzerentscheidung 1 bis 7 aus dem Auftrag zu Paket 3.5a). Umsetzung im Branch `feature/m3-3.5a-medienansicht` (PR #36). Der Stand dieses ADR zeigt, was schon im Code ist. Offene Teile sind unten ausdrücklich markiert.
+Status: angenommen (21.10.2026, Nutzerentscheidung 1 bis 7 aus dem Auftrag zu Paket 3.5a). Umsetzung im Branch `feature/m3-3.5a-medienansicht` (PR #36, Paket 3.5a-1 „Server-Grundlage“). Vorschauen und Gäste-Seite folgen als 3.5a-2 und 3.5a-3. Der Stand dieses ADR zeigt, was schon im Code ist. Offene Teile sind unten ausdrücklich markiert.
 
 ## Kontext
 
@@ -40,7 +40,7 @@ Die Pixelgrenze liegt vorläufig bei 100 Megapixel. Das deckt 12- bis 50-Megapix
 - Medienliste und `GET /api/v1/media/{id}` (Header-Auth) liefern je Eintrag `mine`, `urlsExpireInSeconds` (600) und die signierten Adressen `viewUrl`, `downloadUrl`, bei Video `streamUrl`. Die Adressen sind pro anfragendem Teilnehmer.
 - `GET /api/v1/space` liefert `remainingSeconds` (`null` ohne Ende), `endsAt` (ISO 8601, UTC, `null` ohne Ende), `revision` und `limits` (`imageMaxBytes`, `videoMaxBytes`).
 - `revision` steigt bei Uploads, Löschungen, Beitritt, Entfernen und Erneuern der Einladung.
-- Offen: `previewUrl`, `previewState` und `videoCodec` kommen mit den Vorschauen.
+- Die Felder `previewUrl`, `previewState`, `videoCodec` und `viewState` sind mit Paket 3.5a-1 als Platzhalter enthalten und immer `null`. Sie werden in 3.5a-2 gefüllt. Der Vertrag steht im Abschnitt „Schnittstelle für 3.5a-2 und 3.5a-3“.
 
 ### 5. Server-Last (umgesetzt)
 
@@ -55,6 +55,27 @@ Eigene Grenze für Medien-Streams und Downloads: vier gleichzeitig (`ServerGates
 
 Raster, unendliches Scrollen, Filter „Meine“, Detail, Download, Zurückziehen mit Bestätigung, Speicheranzeige, Abfrage alle 10 bis 15 Sekunden bei sichtbarer Seite, i18n de und en, Barrierefreiheit. Noch nicht begonnen. Die Browser-Tests (Node mit CDP, headless) auch nicht.
 
+## Schnittstelle für 3.5a-2 und 3.5a-3
+
+Festgeschrieben am 21.10.2026. Paket 3.5a-2 (Vorschauen, Codec, HEIC-Ansicht) füllt diese Felder und Routen. Paket 3.5a-3 (Gäste-Seite) entwickelt dagegen. Änderungen am Vertrag brauchen einen Nachtrag zu diesem ADR.
+
+**Felder je Eintrag** in der Medienliste und in `GET /api/v1/media/{id}` (zusätzlich zu den Feldern aus Abschnitt 4):
+
+- `previewUrl`: string oder `null`. Signierte Adresse für die Vorschau mit Zweck `preview`, Gültigkeit 10 Minuten, Route `/api/v1/media/{id}/preview`. `null`, solange keine Vorschau bereit ist.
+- `previewState`: `"pending"`, `"ready"`, `"failed"` oder `null`. `null` heißt: Der Server unterstützt Vorschauen für diesen Eintrag noch nicht (in 3.5a-1 für alle Einträge).
+- `videoCodec`: string oder `null`, z. B. `"avc1"` oder `"hvc1"`. `null` bei Bildern und bei nicht erkanntem Codec.
+- `viewState`: `"pending"`, `"ready"`, `"failed"` oder `null`. Nur bei HEIC/HEIF gesetzt. Bei HEIC/HEIF liefert `viewUrl` die 1600-px-JPEG-Ansicht, sobald `viewState` `"ready"` ist. Bis dahin ist `viewUrl` `null`. Bei `"failed"` bleibt `viewUrl` `null`. Bei allen anderen Typen ist `viewState` `null` und `viewUrl` zeigt das Original.
+
+**Routen:**
+
+- `GET /api/v1/media/{id}/preview`: JPEG mit 320 px langer Kante, für Bilder und Videos. Zugriff per Header oder per signierter Adresse mit Zweck `preview`. Gleiche Antwort-Header wie bei anderen Medienantworten (ADR 0019, Abschnitt 1).
+- `GET /api/v1/media/{id}/view`: bestehende Route. Bei HEIC/HEIF liefert sie die 1600-px-JPEG-Ansicht. Zugriff wie oben.
+- Antwortcodes für beide Routen: `200` bei Erfolg. `404` mit `preview_unavailable`, wenn der Zustand `pending` oder `failed` ist. `404` mit `not_found`, wenn das Medium nicht existiert.
+
+**Stand 3.5a-1:** Die Felder sind als Platzhalter vorhanden (`null`). Die Routen `/preview` gibt es noch nicht. Der Test `itemsCarryNullPlaceholdersForPreviewsCodecAndHeicViewUntilPackage3Point5a2` prüft die Platzhalter.
+
+**Folgepakete:** Die Gäste-Seite behandelt `null` bei `previewUrl` und `viewUrl` als „Vorschau folgt“ bzw. „Original laden“ und nie als Fehler. Die Seite erneuert Adressen still bei `401` und `403` (Abschnitt 1).
+
 ## Konsequenzen
 
 - Die Signatur ist ein Bearer-ähnliches Recht für 10 bzw. 30 Minuten. Wer die URL aus dem WLAN abgreift, kann das Medium in dieser Zeit lesen. Das ist mit dem Ziel „nur im WLAN, nur für Teilnehmer“ vereinbar. Die Entfernung eines Teilnehmers wirkt sofort.
@@ -63,7 +84,7 @@ Raster, unendliches Scrollen, Filter „Meine“, Detail, Download, Zurückziehe
 
 ## Offen
 
-- Vorschauen (Abschnitt 3) mit Migration 6 → 7 und Migrationstest.
-- Codec-Erkennung und `videoCodec` (Abschnitt 2).
-- Gäste-Seite, Browser-Tests, Testkatalog-Abschnitt „Medien im Browser“.
+- Vorschauen (Abschnitt 3) mit Migration 6 → 7 und Migrationstest, Paket 3.5a-2. Füllt den Vertrag oben.
+- Codec-Erkennung und `videoCodec` (Abschnitt 2), Paket 3.5a-2.
+- Gäste-Seite, Browser-Tests, Testkatalog-Abschnitt „Medien im Browser“, Paket 3.5a-3.
 - Ende-Hinweise für Gäste und für den Gastgeber (Abschnitt 6).

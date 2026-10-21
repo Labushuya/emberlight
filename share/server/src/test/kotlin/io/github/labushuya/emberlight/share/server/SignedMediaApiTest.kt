@@ -394,6 +394,42 @@ class SignedMediaApiTest {
         }
 
     @Test
+    fun itemsCarryNullPlaceholdersForPreviewsCodecAndHeicViewUntilPackage3Point5a2() =
+        testApplication {
+            install()
+            val imageId = client.upload(MediaFixtures.jpeg(300), "bild.jpg")
+            client.upload(MediaFixtures.mp4(), "clip.mp4")
+            val placeholders = listOf("previewUrl", "previewState", "videoCodec", "viewState")
+
+            val list =
+                client.get("/api/v1/media") {
+                    header(HttpHeaders.Host, "localhost")
+                    header(HttpHeaders.Authorization, "Bearer $GUEST_TOKEN")
+                }
+            val items =
+                Json
+                    .parseToJsonElement(list.bodyAsText())
+                    .jsonObject
+                    .getValue("items")
+                    .jsonArray
+                    .map { it.jsonObject }
+            assertEquals(2, items.size)
+            items.forEach { item ->
+                placeholders.forEach { key ->
+                    assertTrue("$key fehlt", item.containsKey(key))
+                    assertEquals(JsonNull, item.getValue(key))
+                }
+            }
+
+            val single = client.signedGet("/api/v1/media/$imageId", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN")
+            assertEquals(HttpStatusCode.OK, single.status)
+            val item = Json.parseToJsonElement(single.bodyAsText()).jsonObject
+            placeholders.forEach { key ->
+                assertEquals(JsonNull, item.getValue(key))
+            }
+        }
+
+    @Test
     fun singleItemRouteNeedsTheHeaderAndAnswersNotFoundForUnknownIds() =
         testApplication {
             install()

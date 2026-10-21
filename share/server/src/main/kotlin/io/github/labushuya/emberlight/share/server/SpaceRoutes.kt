@@ -631,6 +631,12 @@ private fun SpaceAccess.mediaItemJson(
             "locationKept" to JsonPrimitive(entry.locationKept),
             // Die kürzeste Gültigkeit der Adressen. Die Stream-Adresse lebt länger (ADR 0019).
             "urlsExpireInSeconds" to JsonPrimitive(MediaPurpose.VIEW.ttlSeconds),
+            // Platzhalter für Paket 3.5a-2 (Vorschauen, Video-Codec, HEIC-Ansicht). Vertrag in ADR 0019, Abschnitt
+            // „Schnittstelle für 3.5a-2 und 3.5a-3“. Bis dahin immer null.
+            "previewUrl" to JsonNull,
+            "previewState" to JsonNull,
+            "videoCodec" to JsonNull,
+            "viewState" to JsonNull,
         ) + urls,
     )
 }

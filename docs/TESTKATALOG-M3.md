@@ -128,17 +128,17 @@ Quellen: die Testkataloge aus den PR-Beschreibungen von #30 (Paket 3.2), #32 (Pa
 
 - [ ] **5.22 [Entwickler] curl-Prüfung.** Handlung: Die Befehle aus `docs/DEBUG-SERVER.md` ausführen. Erwartet: Beitritt mit gültiger Einladung `201`. Vorschau mit gültigem Geheimnis `200` mit genau `spaceName` und `accentColor`. Falsche Einladung bei Beitritt und Vorschau `403` (`invite_invalid`). Falscher Content-Type `415`. Gast auf `/participants` `403`. *(seit 3.4, PR #35 Punkt 21, Entwickler-Prüfung)*
 
-## 6 Medien im Browser (3.5a, folgt)
+## 6 Medien im Browser (3.5a-1 Server umgesetzt, 3.5a-2 und 3.5a-3 folgen)
 
 - [ ] **6.1 Medienliste im Browser.** Handlung: Gast öffnet den Space im Browser. Erwartet: Bilder und Videos mit Uploader und Zeitpunkt. HEIC erscheint als JPEG-Ansicht. *(folgt 3.5a)*
-- [ ] **6.2 [Entwickler] Signierte Medien-URLs.** Handlung: Eine Medien-URL abrufen, nach Ablauf erneut abrufen. Erwartet: Eine abgelaufene URL wird abgewiesen, eine neue Abfrage liefert eine neue, gültige URL. *(folgt 3.5a, Entwickler-Prüfung)*
+- [ ] **6.2 [Entwickler] Signierte Medien-URLs.** Handlung: Eine Medien-URL abrufen, nach Ablauf erneut abrufen. Erwartet: Eine abgelaufene URL wird abgewiesen, eine neue Abfrage liefert eine neue, gültige URL. *(3.5a-1 umgesetzt, Server-Tests `MediaUrlSignerTest`, `SignedMediaApiTest`; Entwickler-Prüfung am Gerät offen)*
 - [ ] **6.3 Video mit langer Wiedergabe.** Handlung: Video über mehr als 30 Minuten abspielen. Erwartet: Die Wiedergabe läuft weiter. Die URL erneuert sich still, ohne Unterbrechung und ohne Hinweis. *(folgt 3.5a)*
 - [ ] **6.4 Aktualisierung der Liste.** Handlung: Die Seite offen lassen, während ein anderer Gast hochlädt. Erwartet: Der neue Upload erscheint innerhalb von 10 bis 15 Sekunden, ohne Neuladen. *(folgt 3.5a)*
 - [ ] **6.5 Restzeit sichtbar.** Handlung: Im Space die Seite ansehen. Erwartet: Die Restzeit ist immer sichtbar. *(folgt 3.5a)*
 - [ ] **6.6 Vorwarnung 10 Minuten.** Handlung: Warten, bis noch 10 Minuten übrig sind. Erwartet: Banner mit der Vorwarnung. Die Seite bleibt benutzbar. *(folgt 3.5a)*
 - [ ] **6.7 Vorwarnung 1 Minute.** Handlung: Warten, bis noch 1 Minute übrig ist. Erwartet: Dialog mit der Vorwarnung. *(folgt 3.5a)*
 - [ ] **6.8 Ende-Ansicht.** Handlung: Das Ende abwarten, dann die Seite neu laden. Erwartet: Ganzseitige Ende-Ansicht. Die Seite merkt sich die Ende-Ansicht, auch nach dem Neuladen. *(folgt 3.5a)*
-- [ ] **6.9 [Entwickler] Nachlauf 60 Sekunden.** Handlung: Kurz nach dem Ende eine Anfrage senden, dann nach 60 Sekunden erneut. Erwartet: In den ersten 60 Sekunden antwortet der Server mit `410`, danach beendet er sich. Die Seite zeigt die Ende-Ansicht ohne Verbindungsfehler. *(folgt 3.5a, Entwickler-Prüfung)*
+- [ ] **6.9 [Entwickler] Nachlauf 60 Sekunden.** Handlung: Kurz nach dem Ende eine Anfrage senden, dann nach 60 Sekunden erneut. Erwartet: In den ersten 60 Sekunden antwortet der Server mit `410`, danach beendet er sich. Die Seite zeigt die Ende-Ansicht ohne Verbindungsfehler. *(3.5a-1 umgesetzt, Server-Test `SpaceClosureSocketTest`; Entwickler-Prüfung am Gerät offen)*
 - [ ] **6.10 Verbindungsverlust.** Handlung: WLAN am Handy des Gasts ausschalten, Seite bedienen, dann wieder einschalten. Erwartet: Klarer Text statt einer Fehlerseite. Nach der Rückkehr des WLAN lädt die Seite weiter. *(folgt 3.5a)*
 
 ## 7 Upload im Browser (3.5b, folgt)
