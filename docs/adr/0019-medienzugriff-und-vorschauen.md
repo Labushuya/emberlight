@@ -127,6 +127,46 @@ Der Vertrag oben bleibt unverändert. Dieser Nachtrag hält fest, wie die Seite 
 - Gerätetest der Vorschauen (HEIC ab API 28, Videobild und Drehung, Speicherzählung), Testkatalog 6.16 bis 6.20.
 - Vorschau in der Gastgeber-App: umgesetzt in 3.5c (Nachtrag 3.5c unten). Offen sind Nachladen über 200 Medien, Zweispaltenansicht auf großen Displays und die Extraktion des Viewers nach `core:viewer`.
 
+
+## Nachtrag 3.5b: Upload im Browser (21.10.2026)
+
+Die Gäste-Seite lädt Medien hoch. Umsetzung in `guest/guest-upload.js` (Oberfläche in `index.html`, Stile in `guest.css`). Die Signaturen stehen in `guest/formats.json`. Der Upload nutzt die API aus [ADR 0014](0014-space-speicher-und-server-api.md) (Abschnitt „Upload“) und die Standort-Rückfrage aus [ADR 0015](0015-entfernung-von-standortdaten.md).
+
+**Bedienung.** Knopf „Dateien auswählen“ (`input type=file multiple accept="image/*,video/*"`). Am PC zusätzlich Ablage per Drag and Drop auf die Ablagezone, der Knopf bleibt die Tastatur-Alternative. Mehrfachauswahl wird zur Warteschlange. Je Gast laufen höchstens zwei Uploads gleichzeitig. Je Datei: Zustand, Fortschritt in Prozent und Balken (`upload.onprogress`), Knopf „Abbrechen“ (`xhr.abort`). Oben der Gesamtfortschritt. Die Live-Region meldet nur Abschluss, Fehler, Stopp und Rückfragen, gedrosselt über `core.announce`. Solange Uploads laufen, steht der Hinweis „Bitte die Seite offen lassen, bis alle Uploads fertig sind.“ da.
+
+**Vorabprüfung im Browser.** Vor dem Senden prüft die Seite jede Datei:
+1. Format: die ersten 32 Bytes (`file.slice(0, 32)`) gegen `formats.json`. Die Auswertung entspricht `ContentInspector`.
+2. Größe: gegen `imageMaxBytes` bzw. `videoMaxBytes` aus `limits`, je nach erkanntem Format.
+3. Speicher: gegen `storageLimitBytes − usedBytes`. Dabei zählt die Summe der wartenden und laufenden Dateien mit.
+
+Abgelehnte Dateien werden nicht gesendet und in der Liste mit dem Grund angezeigt. Lassen sich die Regeln nicht laden, bleibt die Auswahl gesperrt (fail closed).
+
+**Gleichlauf der Signaturen.** `formats.json` ist die Liste für die Seite, `ContentInspector` die für den Server. `GuestFormatsParityTest` (JVM) prüft beide an `src/test/fixtures/guest-formats.json`: `ContentInspector` liefert das erwartete Ergebnis, und die Auswertung von `formats.json` stimmt damit überein. Der Browser-Test `formats.test.mjs` prüft die Seite an denselben Fällen. Weicht eine Liste ab, schlägt ein Test fehl.
+
+**Antworten des Servers und Verhalten der Seite.**
+
+| Antwort | Verhalten |
+|---|---|
+| `201` | Fertig. Bei `locationKept` „Fertig, Standort enthalten“ (Kennzeichen im Raster) |
+| `200` mit `duplicate: true` | „Bereits vorhanden“, Knopf „Zum Eintrag“ springt zum Eintrag. Kein Fehler |
+| `422 location_not_removable` | Rückfrage pro Datei mit „Mit Standort hochladen“ bzw. „Nicht hochladen“. Ja: erneut mit `X-Emberlight-Keep-Location: 1`. Nein: nichts gesendet |
+| `429`, `503` mit `Retry-After` | Warten, ohne Meldung, dann erneut |
+| Netzfehler, `408`, `5xx` | Warten 1 s, 3 s, 10 s, danach Fehler „Keine Verbindung …“ |
+| `507` | Warteschlange angehalten, Hinweis, Knopf „Fortsetzen“. Laufende Uploads enden, neue starten nicht |
+| `410` | Ende-Ansicht mit `endedAt` (ADR 0014), alle Uploads gestoppt |
+| `400`, `401`, `403`, `413`, `415` | Fehler je Datei mit verständlichem Text, keine Wiederholung |
+
+**Auslegungen und Abweichungen.**
+- „Höchstens 3 Versuche“ im Auftrag: gelesen als erster Versuch plus drei Wiederholungen mit den Wartezeiten 1 s, 3 s und 10 s.
+- Warten bei `429` und `503` mit `Retry-After`: Standard 5 s, höchstens 60 s je Warten, höchstens zehn Wartezeiten. Die Begrenzung auf zehn ist eine Festlegung dieses Nachtrags, der Auftrag nennt keine Grenze.
+- Passt eine Datei bei der Vorabprüfung nicht mehr in den freien Speicher, wird nur diese Datei abgelehnt. Die übrigen laufen weiter.
+- Beim Verlassen des Space (Knopf „Verlassen“, Sitzung abgelaufen, Ende) bricht die Seite alle Uploads ab (`cancelAll`).
+- Die Seite meldet Hintergrund-Tabs nur über den Hinweis. Die Pausierung durch den Browser ist nicht abgefangen.
+- Das Inline-Stylen der Breiten geschieht nur über `element.style`, weil die CSP keine Inline-Attribute erlaubt (ADR 0018).
+
+**Browser-Tests.** `GuestBrowserTest` mit vier neuen Szenarien: `upload.test.mjs` (acht Fälle: Fortschritt, zwei parallel, Dublette, Vorab-Ablehnung, Standort-Rückfrage, Abbrechen, 429, Ablage am PC), `upload-storage.test.mjs` (507), `upload-closed.test.mjs` (410 mit `endedAt`), `formats.test.mjs` (Gleichlauf). Die Steuerung über den Steuerkanal: `hold-uploads` und `release-uploads` belegen die Upload-Plätze des Gastes (429), `fill-storage` füllt den Speicher, `close-space` markiert das Ende. Die Fixtures sind echte JPEGs (`BrowserScene.photo`, Zufallsbilder mit festem Seed) und ein MP4 mit `gpmd`-Track (`MediaFixtures.mp4WithGpmdTrack`, Antwort `422`). Die Szenarien dauern zusammen rund 100 Sekunden.
+
+**Offen.** Gerätetests am Handy und am PC (Testkatalog, Abschnitt 7). Netzabbruch mitten im Upload (WLAN aus) ist nicht automatisiert.
 ## Nachtrag 3.5c: Gemeinsame Vault, Gastgeber-Upload, Medienansicht (21.10.2026)
 
 Dieser Nachtrag hält fest, wie 3.5c die Entscheidungen oben nutzt. Die Schnittstelle für Medien-URLs und Vorschauen bleibt unverändert.

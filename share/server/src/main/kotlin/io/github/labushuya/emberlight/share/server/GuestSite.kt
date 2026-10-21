@@ -38,6 +38,8 @@ internal object GuestSite {
             "/guest.css" to ("guest.css" to CSS),
             "/guest-core.js" to ("guest-core.js" to JS),
             "/guest-space.js" to ("guest-space.js" to JS),
+            "/guest-upload.js" to ("guest-upload.js" to JS),
+            "/formats.json" to ("formats.json" to JSON),
             "/guest.js" to ("guest.js" to JS),
             "/i18n/de.json" to ("i18n/de.json" to JSON),
             "/i18n/en.json" to ("i18n/en.json" to JSON),

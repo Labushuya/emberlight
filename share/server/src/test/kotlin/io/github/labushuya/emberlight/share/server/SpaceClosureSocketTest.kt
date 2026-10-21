@@ -45,6 +45,24 @@ class SpaceClosureSocketTest {
         }
 
     @Test
+    fun aClosedSpaceNamesTheEndInUtcWhenItIsKnown() =
+        runBlocking {
+            val endedAt = 1_790_000_000_000L
+            val closure = FixedClosure(closed = true, endedAt = endedAt)
+            val server = KtorLocalServer(routes = {}, authorizer = allowAll, closure = closure)
+            val port = server.start(ServerConfig(subnet = localSubnet))
+
+            val response = RawHttp.get(port, "/health", "Host" to "127.0.0.1:$port", "Authorization" to "Bearer abc")
+
+            assertEquals(410, response.status)
+            assertEquals(
+                """{"error":"space_closed","endedAt":"2026-09-21T14:13:20Z"}""",
+                response.body,
+            )
+            server.stop()
+        }
+
+    @Test
     fun anOpenSpaceKeepsTheUsualDenialWithoutAuthorization() =
         runBlocking {
             val closure = FixedClosure(closed = false)
@@ -63,10 +81,13 @@ class SpaceClosureSocketTest {
 
     private class FixedClosure(
         private val closed: Boolean,
+        private val endedAt: Long? = null,
     ) : SpaceClosure {
         val reported = AtomicInteger()
 
         override fun isClosed(): Boolean = closed
+
+        override fun endedAtMillis(): Long? = endedAt
 
         override fun onClosedRequest() {
             reported.incrementAndGet()

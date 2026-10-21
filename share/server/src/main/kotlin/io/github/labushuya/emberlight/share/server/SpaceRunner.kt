@@ -240,6 +240,8 @@ internal class SpaceRunner(
         submit(RunCommand.Expire)
     }
 
+    override fun endedAtMillis(): Long? = if (isClosed()) deadline?.expiresAtMillis else null
+
     private suspend fun handle(command: RunCommand) {
         when (command) {
             is RunCommand.Start -> start(command)

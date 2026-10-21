@@ -96,6 +96,8 @@
     listRevision: null,
     usedBytes: 0,
     limitBytes: 0,
+    imageMaxBytes: 0,
+    videoMaxBytes: 0,
     storageWarning: false,
     items: [],
     nextCursor: null,
@@ -289,8 +291,8 @@
     core.announce(t("connectionLost"));
   }
 
-  function handleFailure(status) {
-    if (status === 410) endSpace();
+  function handleFailure(status, data) {
+    if (status === 410) endSpace(false, data);
     else if (status === 401) sessionLost();
     else noteFailure();
   }
@@ -337,23 +339,29 @@
 
   function forgetLocally(spaceId) {
     stopTimers();
+    if (core.upload) core.upload.cancelAll();
     closeDetail(false);
     hideDialogs();
     state.session = null;
     if (spaceId) core.forgetSession(spaceId);
   }
 
-  /** Das Ende ist da (Countdown, 410 oder bekanntes Ende nach Verbindungsverlust). Das merkt sich die Seite. */
-  function endSpace(atPlannedEnd) {
+  /**
+   * Das Ende ist da (Countdown, 410 oder bekanntes Ende nach Verbindungsverlust). Das merkt sich die Seite. Nennt die
+   * Antwort 410 ein `endedAt` (ADR 0014, Nachtrag), zeigt die Seite diese Stoppzeit.
+   */
+  function endSpace(atPlannedEnd, serverData) {
     if (state.ended || !state.session) return;
     state.ended = true;
     // Die Uhrzeit ist das geplante Ende, wenn der Countdown es erreicht hat. Hat der Gastgeber früher beendet, ist es der
     // Zeitpunkt, zu dem die Seite das Ende bemerkt hat (das Ende selbst meldet die API nicht, ADR 0017).
     var reached = atPlannedEnd === true && state.endsAt !== null;
+    var serverEnd = serverData && typeof serverData.endedAt === "string" ? serverData.endedAt : null;
+    var known = serverEnd && core.formatTime(serverEnd) ? serverEnd : null;
     var record = {
       spaceId: state.session.spaceId,
       spaceName: state.spaceName || state.session.spaceName || "",
-      endsAt: reached ? state.endsAt : new Date().toISOString()
+      endsAt: reached ? state.endsAt : known || new Date().toISOString()
     };
     core.saveEnd(record);
     forgetLocally(record.spaceId);
@@ -392,7 +400,7 @@
           core.showSection("none");
           core.setStatus(t("left"));
         } else if (result.status === 410) {
-          endSpace();
+          endSpace(false, result.data);
         } else {
           core.setStatus(t("genericError"));
         }
@@ -418,6 +426,9 @@
     state.usedBytes = typeof data.usedBytes === "number" ? data.usedBytes : 0;
     state.limitBytes = typeof data.storageLimitBytes === "number" ? data.storageLimitBytes : 0;
     state.storageWarning = data.warning === true;
+    var limits = data.limits || {};
+    state.imageMaxBytes = typeof limits.imageMaxBytes === "number" ? limits.imageMaxBytes : 0;
+    state.videoMaxBytes = typeof limits.videoMaxBytes === "number" ? limits.videoMaxBytes : 0;
     if (state.session) {
       state.session.spaceName = state.spaceName;
       state.session.endsAt = state.endsAt;
@@ -440,7 +451,7 @@
           noteSuccess();
           return "ok";
         }
-        handleFailure(result.status);
+        handleFailure(result.status, result.data);
         return "failed";
       },
       function () {
@@ -552,7 +563,7 @@
             nextCursor: typeof result.data.nextCursor === "string" ? result.data.nextCursor : null
           };
         }
-        handleFailure(result.status);
+        handleFailure(result.status, result.data);
         return { ok: false, items: [], nextCursor: null };
       },
       function () {
@@ -657,6 +668,7 @@
   function tileFor(item) {
     var li = document.createElement("li");
     li.className = "cell";
+    if (ID_PATTERN.test(item.id)) li.setAttribute("data-id", item.id);
     var button = document.createElement("button");
     button.type = "button";
     button.className = "tile";
@@ -731,7 +743,7 @@
           core.setStatus(t("notFound"));
           return null;
         }
-        handleFailure(result.status);
+        handleFailure(result.status, result.data);
         return null;
       },
       function () {
@@ -981,7 +993,7 @@
         }
         closeWithdraw(true);
         if (result.status === 403) core.setStatus(t("withdrawForbidden"));
-        else handleFailure(result.status);
+        else handleFailure(result.status, result.data);
       },
       function () {
         el.withdrawConfirm.disabled = false;
@@ -1036,10 +1048,52 @@
     });
   }
 
+  /**
+   * Zeigt den Eintrag mit der Medien-ID (Dublette beim Upload). Ist er nicht geladen, lädt die Liste neu.
+   * Liefert ein Promise, das nach dem Versuch aufgelöst wird.
+   */
+  function focusItem(id) {
+    if (!ID_PATTERN.test(id) || !state.session) return Promise.resolve(false);
+    function locate() {
+      var tile = el.grid.querySelector('li[data-id="' + id + '"] .tile');
+      if (!tile) return false;
+      tile.scrollIntoView({ block: "center" });
+      tile.focus();
+      return true;
+    }
+    if (locate()) return Promise.resolve(true);
+    return refreshList().then(function () {
+      return locate();
+    });
+  }
+
   init();
 
+  // Schnittstelle für guest-upload.js (Paket 3.5b): lesen und anstoßen, keine inneren Zustände.
   core.space = {
     open: open,
-    showEnded: showEnded
+    showEnded: showEnded,
+    session: function () {
+      return state.session;
+    },
+    limits: function () {
+      return {
+        imageMaxBytes: state.imageMaxBytes,
+        videoMaxBytes: state.videoMaxBytes,
+        freeBytes: Math.max(0, state.limitBytes - state.usedBytes)
+      };
+    },
+    refresh: function () {
+      return refreshSpace();
+    },
+    reloadList: function () {
+      return refreshList();
+    },
+    endedByServer: function (endedAt) {
+      if (state.session) endSpace(false, { endedAt: endedAt });
+    },
+    focusItem: function (id) {
+      return focusItem(id);
+    }
   };
 })();

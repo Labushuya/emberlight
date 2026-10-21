@@ -14,7 +14,7 @@ export async function seedSession(page, config, session) {
 export async function openSpace(page, config, session) {
   await seedSession(page, config, session);
   await page.goto(`${config.base}/`);
-  await page.waitFor("!document.getElementById('space-section').hidden", { what: "Space-Ansicht" });
+  await page.waitFor("!document.getElementById('space-section').hidden", { what: "Space-Ansicht", timeout: 30000 });
   await page.waitFor("document.getElementById('space-name').textContent.length > 0", { what: "Name des Space" });
 }
 

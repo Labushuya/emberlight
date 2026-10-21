@@ -1,0 +1,155 @@
+{
+  "description": "Gemeinsame Fixtures für die Signaturprüfung: ContentInspector (JVM) und guest/guest-upload.js (Browser). head = erste Bytes als Hex (höchstens 32 Bytes).",
+  "cases": [
+    {
+      "name": "jpeg",
+      "head": "ffd8ffe000104a46494600000000000000000000000000000000000000000000",
+      "mime": "image/jpeg",
+      "kind": "image"
+    },
+    {
+      "name": "png",
+      "head": "89504e470d0a1a0a0000000d4948445200000000000000000000000000000000",
+      "mime": "image/png",
+      "kind": "image"
+    },
+    {
+      "name": "gif87a",
+      "head": "4749463837610a00000000000000000000000000000000000000000000000000",
+      "mime": "image/gif",
+      "kind": "image"
+    },
+    {
+      "name": "gif89a",
+      "head": "4749463839610a00000000000000000000000000000000000000000000000000",
+      "mime": "image/gif",
+      "kind": "image"
+    },
+    {
+      "name": "webp",
+      "head": "5249464600000064574542505650382000000000000000000000000000000000",
+      "mime": "image/webp",
+      "kind": "image"
+    },
+    {
+      "name": "heic",
+      "head": "00000018667479706865696300000000686569636d6966310000000000000000",
+      "mime": "image/heic",
+      "kind": "image"
+    },
+    {
+      "name": "heix",
+      "head": "00000018667479706865697800000000686569786d6966310000000000000000",
+      "mime": "image/heic",
+      "kind": "image"
+    },
+    {
+      "name": "mif1",
+      "head": "00000018667479706d696631000000006d6966316d6966310000000000000000",
+      "mime": "image/heif",
+      "kind": "image"
+    },
+    {
+      "name": "avif",
+      "head": "00000018667479706176696600000000617669666d6966310000000000000000",
+      "mime": "image/avif",
+      "kind": "image"
+    },
+    {
+      "name": "mp4-isom",
+      "head": "000000186674797069736f6d0000000069736f6d6d6966310000000000000000",
+      "mime": "video/mp4",
+      "kind": "video"
+    },
+    {
+      "name": "mp4-mp42",
+      "head": "00000018667479706d703432000000006d7034326d6966310000000000000000",
+      "mime": "video/mp4",
+      "kind": "video"
+    },
+    {
+      "name": "mp4-avc1",
+      "head": "00000018667479706176633100000000617663316d6966310000000000000000",
+      "mime": "video/mp4",
+      "kind": "video"
+    },
+    {
+      "name": "mov-qt",
+      "head": "00000018667479707174202000000000717420206d6966310000000000000000",
+      "mime": "video/quicktime",
+      "kind": "video"
+    },
+    {
+      "name": "3gp-3gp4",
+      "head": "00000018667479703367703400000000336770346d6966310000000000000000",
+      "mime": "video/3gpp",
+      "kind": "video"
+    },
+    {
+      "name": "mov-moov-ohne-ftyp",
+      "head": "000000106d6f6f76000000086672656500000000000000000000000000000000",
+      "mime": "video/quicktime",
+      "kind": "video"
+    },
+    {
+      "name": "mov-mdat-ohne-ftyp",
+      "head": "000000106d646174000000086672656500000000000000000000000000000000",
+      "mime": "video/quicktime",
+      "kind": "video"
+    },
+    {
+      "name": "polyglot-png-mit-html",
+      "head": "89504e470d0a1a0a3c7363726970743e616c6572742831293c2f736372697074",
+      "mime": "image/png",
+      "kind": "image"
+    },
+    {
+      "name": "abgelehnt-leer",
+      "head": "",
+      "mime": null,
+      "kind": null
+    },
+    {
+      "name": "abgelehnt-text",
+      "head": "4469657320697374206e757220546578742e0000000000000000000000000000",
+      "mime": null,
+      "kind": null
+    },
+    {
+      "name": "abgelehnt-jpeg-kaputt",
+      "head": "ffd8fe0000000000000000000000000000000000000000000000000000000000",
+      "mime": null,
+      "kind": null
+    },
+    {
+      "name": "abgelehnt-png-kaputt",
+      "head": "89504e470d0a1a0b000000000000000000000000000000000000000000000000",
+      "mime": null,
+      "kind": null
+    },
+    {
+      "name": "abgelehnt-sequenz-msf1",
+      "head": "00000018667479706d736631000000006d7366316d6966310000000000000000",
+      "mime": null,
+      "kind": null
+    },
+    {
+      "name": "abgelehnt-unbekannte-marke",
+      "head": "00000018667479707878787800000000787878786d6966310000000000000000",
+      "mime": null,
+      "kind": null
+    },
+    {
+      "name": "abgelehnt-free-marke",
+      "head": "00000018667479706672656500000000667265656d6966310000000000000000",
+      "mime": null,
+      "kind": null
+    },
+    {
+      "name": "abgelehnt-ftyp-zu-kurz",
+      "head": "0000000c6674797069736f",
+      "mime": null,
+      "kind": null
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "description": "Signaturen für die Vorabprüfung der Gäste-Seite (ADR 0019, Paket 3.5b). Muss zu ContentInspector passen. Der JVM-Test GuestFormatsParityTest prüft beide Seiten an derselben Datei test/fixtures/guest-formats.json.",
+  "signatures": [
+    { "mime": "image/jpeg", "kind": "image", "checks": [ { "offset": 0, "hex": "FFD8FF" } ] },
+    { "mime": "image/png", "kind": "image", "checks": [ { "offset": 0, "hex": "89504E470D0A1A0A" } ] },
+    { "mime": "image/gif", "kind": "image", "checks": [ { "offset": 0, "ascii": "GIF87a" } ] },
+    { "mime": "image/gif", "kind": "image", "checks": [ { "offset": 0, "ascii": "GIF89a" } ] },
+    { "mime": "image/webp", "kind": "image", "checks": [ { "offset": 0, "ascii": "RIFF" }, { "offset": 8, "ascii": "WEBP" } ] },
+    { "mime": "video/quicktime", "kind": "video", "checks": [ { "offset": 4, "ascii": "moov" } ] },
+    { "mime": "video/quicktime", "kind": "video", "checks": [ { "offset": 4, "ascii": "mdat" } ] },
+    { "mime": "video/quicktime", "kind": "video", "checks": [ { "offset": 4, "ascii": "wide" } ] }
+  ],
+  "ftyp": {
+    "offset": 4,
+    "ascii": "ftyp",
+    "brandOffset": 8,
+    "brands": {
+      "heic": { "mime": "image/heic", "kind": "image" },
+      "heix": { "mime": "image/heic", "kind": "image" },
+      "mif1": { "mime": "image/heif", "kind": "image" },
+      "avif": { "mime": "image/avif", "kind": "image" },
+      "isom": { "mime": "video/mp4", "kind": "video" },
+      "iso2": { "mime": "video/mp4", "kind": "video" },
+      "mp41": { "mime": "video/mp4", "kind": "video" },
+      "mp42": { "mime": "video/mp4", "kind": "video" },
+      "avc1": { "mime": "video/mp4", "kind": "video" },
+      "qt  ": { "mime": "video/quicktime", "kind": "video" },
+      "3gp4": { "mime": "video/3gpp", "kind": "video" },
+      "3gp5": { "mime": "video/3gpp", "kind": "video" },
+      "3gp6": { "mime": "video/3gpp", "kind": "video" },
+      "3gp7": { "mime": "video/3gpp", "kind": "video" },
+      "3ge6": { "mime": "video/3gpp", "kind": "video" },
+      "3ge7": { "mime": "video/3gpp", "kind": "video" },
+      "3gg6": { "mime": "video/3gpp", "kind": "video" },
+      "3gr6": { "mime": "video/3gpp", "kind": "video" },
+      "3gs6": { "mime": "video/3gpp", "kind": "video" }
+    }
+  }
+}

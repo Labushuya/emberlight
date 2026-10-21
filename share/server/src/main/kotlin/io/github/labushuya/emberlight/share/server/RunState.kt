@@ -55,6 +55,12 @@ interface SpaceClosure {
     /** Eine Anfrage hat den abgelaufenen Space erreicht. Der Aufruf kehrt sofort zurück. */
     fun onClosedRequest()
 
+    /**
+     * Zeitpunkt des Endes in Epoch-Millisekunden (UTC) für die Antwort `410` (`endedAt`, Nachtrag ADR 0014). `null`, wenn
+     * er nicht bekannt ist. Die Antwort lässt das Feld dann weg.
+     */
+    fun endedAtMillis(): Long? = null
+
     companion object {
         /** Ohne Ende: der Server lehnt nie wegen des Ablaufs ab. */
         val Open: SpaceClosure =
