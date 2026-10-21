@@ -155,7 +155,7 @@ Die Punkte gelten für den Browser des Gasts, einmal auf dem Telefon (390 px bre
 **Beide**
 
 - [ ] **6.11 Sprache.** Handlung: Die Seite auf Englisch stellen und öffnen. Erwartet: Alle Texte sind englisch, die Pluralformen stimmen („1 minute left“, „9 minutes left“). *(3.5a-3, Browser-Test auf Englisch; Gerät offen)*
-- [ ] **6.12 Aktualisierung der Liste.** Handlung: Die Seite offen lassen, während ein anderer Gast etwas hochlädt. Erwartet: Der neue Upload erscheint innerhalb von 10 bis 15 Sekunden, ohne Neuladen. *(3.5a-3 im Code; Gerät offen, Upload im Browser folgt mit 3.5b)*
+- [ ] **6.12 Aktualisierung der Liste.** Handlung: Die Seite offen lassen, während ein anderer Gast etwas hochlädt. Erwartet: Der neue Upload erscheint innerhalb von 10 bis 15 Sekunden, ohne Neuladen. *(3.5a-3 im Code; Gerät offen; Upload im Browser seit 3.5b, siehe 7)*
 - [ ] **6.13 [Entwickler] Nachlauf 60 Sekunden.** Handlung: Kurz nach dem Ende eine Anfrage senden, dann nach 60 Sekunden erneut. Erwartet: In den ersten 60 Sekunden antwortet der Server mit `410`, danach beendet er sich. Die Seite zeigt die Ende-Ansicht ohne Verbindungsfehler. *(3.5a-1 umgesetzt, Server-Test `SpaceClosureSocketTest`; Entwickler-Prüfung am Gerät offen)*
 - [ ] **6.14 HEIC im Browser.** Handlung: Ein HEIC-Foto öffnen. Erwartet: Mit Vorschau (1600 px) sichtbar. Ohne Vorschau steht „Vorschau nicht verfügbar – herunterladen“. *(folgt 3.5a-2)*
 - [ ] **6.15 [Entwickler] Signierte Medien-URLs.** Handlung: Eine Medien-URL abrufen, nach Ablauf erneut abrufen. Erwartet: Eine abgelaufene URL wird abgewiesen, eine neue Abfrage liefert eine neue, gültige URL. *(3.5a-1 umgesetzt, Server-Tests `MediaUrlSignerTest`, `SignedMediaApiTest`; Entwickler-Prüfung am Gerät offen)*
@@ -176,15 +176,25 @@ Die Punkte gelten für den Browser des Gasts, einmal auf dem Telefon (390 px bre
 - [ ] **6b.7 Verbindungsverlust ohne Ende.** Handlung: Der Server ist nicht erreichbar, das Ende ist nicht bekannt. Erwartet: „Keine Verbindung zum Space. Vielleicht wurde er beendet …“, die Seite versucht es automatisch erneut und zeigt danach den Space wieder. *(3.5a-3, Browser-Test; Gerät offen)*
 
 
-## 7 Upload im Browser (3.5b, folgt)
+## 7 Upload im Browser (3.5b umgesetzt, Gerätetests offen)
 
-- [ ] **7.1 Fortschritt je Datei.** Handlung: Mehrere Dateien auswählen und hochladen. Erwartet: Eine Fortschrittsanzeige je Datei. *(folgt 3.5b)*
-- [ ] **7.2 Vorabprüfung Größe.** Handlung: Eine Datei über der Größengrenze auswählen. Erwartet: Die Datei wird vor dem Senden mit Grund abgewiesen, kein Upload startet. *(folgt 3.5b)*
-- [ ] **7.3 Vorabprüfung Speicher.** Handlung: Eine Datei auswählen, die größer als der freie Speicher des Space ist. Erwartet: Die Datei wird vor dem Senden abgewiesen. *(folgt 3.5b)*
-- [ ] **7.4 Wiederholung.** Handlung: Während eines Uploads das WLAN ausschalten, danach „Wiederholen“ antippen. Erwartet: Die Datei wird erneut gesendet und erscheint danach nur einmal in der Liste. *(folgt 3.5b)*
-- [ ] **7.5 Standort-Rückfrage pro Datei.** Handlung: Eine eigene Aufnahme mit Standort hochladen, deren Standort nicht entfernt werden kann. Erwartet: Rückfrage je Datei mit „Mit Standort hochladen“ und „Nicht hochladen“. *(folgt 3.5b)*
-- [ ] **7.6 Nicht hochladen.** Handlung: Bei 7.5 „Nicht hochladen“ wählen, bei einer zweiten Datei „Mit Standort hochladen“. Erwartet: Die erste Datei wird nicht übertragen, die zweite schon. *(folgt 3.5b)*
-- [ ] **7.7 Eigene Uploads zurückziehen.** Handlung: Den eigenen Upload zurückziehen. Erwartet: Kurze Bestätigung, danach verschwindet der Upload. Fremde Uploads lassen sich nicht zurückziehen. *(folgt 3.5b, Designentscheidung (e))*
+Die Browser-Tests decken Fortschritt, Warteschlange, Dublette, Vorabprüfung ohne Anfrage, Standort-Rückfrage, Abbrechen, Wiederholung bei 429, Ablage am PC, Speicher voll, Ende während des Uploads und den Gleichlauf der Signaturen ab. Die Punkte unten prüfen, was die Browser-Tests nicht erreichen (Telefon, WLAN, echte Dateien aus der Galerie).
+
+- [ ] **7.1 Mehrere Fotos auswählen (Handy).** Handlung: Im Space „Dateien auswählen“ antippen, mehrere Fotos wählen. Erwartet: Jede Datei erscheint als Zeile in der Warteschlange, höchstens zwei laufen gleichzeitig, die übrigen zeigen „Wartet“. *(seit 3.5b)*
+- [ ] **7.2 Fortschritt je Datei (Handy).** Handlung: Ein großes Video hochladen. Erwartet: Die Zeile zeigt „Wird hochgeladen, x %“ mit wachsendem Balken, darüber der Gesamtfortschritt. *(seit 3.5b)*
+- [ ] **7.3 Ablage am PC.** Handlung: Am PC Dateien aus dem Explorer auf die Ablagezone ziehen. Erwartet: Die Dateien kommen in die Warteschlange. Fallen sie daneben, öffnet der Browser sie nicht. *(seit 3.5b)*
+- [ ] **7.4 Tastatur am PC.** Handlung: Mit Tab zum Knopf „Dateien auswählen“, Enter drücken. Erwartet: Der Auswahldialog öffnet sich, der Fokus ist sichtbar, die Zeilen sind per Tab erreichbar. *(seit 3.5b)*
+- [ ] **7.5 Vorabprüfung Format.** Handlung: Eine Textdatei mit der Endung „.jpg“ auswählen. Erwartet: Die Zeile zeigt „Dieses Dateiformat ist nicht erlaubt.“, es entsteht keine Anfrage (Entwickler: Netzwerkprotokoll der Seite). *(seit 3.5b, Entwickler-Prüfung)*
+- [ ] **7.6 Vorabprüfung Größe und Speicher.** Handlung: Eine Datei über der Größengrenze für Bilder bzw. Videos auswählen. Dann mehrere Dateien wählen, deren Summe den freien Speicher übersteigt. Erwartet: Die Datei wird mit Grund abgewiesen, bzw. die überzähligen Dateien passen nicht mehr in den Speicher. Kein Upload startet dafür. *(seit 3.5b)*
+- [ ] **7.7 Standort-Rückfrage pro Datei.** Handlung: Ein Video mit Standort hochladen, dessen Standort nicht entfernt werden kann. Erwartet: Rückfrage je Datei mit „Mit Standort hochladen“ und „Nicht hochladen“, die Rückfrage gilt nur für diese Datei. *(seit 3.5b, ADR 0015)*
+- [ ] **7.8 Nicht hochladen.** Handlung: Bei 7.7 „Nicht hochladen“ wählen, bei einer zweiten Datei „Mit Standort hochladen“. Erwartet: Die erste Datei wird nicht gespeichert, die zweite erscheint mit dem Kennzeichen „Standort enthalten“. *(seit 3.5b)*
+- [ ] **7.9 Bereits vorhanden.** Handlung: Ein Foto hochladen, das schon im Space liegt. Erwartet: „Bereits vorhanden“ ohne Fehler, Knopf „Zum Eintrag“ springt zum Eintrag im Raster. *(seit 3.5b)*
+- [ ] **7.10 Abbrechen.** Handlung: Eine wartende oder laufende Datei mit „Abbrechen“ entfernen. Erwartet: Die Zeile zeigt „Abgebrochen“, die Datei erscheint nicht im Raster. *(seit 3.5b)*
+- [ ] **7.11 Netzabbruch während des Uploads (Handy).** Handlung: Während eines Uploads das WLAN ausschalten, nach kurzer Zeit wieder einschalten. Erwartet: Die Zeile wartet, wiederholt den Upload nach 1, 3 und 10 Sekunden und erscheint danach einmal im Raster. Bleibt das WLAN aus, zeigt die Zeile „Keine Verbindung …“ nach dem dritten Versuch. *(seit 3.5b, nicht automatisiert)*
+- [ ] **7.12 Speicher voll während des Uploads.** Handlung: Auf dem Gastgeber-Handy den Space bis zum Limit füllen, dann einen Upload starten. Erwartet: Die Warteschlange hält an, der Hinweis „Der Space ist voll.“ erscheint, „Fortsetzen“ ist sichtbar. *(seit 3.5b)*
+- [ ] **7.13 Ende während des Uploads.** Handlung: Den Space beenden, während ein Upload wartet. Erwartet: Die Ende-Ansicht zeigt die Uhrzeit des Endes. Die Zeit stimmt mit der Stoppzeit auf dem Gastgeber-Handy überein, sofern der Gast das Ende über die Abfrage erfährt (ADR 0014, Nachtrag endedAt, Abweichung beim manuellen Beenden). *(seit 3.5b, Abweichung offen)*
+- [ ] **7.14 Seite offen lassen.** Handlung: Während eines Uploads den Browser in den Hintergrund schalten. Erwartet: Der Hinweis „Bitte die Seite offen lassen …“ ist sichtbar, nach dem Zurückkehren laufen die Uploads weiter oder melden einen Fehler. *(seit 3.5b, Verhalten des Browsers)*
+- [ ] **7.15 Eigene Uploads zurückziehen.** Handlung: Den eigenen Upload zurückziehen. Erwartet: Kurze Bestätigung, danach verschwindet der Upload. Fremde Uploads lassen sich nicht zurückziehen. *(seit 3.5a-3, Designentscheidung (e))*
 
 ## 8 Gastgeber-Upload und Medien in der App (3.5c, folgt)
 
@@ -198,9 +208,9 @@ Die Punkte gelten für den Browser des Gasts, einmal auf dem Telefon (390 px bre
 - [ ] **9.1 Titelbild mit Standort.** Handlung: Eigenes Foto mit aktiviertem Standort als Titelbild wählen, speichern. Erwartet: Das Titelbild wird übernommen. *(seit 3.2, PR #30 Punkt 10, Titelbild-Pipeline)*
 - [ ] **9.2 [Entwickler] Titelbild ohne Standort.** Handlung: Titelbild im Space-Speicher des Debug-Builds prüfen (`adb shell run-as …`, dann ExifTool). Erwartet: Keine GPS-Angaben in EXIF und XMP. *(seit 3.2, Entwickler-Prüfung)*
 - [ ] **9.3 Nicht bereinigbares Titelbild.** Handlung: Titelbild mit einem Standort wählen, den die Bereinigung nicht entfernen kann (falls verfügbar). Erwartet: Meldung mit Hinweis. Eine Einwilligungsoption gibt es nicht. *(seit 3.2, PR #30 Punkt 11)*
-- [ ] **9.4 Video mit Standort.** Handlung: Eigenes Video mit Standort über den Browser hochladen. Erwartet: Der Standort ist entfernt, das Video bleibt abspielbar. *(seit 3.1b, folgt Upload im Browser 3.5b)*
-- [ ] **9.5 [Entwickler] Foto mit Standort.** Handlung: Eigenes Foto mit Standort über den Gast-Upload oder 8.1 hochladen, dann die Kopie prüfen. Erwartet: Keine GPS-Angaben, die Bildgröße bleibt erhalten. *(seit 3.1b, folgt 3.5b/3.5c, Entwickler-Prüfung)*
-- [ ] **9.6 Markierung „Standort enthalten“.** Handlung: Bei nicht bereinigbarer Datei „Mit Standort hochladen“ wählen. Erwartet: Die Datei trägt in der Medienliste die Markierung „Standort enthalten“. *(folgt 3.5b, ADR 0015)*
+- [ ] **9.4 Video mit Standort.** Handlung: Eigenes Video mit Standort über den Browser hochladen. Erwartet: Der Standort ist entfernt, das Video bleibt abspielbar. *(seit 3.1b, Upload im Browser seit 3.5b)*
+- [ ] **9.5 [Entwickler] Foto mit Standort.** Handlung: Eigenes Foto mit Standort über den Gast-Upload oder 8.1 hochladen, dann die Kopie prüfen. Erwartet: Keine GPS-Angaben, die Bildgröße bleibt erhalten. *(seit 3.1b, Gast-Upload seit 3.5b, Gastgeber-Upload folgt 3.5c, Entwickler-Prüfung)*
+- [ ] **9.6 Markierung „Standort enthalten“.** Handlung: Bei nicht bereinigbarer Datei „Mit Standort hochladen“ wählen. Erwartet: Die Datei trägt in der Medienliste die Markierung „Standort enthalten“. *(seit 3.5b, ADR 0015)*
 
 ## 10 Ende bzw. Aufbewahrung bzw. Verlängern bzw. Vorlage (3.6, folgt)
 

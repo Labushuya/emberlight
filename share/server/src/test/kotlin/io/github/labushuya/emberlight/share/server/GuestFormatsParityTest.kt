@@ -26,7 +26,11 @@ class GuestFormatsParityTest {
     fun contentInspectorGivesTheExpectedResultForEveryFixture() {
         cases.forEach { case ->
             val name = case.text("name")
-            val actual = ContentInspector.identify(hex(case.text("head")))?.let { it.mimeType to it.kind.name.lowercase() }
+            val actual =
+                ContentInspector.identify(hex(case.text("head")))?.let {
+                    it.mimeType to
+                        it.kind.name.lowercase()
+                }
             assertEquals(name, expectedOf(case), actual)
         }
     }
