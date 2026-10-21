@@ -67,6 +67,10 @@ data class MediaEntity(
     @ColumnInfo(name = "view_state") val viewState: String? = null,
     /** Erkannter Video-Codec, z. B. `avc1`. Leer heißt: geprüft, nicht erkannt. `null`: noch nicht geprüft (Paket 3.5a-2). */
     @ColumnInfo(name = "video_codec") val videoCodec: String? = null,
+    /** Fehlergrund der 320-px-Vorschau als Code, nur bei `FAILED` gesetzt (Hotfix 2). Ohne Pfad und ohne Werte. */
+    @ColumnInfo(name = "preview_reason") val previewReason: String? = null,
+    /** Fehlergrund der 1600-px-Ansicht als Code, nur bei `FAILED` gesetzt (Hotfix 2). */
+    @ColumnInfo(name = "view_reason") val viewReason: String? = null,
     /** Bytes der 320-px-Vorschau auf dem Speicher. Zählen gegen das Speicherlimit (Paket 3.5a-2). */
     @ColumnInfo(name = "preview_bytes", defaultValue = "0") val previewBytes: Long = 0L,
     /** Bytes der 1600-px-Ansicht auf dem Speicher. Zählen gegen das Speicherlimit (Paket 3.5a-2). */
@@ -189,6 +193,20 @@ interface MediaDao {
 
     @Query("DELETE FROM media WHERE id = :id")
     suspend fun deleteById(id: String): Int
+
+    /** Fehlergrund der 320-px-Vorschau als Code. `null` löscht ihn. Wirkt nur auf bestehende Medien (Hotfix 2). */
+    @Query("UPDATE media SET preview_reason = :reason WHERE id = :id AND state = 'READY'")
+    suspend fun setPreviewReason(
+        id: String,
+        reason: String?,
+    ): Int
+
+    /** Fehlergrund der 1600-px-Ansicht als Code. `null` löscht ihn (Hotfix 2). */
+    @Query("UPDATE media SET view_reason = :reason WHERE id = :id AND state = 'READY'")
+    suspend fun setViewReason(
+        id: String,
+        reason: String?,
+    ): Int
 
     /** Zustand der 320-px-Vorschau mit ihrer Größe. Wirkt nur auf bereite Medien (ADR 0019). */
     @Query("UPDATE media SET preview_state = :state, preview_bytes = :bytes WHERE id = :id AND state = 'READY'")
@@ -429,7 +447,7 @@ interface SpaceDao {
  */
 @Database(
     entities = [MediaEntity::class, ParticipantEntity::class, SpaceEntity::class, PauseEventEntity::class],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 abstract class SpacesDatabase : RoomDatabase() {
@@ -521,6 +539,18 @@ abstract class SpacesDatabase : RoomDatabase() {
             }
 
         /**
+         * Version 8 → 9 (Hotfix 2): Fehlergrund der Vorschau und der Ansicht als Code (`preview_reason`, `view_reason`).
+         * Additiv, bestehende Medien haben `NULL`.
+         */
+        val MIGRATION_8_9: Migration =
+            object : Migration(8, 9) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `media` ADD COLUMN `preview_reason` TEXT")
+                    db.execSQL("ALTER TABLE `media` ADD COLUMN `view_reason` TEXT")
+                }
+            }
+
+        /**
          * Version 5 → 6 (Paket 3.4, ADR 0018): verschlüsseltes Einladungsgeheimnis (Ciphertext und IV) an `space`. Additiv.
          * Bestehende Spaces haben `NULL`. Ihre Einladung lässt sich nicht wiederherstellen, der Beitritt erzeugt dann eine
          * neue, und der Gastgeber wird darauf hingewiesen.
@@ -604,6 +634,7 @@ abstract class SpacesDatabase : RoomDatabase() {
                     MIGRATION_5_6,
                     MIGRATION_6_7,
                     MIGRATION_7_8,
+                    MIGRATION_8_9,
                 ).build()
         }
     }

@@ -198,3 +198,19 @@ Erwartet:
 Im Browser: `http://<ip>:<port>/` öffnen. Die Seite liest die Einladung aus dem Fragment und entfernt sie sofort aus der Adresse.
 
 Die Gäste-Seite und ihre Dateien (`/`, `/guest.js`, `/guest.css`, `/i18n/*.json`) brauchen keine Authorization. Mit `curl -i -H "Host: <ip>:<port>" http://<ip>:<port>/` kommt `200` mit der Richtlinie `Content-Security-Policy`, `Referrer-Policy: no-referrer` und `X-Content-Type-Options: nosniff`.
+
+## Protokolle lesen (Hotfix 2)
+
+Die App protokolliert Ablehnungen und Fehler auch im Release-Build, mit festen Tags und ohne Namen, Pfade oder Dateiinhalte:
+
+- `EmberlightServer`: jede Fehlerantwort des Servers mit Status und Code (z. B. `Antwort 422: location_not_removable`, `Antwort 413: payload_too_large`). Ab 500 mit `E`, sonst mit `W`.
+- `EmberlightPreview`: Fehler der Vorschau mit Stufe (`bild`, `video`), Grund und Ausnahmeklasse. Pfade und Zahlen in der Meldung sind ersetzt.
+- `EmberlightSpaceVideo`: Fehler der Videowiedergabe in der Gastgeber-App mit Fehlercode, und das erste gerenderte Bild.
+
+Lesen mit dem Prozess der App:
+
+```
+adb logcat --pid=$(adb shell pidof -s io.github.labushuya.emberlight) -s EmberlightServer:W EmberlightPreview:W EmberlightSpaceVideo:I
+```
+
+Ist die App nicht mehr aktiv, `adb logcat -d -s EmberlightServer:W EmberlightPreview:W` nehmen. Die Ausgabe enthält keine Tokens, keine Einladungen und keine Standortdaten.

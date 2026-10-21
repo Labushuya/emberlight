@@ -9,6 +9,8 @@ import java.util.zip.CRC32
  * - `tEXt` oder unkomprimiertes `iTXt` mit `Raw profile type exif`: Hex-Payload dekodieren, TIFF-Walker auf den
  *   Bytes, geänderte Bytes als `0` in den Hex-Text zurückschreiben. Die Länge bleibt gleich.
  * - `iTXt` `XML:com.adobe.xmp` unkomprimiert: XMP-Scrubber.
+ * - Andere `Raw profile type …` (etwa iptc, app1, xmp), unkomprimiert: Hex-Ziffern werden durch `0` ersetzt. Der Inhalt
+ *   ist keine Standortquelle, die wir sicher lesen; die Länge bleibt gleich (ADR 0015, Nachtrag).
  * - `zTXt` und komprimiertes `iTXt`: mit Größenlimit dekomprimieren und prüfen. Standort darin ist `compressed_text`.
  *
  * Nach jeder Änderung eines Chunks wird seine CRC über Typ und Daten neu berechnet.
@@ -17,6 +19,7 @@ internal object PngScrubber {
     private val SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
     private val EXIF_PREFIX = ascii("Exif\u0000\u0000")
     private const val RAW_PROFILE_EXIF = "Raw profile type exif"
+    private const val RAW_PROFILE_PREFIX = "Raw profile type "
     private const val XMP_KEYWORD = "XML:com.adobe.xmp"
     private const val SCAN_CHUNK = 64 * 1024
 
@@ -74,8 +77,23 @@ internal object PngScrubber {
         val data = pass.bytes(dataStart, dataEnd - dataStart, dataEnd)
         val nul = data.nulFrom(0)
         if (nul < 0) bail(NotRemovableReason.STRUCTURE)
-        if (String(data, 0, nul, Charsets.ISO_8859_1) == RAW_PROFILE_EXIF) {
-            rawProfile(pass, dataStart + nul + 1, dataEnd, 0)
+        val keyword = String(data, 0, nul, Charsets.ISO_8859_1)
+        when {
+            keyword == RAW_PROFILE_EXIF -> rawProfile(pass, dataStart + nul + 1, dataEnd, 0)
+            keyword.startsWith(RAW_PROFILE_PREFIX) -> blankRawProfile(pass, dataStart + nul + 1, dataEnd)
+        }
+    }
+
+    /** Anderes Raw-Profile: Jede Hex-Ziffer wird durch `0` ersetzt. Leerraum bleibt, damit die Ziffernzahl stimmt. */
+    private fun blankRawProfile(
+        pass: ScrubPass,
+        start: Long,
+        end: Long,
+    ) {
+        val text = String(pass.bytes(start, end - start, end), Charsets.ISO_8859_1)
+        val profile = decodeProfile(text)
+        for (index in profile.digitAt) {
+            pass.blank(start + index, 1, '0'.code.toByte(), "raw_profile_other")
         }
     }
 
@@ -116,9 +134,10 @@ internal object PngScrubber {
             checkCompressed(keyword, inflateLimited(data.copyOfRange(translatedEnd + 1, data.size)))
             return
         }
-        when (keyword) {
-            XMP_KEYWORD -> XmpScrubber.scrubRegion(pass, textStart, dataEnd)
-            RAW_PROFILE_EXIF -> rawProfile(pass, textStart, dataEnd, 0)
+        when {
+            keyword == XMP_KEYWORD -> XmpScrubber.scrubRegion(pass, textStart, dataEnd)
+            keyword == RAW_PROFILE_EXIF -> rawProfile(pass, textStart, dataEnd, 0)
+            keyword.startsWith(RAW_PROFILE_PREFIX) -> blankRawProfile(pass, textStart, dataEnd)
         }
     }
 

@@ -1,6 +1,5 @@
 package io.github.labushuya.emberlight.feature.space.run
 
-import android.net.Uri
 import android.text.format.Formatter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,7 +26,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -48,17 +46,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.compose.PlayerSurface
-import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
+import coil3.compose.SubcomposeAsyncImage
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import io.github.labushuya.emberlight.feature.space.R
@@ -168,25 +161,20 @@ private fun HostMediaTile(
                 .clickable(role = Role.Button, onClick = onClick)
                 .semantics { contentDescription = description },
     ) {
-        val file = item.previewFile
-        if (file != null) {
-            val request = remember(context, file) { previewRequest(context, file, TILE_PIXELS) }
-            AsyncImage(
+        // Vorschau, sonst bei fehlgeschlagener Vorschau das Original verkleinert (Hotfix 2). Scheitert auch das, bleibt
+        // der Platzhalter „Keine Vorschau“.
+        val source = item.previewFile ?: item.originalFile
+        if (source != null) {
+            val request = remember(context, source) { previewRequest(context, source, TILE_PIXELS) }
+            SubcomposeAsyncImage(
                 model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
+                error = { PreviewPlaceholder(placeholderRes(PreviewState.FAILED)) },
             )
         } else {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = stringResource(placeholderRes(item.previewState)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(4.dp),
-                )
-            }
+            PreviewPlaceholder(placeholderRes(item.previewState))
         }
         if (item.isVideo) {
             Tag(
@@ -208,7 +196,10 @@ private fun HostMediaTile(
             text = uploader,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurface,
+            // Ein langer Name endet mit „…“ statt abgeschnitten zu verschwinden (Hotfix 2, Golden „Christopher-Alexander“).
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
             modifier =
                 Modifier
                     .align(Alignment.BottomStart)
@@ -266,6 +257,20 @@ private fun placeholderRes(state: String?): Int =
         PreviewState.FAILED -> R.string.space_media_placeholder_failed
         else -> R.string.space_media_placeholder_pending
     }
+
+/** Platzhalter in einer Kachel oder Ansicht: ein kurzer Text, mittig, ohne Bild. */
+@Composable
+private fun PreviewPlaceholder(textRes: Int) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = stringResource(textRes),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(4.dp),
+        )
+    }
+}
 
 /** Anfrage für eine Vorschau aus dem Space-Speicher. Der Coil-Plattencache ist aus, die Datei liegt ohnehin dort. */
 private fun previewRequest(
@@ -352,7 +357,7 @@ internal fun HostMediaDetailBody(
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when {
                 detail != null && detail.isVideo -> {
-                    VideoDetail(detail.file)
+                    HostVideoDetail(detail.file)
                 }
 
                 detail != null -> {
@@ -427,7 +432,7 @@ private fun ZoomableImage(
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     val request = remember(context, file) { previewRequest(context, file, DETAIL_PIXELS) }
-    AsyncImage(
+    SubcomposeAsyncImage(
         model = request,
         contentDescription = stringResource(R.string.space_media_detail_image, description),
         contentScale = ContentScale.Fit,
@@ -445,44 +450,9 @@ private fun ZoomableImage(
                         offset = if (scale > 1f) offset + pan else Offset.Zero
                     }
                 },
+        // Scheitert das Dekodieren (etwa HEIC auf einem älteren Gerät), zeigt die Ansicht „Keine Vorschau“ (Hotfix 2).
+        error = { PreviewPlaceholder(placeholderRes(PreviewState.FAILED)) },
     )
-}
-
-/** Video aus dem App-Speicher über `file://`. Ohne FileProvider, der Speicher ist nicht für andere Apps erreichbar. */
-@androidx.annotation.OptIn(UnstableApi::class)
-@Composable
-private fun VideoDetail(file: File) {
-    val context = LocalContext.current
-    var failed by remember(file) { mutableStateOf(false) }
-    val player =
-        remember(file) {
-            ExoPlayer.Builder(context).build().apply {
-                setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
-                prepare()
-            }
-        }
-    DisposableEffect(player) {
-        val listener =
-            object : Player.Listener {
-                override fun onPlayerError(error: PlaybackException) {
-                    failed = true
-                }
-            }
-        player.addListener(listener)
-        onDispose {
-            player.removeListener(listener)
-            player.release()
-        }
-    }
-    if (failed) {
-        Text(
-            text = stringResource(R.string.space_media_video_failed),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
-        )
-    } else {
-        PlayerSurface(player = player, modifier = Modifier.fillMaxSize())
-    }
 }
 
 private const val NARROW_COLUMNS = 3

@@ -379,6 +379,9 @@
     <string name="space_media_remove_text">Es verschwindet für alle im Space. Das lässt sich nicht rückgängig machen.</string>
     <string name="space_media_remove_confirm">Entfernen</string>
     <string name="space_media_video_failed">Dieses Video lässt sich nicht abspielen.</string>
+    <string name="space_media_video_play">Abspielen</string>
+    <string name="space_media_video_replay">Erneut abspielen</string>
+    <string name="space_media_video_pause">Pause</string>
     <string name="space_retention_channel_name">Aufbewahrung</string>
     <string name="space_retention_notice_title">Aufbewahrung von „%1$s“</string>
     <string name="space_retention_notice_text">Die Aufbewahrung endet am %1$s. Sichere jetzt, was du behalten möchtest.</string>

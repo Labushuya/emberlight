@@ -39,13 +39,13 @@ internal class FakePreviewRenderer(
         mime: String,
         longEdge: Int,
         target: File,
-    ): Boolean = record("image", source, longEdge, target)
+    ): RenderResult = record("image", source, longEdge, target)
 
     override fun renderVideoFrame(
         source: File,
         longEdge: Int,
         target: File,
-    ): Boolean = record("video", source, longEdge, target)
+    ): RenderResult = record("video", source, longEdge, target)
 
     override fun videoCodec(source: File): String? {
         calls += Call("codec", source.name, 0)
@@ -57,13 +57,13 @@ internal class FakePreviewRenderer(
         source: File,
         longEdge: Int,
         target: File,
-    ): Boolean {
+    ): RenderResult {
         calls += Call(kind, source.name, longEdge)
         latch.countDown()
+        if (!ok) return RenderResult.Failed("fake")
         gate?.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        if (!ok) return false
         target.writeBytes("$kind-$longEdge".toByteArray(Charsets.US_ASCII))
-        return true
+        return RenderResult.Done
     }
 
     private companion object {

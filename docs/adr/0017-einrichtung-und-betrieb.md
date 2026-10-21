@@ -2,6 +2,8 @@
 
 Status: Umgesetzt im Paket 3.3 (Stand 20.10.2026), nachgebessert in 3.3b am 20.10.2026: Ein Prozess-Tod oder Abbruch durch das System beendet einen Space nicht mehr (Abschnitt „Neustart nach Prozess-Tod“). Gerätetest offen, siehe Abschnitt „Offen“. Grundlage sind [ADR 0012](0012-lokaler-server.md) (Dienst, Stopp in der App), [ADR 0013](0013-schutz-gegen-manipulation.md) (Netz, Pflicht-Tests) und [ADR 0016](0016-space-verwaltung.md) (Entwürfe, Voreinstellungen).
 
+Nachtrag 21.10.2026 (Hotfix 2): Die Medienansicht des Gastgebers zeigt bei fehlgeschlagener Vorschau das Original, verkleinert und ohne Plattencache. Scheitert auch das, steht dort „Keine Vorschau“. Die Videoansicht in der Gastgeber-App ist eigenständig (kein Galerie-Code): Player mit Audio-Attributen, Abspielen nur über den Knopf, Pause bei ON_STOP, Freigabe beim Schließen. Die Fläche ist eine TextureView, weil die Ansicht in einem Dialog liegt; eine SurfaceView kann dort schwarz bleiben. Fehler erscheinen als Text und im Log `EmberlightSpaceVideo`. Die Serverantworten mit Fehlercode werden im Log `EmberlightServer` festgehalten (siehe `docs/DEBUG-SERVER.md`).
+
 ## Kontext
 
 Bis Paket 3.2 gab es Entwürfe, aber keinen Start. Paket 3.3 bringt den Betrieb: Der Gastgeber richtet das Gerät ein, startet den Space, sieht den laufenden Space und beendet ihn. Der Dienst muss dabei auf Geräten laufen, die Hintergrundprozesse hart beenden. Das Gerät kann pausieren, das WLAN kann wechseln, und die Frist muss auch dann stimmen, wenn die Uhr verstellt wird.

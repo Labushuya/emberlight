@@ -16,6 +16,8 @@ internal object TiffScrubber {
     private const val TAG_GPS_IFD = 0x8825
     private const val TAG_MAKER_NOTE = 0x927C
     private const val ENTRY_SIZE = 12L
+    private val TIFF_LE = byteArrayOf(0x49, 0x49, 0x2A, 0x00)
+    private val TIFF_BE = byteArrayOf(0x4D, 0x4D, 0x00, 0x2A)
 
     /**
      * Ein IFD-Eintrag. [at] ist die absolute Position des Eintrags, [size] die Länge des Werts in Bytes oder -1 bei
@@ -103,6 +105,17 @@ internal object TiffScrubber {
             "II" -> false
             else -> bail(NotRemovableReason.STRUCTURE)
         }
+
+    /** `true`, wenn bei [at] ein TIFF-Header (`II*\0` oder `MM\0*`) steht. Ohne Strukturprüfung. */
+    fun hasHeader(
+        pass: ScrubPass,
+        at: Long,
+        end: Long,
+    ): Boolean {
+        if (end - at < 4) return false
+        val head = pass.bytes(at, 4, end)
+        return head.contentEquals(TIFF_LE) || head.contentEquals(TIFF_BE)
+    }
 
     /** Ganzzahliger Wert eines Pointer- oder Längen-Eintrags (SHORT oder LONG, einzeln). */
     private fun scalar(

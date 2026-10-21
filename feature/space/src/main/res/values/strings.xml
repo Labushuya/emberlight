@@ -375,6 +375,9 @@
     <string name="space_media_remove_text">It disappears for everyone in this space. This cannot be undone.</string>
     <string name="space_media_remove_confirm">Remove</string>
     <string name="space_media_video_failed">This video cannot be played.</string>
+    <string name="space_media_video_play">Play</string>
+    <string name="space_media_video_replay">Play again</string>
+    <string name="space_media_video_pause">Pause</string>
     <string name="space_retention_channel_name">Keeping media</string>
     <string name="space_retention_notice_title">Keeping “%1$s”</string>
     <string name="space_retention_notice_text">Keeping ends on %1$s. Save what you want to keep now.</string>

@@ -237,6 +237,7 @@ Die Punkte gelten für das Telefon des Gastgebers im laufenden Space. Die Unit-T
 - [ ] **9.4 Video mit Standort.** Handlung: Eigenes Video mit Standort über den Browser hochladen. Erwartet: Der Standort ist entfernt, das Video bleibt abspielbar. *(seit 3.1b, Upload im Browser seit 3.5b)*
 - [ ] **9.5 [Entwickler] Foto mit Standort.** Handlung: Eigenes Foto mit Standort über den Gast-Upload oder 8.1 hochladen, dann die Kopie prüfen. Erwartet: Keine GPS-Angaben, die Bildgröße bleibt erhalten. *(seit 3.1b, Gast-Upload seit 3.5b, Gastgeber-Upload seit 3.5c, Entwickler-Prüfung)*
 - [ ] **9.6 Markierung „Standort enthalten“.** Handlung: Bei nicht bereinigbarer Datei „Mit Standort hochladen“ wählen. Erwartet: Die Datei trägt in der Medienliste die Markierung „Standort enthalten“. *(seit 3.5b, ADR 0015)*
+- [ ] **9.7 [Entwickler] Honor-Kamerafoto mit Standort (APP10).** Handlung: Ein Foto der Honor-Kamera mit Standort über den Gast-Upload hochladen, die gespeicherte Kopie am PC mit einer Exif-App oder ExifTool prüfen. Erwartet: Kein Standort in EXIF, XMP und im Rest der Datei (auch nicht im zweiten Exif-Block in APP10). Die Bildgröße ändert sich nur durch das Abschneiden eines Anhangs. *(seit Hotfix 2, ADR 0015)*
 
 ## 10 Ende bzw. Aufbewahrung bzw. Verlängern bzw. Vorlage (3.6b umgesetzt, Gerätetests offen; 3.6a und 3.6c folgen)
 
