@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.labushuya.emberlight.share.server.RunState
 import io.github.labushuya.emberlight.share.server.SpaceServerService
-import io.github.labushuya.emberlight.share.space.MediaRow
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
@@ -35,7 +34,6 @@ data class SpaceRunningUiState(
     val record: SpaceRecord? = null,
     val loaded: Boolean = false,
     val usedBytes: Long = 0L,
-    val media: List<MediaRow> = emptyList(),
     val runState: RunState = RunState.Idle,
     /** Die neueste Pause, die der Gastgeber noch nicht gesehen hat. */
     val pause: PauseEvent? = null,
@@ -124,18 +122,15 @@ class SpaceRunningViewModel
             val base =
                 combine(
                     combine(spaces.observe(id), runs.observeUsedBytes(id)) { record, used -> record to used },
-                    combine(runs.observeMedia(id, MEDIA_LIMIT), runs.observePauses(id)) { media, pauses ->
-                        media to pauses
-                    },
+                    runs.observePauses(id),
                     SpaceServerService.runState,
                     ticker(),
                     resumeFailure,
-                ) { (record, used), (media, pauses), runState, now, failure ->
+                ) { (record, used), pauses, runState, now, failure ->
                     SpaceRunningUiState(
                         record = record,
                         loaded = true,
                         usedBytes = used,
-                        media = media,
                         runState = runState,
                         pause = pauses.firstOrNull { !it.acknowledged },
                         nowMillis = now,
@@ -228,7 +223,6 @@ class SpaceRunningViewModel
 
         private companion object {
             const val ARG_ID = "id"
-            const val MEDIA_LIMIT = 50
             const val TICK_MILLIS = 15_000L
             const val STOP_TIMEOUT_MILLIS = 5_000L
         }

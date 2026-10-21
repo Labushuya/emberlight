@@ -12,6 +12,7 @@ import io.github.labushuya.emberlight.share.server.WifiAddress
 import io.github.labushuya.emberlight.share.server.WifiNetworkProvider
 import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
+import io.github.labushuya.emberlight.share.space.SpaceVaults
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.StorageProbe
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
@@ -217,7 +218,7 @@ class SpaceRunningViewModelTest {
                 controller = SpaceRunController(context),
                 starter = SpaceStarter(context, runs, StorageProbe { FREE_BYTES }, FixedWifi { wifi }),
                 clock = clock,
-                hostActions = SpaceHostActions(context, database, FakeInviteSecretCipher()),
+                hostActions = SpaceHostActions(SpaceVaults.create(database, spacesDir), FakeInviteSecretCipher()),
             )
         collector = CoroutineScope(Dispatchers.Unconfined).launch { vm.state.collect { latest = it } }
         return vm

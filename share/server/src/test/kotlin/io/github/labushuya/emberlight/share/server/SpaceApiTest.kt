@@ -1,6 +1,8 @@
 package io.github.labushuya.emberlight.share.server
 
 import androidx.test.core.app.ApplicationProvider
+import io.github.labushuya.emberlight.share.space.ChunkSource
+import io.github.labushuya.emberlight.share.space.IngestResult
 import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.Principal
 import io.github.labushuya.emberlight.share.space.Role
@@ -505,5 +507,45 @@ class SpaceApiTest {
             val response = client.delete("/api/v1/media/${"C".repeat(22)}") { header(HttpHeaders.Host, "localhost") }
 
             assertEquals(HttpStatusCode.Unauthorized, response.status)
+        }
+
+    /**
+     * Ein Upload aus der App läuft über dieselbe Vault wie der HTTP-Upload (Paket 3.5c). Gäste sehen ihn in der Liste mit dem
+     * Gastgeber als Uploader, und er gehört nicht zu ihren eigenen Medien.
+     */
+    @Test
+    fun aHostUploadFromTheAppIsListedForGuestsWithTheHostAsUploader() =
+        testApplication {
+            install()
+            val bytes = MediaFixtures.jpeg(300)
+            val source =
+                object : ChunkSource {
+                    private var position = 0
+
+                    override suspend fun read(
+                        buffer: ByteArray,
+                        offset: Int,
+                        length: Int,
+                    ): Int {
+                        if (position >= bytes.size) return -1
+                        val count = minOf(length, bytes.size - position)
+                        bytes.copyInto(buffer, offset, position, position + count)
+                        position += count
+                        return count
+                    }
+                }
+
+            val result = vault.ingest(host, "gastgeber.jpg", bytes.size.toLong(), source)
+
+            assertTrue(result is IngestResult.Created)
+            val list = json(client.get("/api/v1/media") { auth("tok-guest-0123456789") })
+            val item =
+                list
+                    .getValue("items")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals("Gastgeberin", item.getValue("uploader").jsonPrimitive.content)
+            assertEquals(false, item.getValue("mine").jsonPrimitive.boolean)
         }
 }

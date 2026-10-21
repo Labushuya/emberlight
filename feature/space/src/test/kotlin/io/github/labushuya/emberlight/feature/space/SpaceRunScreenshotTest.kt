@@ -30,11 +30,6 @@ class SpaceRunScreenshotTest : SpaceRunScreenshotSupport() {
     }
 
     @Test
-    fun runningNormalPhoneEnglish() {
-        capture({ Running(state(usedBytes = 1 * GIB_BYTES)) }, "src/test/screenshots/SpaceRunning_phone_en.png")
-    }
-
-    @Test
     fun runningPauseBannerPhoneEnglish() {
         capture(
             { Running(state(usedBytes = 1 * GIB_BYTES, pause = pauseEvent())) },

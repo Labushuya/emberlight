@@ -19,6 +19,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.github.labushuya.emberlight.core.design.theme.EmberlightTheme
+import io.github.labushuya.emberlight.feature.space.media.HostMediaItem
+import io.github.labushuya.emberlight.feature.space.media.HostMediaUiState
+import io.github.labushuya.emberlight.feature.space.media.MediaFilter
 import io.github.labushuya.emberlight.feature.space.run.InviteLink
 import io.github.labushuya.emberlight.feature.space.run.SpaceRunningContent
 import io.github.labushuya.emberlight.feature.space.run.SpaceRunningUiState
@@ -32,10 +35,13 @@ import io.github.labushuya.emberlight.feature.space.setup.SetupPermissions
 import io.github.labushuya.emberlight.feature.space.setup.SpaceSetupContent
 import io.github.labushuya.emberlight.feature.space.setup.StartGate
 import io.github.labushuya.emberlight.feature.space.setup.StartOutcomeContent
+import io.github.labushuya.emberlight.feature.space.upload.HostUploadUiState
+import io.github.labushuya.emberlight.feature.space.upload.UploadItem
+import io.github.labushuya.emberlight.feature.space.upload.UploadProgress
+import io.github.labushuya.emberlight.feature.space.upload.UploadStatus
 import io.github.labushuya.emberlight.share.server.PauseCause
 import io.github.labushuya.emberlight.share.server.RunState
 import io.github.labushuya.emberlight.share.server.WifiAddress
-import io.github.labushuya.emberlight.share.space.MediaRow
 import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
@@ -149,7 +155,6 @@ abstract class SpaceRunScreenshotSupport {
             record = active(),
             loaded = true,
             usedBytes = usedBytes,
-            media = media(),
             runState = runState,
             pause = pause,
             nowMillis = SpaceFixtures.NOW,
@@ -194,13 +199,6 @@ abstract class SpaceRunScreenshotSupport {
             endedAt = SpaceFixtures.NOW - HOUR,
         )
 
-    protected fun media(): List<MediaRow> =
-        listOf(
-            MediaRow("m1", "image/jpeg", 3 * MIB, SpaceFixtures.NOW - 10 * 60_000L, "Lena", false),
-            MediaRow("m2", "video/mp4", 120 * MIB, SpaceFixtures.NOW - 30 * 60_000L, "Tom", false),
-            MediaRow("m3", "image/png", 2 * MIB, SpaceFixtures.NOW - 50 * 60_000L, null, true),
-        )
-
     /** Zustand des laufenden Space mit Einladung und Teilnehmern (Paket 3.4). */
     protected fun hostState(
         addressChanged: Boolean = false,
@@ -217,6 +215,73 @@ abstract class SpaceRunScreenshotSupport {
             ParticipantInfo(ParticipantId(HOST_ID), "Lena", Role.HOST, SpaceFixtures.NOW - HOUR),
             ParticipantInfo(ParticipantId(GUEST_ID), "Tom", Role.GUEST, SpaceFixtures.NOW - HOUR / 2),
             ParticipantInfo(ParticipantId(OTHER_ID), "Mia", Role.GUEST, SpaceFixtures.NOW - HOUR / 4),
+        )
+
+    /** Medienraster mit allen Markierungen: Video, Standort, entfernter Uploader, Vorschau bereit, offen und fehlgeschlagen. */
+    protected fun mediaState(filter: MediaFilter = MediaFilter.ALL): HostMediaUiState =
+        HostMediaUiState(
+            loaded = true,
+            filter = filter,
+            items =
+                listOf(
+                    hostItem("m1", "Lena", mine = true, previewState = "PENDING", ageMinutes = 10),
+                    hostItem("m2", "Tom", isVideo = true, previewState = "PENDING", ageMinutes = 30),
+                    hostItem("m3", "Omar", locationKept = true, previewState = "PENDING", ageMinutes = 45),
+                    hostItem("m4", "Mia", removed = true, previewState = "FAILED", ageMinutes = 50),
+                    hostItem("m5", "Lena", mine = true, previewState = null, ageMinutes = 55),
+                    hostItem("m6", "Ben", previewState = "PENDING", ageMinutes = 70),
+                ),
+        )
+
+    private fun hostItem(
+        id: String,
+        name: String,
+        mine: Boolean = false,
+        isVideo: Boolean = false,
+        locationKept: Boolean = false,
+        removed: Boolean = false,
+        previewState: String?,
+        ageMinutes: Long,
+    ): HostMediaItem =
+        HostMediaItem(
+            id = id,
+            isVideo = isVideo,
+            isHeic = false,
+            mine = mine,
+            uploaderName = name,
+            uploaderRemoved = removed,
+            locationKept = locationKept,
+            previewState = previewState,
+            previewFile = null,
+            sizeBytes = 3 * MIB,
+            createdAt = SpaceFixtures.NOW - ageMinutes * 60_000L,
+        )
+
+    /** Upload mitten im Lauf: eine Datei mit bekannter Größe, eine ohne, eine wartet. */
+    protected fun uploadProgressState(): HostUploadUiState =
+        HostUploadUiState(
+            running = true,
+            items =
+                listOf(
+                    UploadItem("u1", "Strand.jpg", UploadStatus.Stored(warning = false)),
+                    UploadItem(
+                        "u2",
+                        "Wanderung.mp4",
+                        UploadStatus.Uploading,
+                        UploadProgress(
+                            readBytes = 48 * MIB,
+                            totalBytes =
+                                120 * MIB,
+                        ),
+                    ),
+                    UploadItem(
+                        "u3",
+                        "Video ohne Größe.mp4",
+                        UploadStatus.Uploading,
+                        UploadProgress(readBytes = 4 * MIB, totalBytes = null),
+                    ),
+                    UploadItem("u4", "Sonnenuntergang.heic", UploadStatus.Waiting),
+                ),
         )
 
     /** Dialoginhalt mit Titel, ohne Dialogfenster. Die Goldens zeigen so den Aufbau. */

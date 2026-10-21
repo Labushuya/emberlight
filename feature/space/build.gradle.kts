@@ -21,6 +21,10 @@ dependencies {
     implementation(libs.coil.compose)
     // QR-Code des Beitritts (Paket 3.4, ADR 0018): erzeugen und in der Prüfung zurücklesen. Nur ZXing core.
     implementation(libs.zxing.core)
+    // Video in der Medienansicht des Gastgebers (Paket 3.5c): eigene schlanke Ansicht, Datei aus dem App-Speicher über file://.
+    // Der Galerie-Viewer wird nicht wiederverwendet (Trennung von Space und Galerie).
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui.compose)
 
     testImplementation(libs.kotlinx.coroutines.test)
 }

@@ -1,20 +1,16 @@
 package io.github.labushuya.emberlight.share.server
 
-import android.annotation.SuppressLint
 import android.content.Context
 import io.github.labushuya.emberlight.share.space.Principal
 import io.github.labushuya.emberlight.share.space.Role
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpaceVault
-import io.github.labushuya.emberlight.share.space.SpacesDatabase
-import io.github.labushuya.emberlight.share.space.StorageProbe
+import io.github.labushuya.emberlight.share.space.SpaceVaults
 import io.github.labushuya.emberlight.share.space.management.SpaceAccentPalette
 import io.github.labushuya.emberlight.share.space.participants.AndroidKeyStoreInviteSecretCipher
 import io.github.labushuya.emberlight.share.space.participants.InviteSecretCipher
 import io.github.labushuya.emberlight.share.space.participants.Secrets
-import io.github.labushuya.emberlight.share.space.preview.PreviewWorkers
-import java.io.File
 
 /** Ein Teilnehmer des Space mit dem Hash seines Zugangsschlüssels (ADR 0013). Der Schlüssel selbst bleibt außen. */
 data class ParticipantSeed(
@@ -60,49 +56,29 @@ data class ServerSetup(
 )
 
 /**
- * Laufzeit eines Serverlaufs: die Sitzung mit Vault, Zugriffsprüfung und Einladung. Der Index ist die prozessweit geteilte
- * Datenbank ([SpacesDatabase.shared]). Sie gehört nicht dem Serverlauf und wird hier nicht geschlossen (Paket 3.3).
+ * Laufzeit eines Serverlaufs: die Sitzung mit Vault, Zugriffsprüfung und Einladung. Die Vault ist die prozessweit geteilte
+ * ([SpaceVaults.shared]), ebenso der Index ([SpacesDatabase.shared]). Beide gehören nicht dem Serverlauf und werden hier nicht
+ * geschlossen (Paket 3.3, Paket 3.5c).
  */
 internal class SpaceRuntime private constructor(
     val access: SpaceAccess,
     /** Statische Gäste-Dateien aus den App-Assets. */
     val guestAssets: GuestAssets,
-    /** Hintergrundfaden der Vorschauen. Beim [close] beendet. */
-    private val previewWorkers: PreviewWorkers,
 ) {
     val spaceVault: SpaceVault get() = access.vault
 
-    /** Beendet den Worker der Vorschauen. Der Index bleibt offen, er gehört dem Prozess. */
-    fun close() {
-        access.vault.stopPreviews()
-        previewWorkers.close()
-    }
-
     companion object {
         /**
-         * Öffnet den Space, registriert die Teilnehmer und räumt Reste eines Absturzes auf. Danach stehen Gastgeber und
-         * Einladung fest. Die Einladung bleibt über Pausen im selben Prozess gleich (ADR 0013, Netz).
-         *
-         * Der Mindest-Restspeicher nutzt [File.getUsableSpace]. Das zählt nur freien Speicher ohne löschbare Caches. Das
-         * ist der konservative Wert: Er unterschätzt den Platz eher, als ihn zu überschätzen.
+         * Öffnet den Space, registriert die Teilnehmer und stellt Gastgeber und Einladung bereit. Die Vault kommt aus
+         * [SpaceVaults.shared]: Wiederaufnahme und Vorschau-Worker laufen dort einmal pro Prozess, nicht bei jedem Start
+         * (Paket 3.5c). Die Einladung bleibt über Pausen im selben Prozess gleich (ADR 0013, Netz).
          */
-        @SuppressLint("UsableSpace")
         suspend fun open(
             context: Context,
             setup: ServerSetup,
             inviteCipher: InviteSecretCipher = AndroidKeyStoreInviteSecretCipher(),
         ): SpaceRuntime {
-            val spacesDir = SpacesDatabase.spacesDirectory(context)
-            val probe = StorageProbe { File(spacesDir, setup.spaceId.value).usableSpace }
-            val vault =
-                SpaceVault.open(
-                    SpacesDatabase.shared(context),
-                    spacesDir,
-                    setup.spaceId,
-                    setup.limits,
-                    probe,
-                    inviteCipher,
-                )
+            val vault = SpaceVaults.shared(context).vaultFor(setup.spaceId, setup.limits, inviteCipher)
             setup.participants.forEach { seed ->
                 vault.registerParticipant(
                     seed.principal.participantId,
@@ -111,10 +87,6 @@ internal class SpaceRuntime private constructor(
                     seed.tokenSha256Hex,
                 )
             }
-            vault.recover()
-            // Vorschauen entstehen im Hintergrund, nach der Wiederaufnahme offener Medien (ADR 0019).
-            val previewWorkers = PreviewWorkers()
-            vault.startPreviews(previewWorkers.scope)
             // Der Token des Gastgebers ist zufällig und nur im Speicher. In der Datenbank steht sein Hash (ADR 0018). Mit einem
             // Gastgeber aus dem Debug-Einstieg gilt dessen Hash. Ein neuer Token würde den Test-Token des PCs ungültig machen.
             val hostToken =
@@ -138,7 +110,7 @@ internal class SpaceRuntime private constructor(
                     endsAtMillis = setup.expiresAtMillis,
                     limits = setup.limits,
                 )
-            return SpaceRuntime(access, AssetGuestAssets(context.applicationContext.assets), previewWorkers)
+            return SpaceRuntime(access, AssetGuestAssets(context.applicationContext.assets))
         }
     }
 }
