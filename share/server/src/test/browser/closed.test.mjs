@@ -15,16 +15,25 @@ test("Ende nach 410: die Seite zeigt das Ende und merkt es sich", async () => {
     await openSpace(page, config, config.session);
     await page.waitFor("!document.getElementById('list-empty').hidden", { what: "geladene Liste" });
 
+    // Das Ende kommt vom Gastgeber, also liegt die Stoppzeit zwischen diesen beiden Zeitpunkten (nicht das geplante Ende).
+    const before = Date.now();
     await control("close-space");
     await page.waitFor("!document.getElementById('ended-section').hidden", {
       what: "Ende-Ansicht nach 410",
       timeout: 40000,
     });
-    assert.match(
-      await page.eval("document.getElementById('ended-text').textContent"),
-      /^Space ‚Sommerfest im Garten‘ ended at /,
-    );
+    const after = Date.now();
+    const text = await page.eval("document.getElementById('ended-text').textContent");
+    assert.match(text, /^Space ‚Sommerfest im Garten‘ ended at /);
     assert.equal(await page.eval("document.getElementById('space-section').hidden"), true);
+
+    // Die gemerkte Stoppzeit ist das `endedAt` der 410-Antwort und stimmt mit der angezeigten Uhrzeit überein.
+    const key = `emberlight.guest-end:${config.base}:${config.session.spaceId}`;
+    const stored = JSON.parse(await page.eval(`localStorage.getItem(${JSON.stringify(key)})`));
+    const endedMs = Date.parse(stored.endsAt);
+    assert.ok(endedMs >= before - 1000 && endedMs <= after + 1000, `Stoppzeit ${stored.endsAt} im Fenster des Endes`);
+    const shown = new Date(endedMs).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    assert.ok(text.includes(shown), `angezeigte Uhrzeit „${shown}“ in „${text}“`);
     expectNoProblems(page, "Ende nach 410");
 
     await page.goto(`${config.base}/`);

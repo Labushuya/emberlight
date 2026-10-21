@@ -100,5 +100,5 @@ Entscheidungen 1 bis 4 vom 20.10.2026 (Namensvorschläge, harte Speichergrenze, 
 ## Offene Punkte nach 3.5b
 
 - Gerätetest 3.5b mit Abschnitt 7 des Testkatalogs (Handy und PC): Auswahl, Ablage am PC, Fortschritt, Standort-Rückfrage, Dublette, Speicher voll, Netzabbruch während eines Uploads (WLAN aus), Seite offen lassen.
-- Beim manuellen Beenden gibt es keine 410-Antwort, Gäste sehen den Verbindungsverlust statt der Stoppzeit (ADR 0014, Nachtrag endedAt). Entscheidung der Nutzerin bzw. des Nutzers über einen kurzen Nachlauf.
+- Erledigt (Fix „Nachlauf auch beim manuellen Beenden“, 21.10.2026, ADR 0017 Nachtrag): Auch beim manuellen Beenden antwortet der Server 60 s lang mit `410` und `endedAt`. Gäste sehen die Ende-Ansicht mit der Stoppzeit statt eines Verbindungsverlusts (ADR 0014, Nachtrag endedAt). Gerätetest offen.
 - Auslegungen im Upload (Wiederholungen, Obergrenze für Wartezeiten bei 429 und 503, Verhalten bei vollem Speicher): ADR 0019, Nachtrag 3.5b.

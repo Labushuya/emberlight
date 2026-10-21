@@ -99,7 +99,7 @@ Grundsätze; Details folgen als ADR in Meilenstein 3.
 
 #### Ende und Nachhalten
 
-- Bei Ablauf oder vorzeitigem Beenden durch den Gastgeber schließt der Server sofort. Alle Zugangsschlüssel werden ungültig.
+- Bei Ablauf oder vorzeitigem Beenden durch den Gastgeber ist der Space sofort beendet. Der Server antwortet noch 60 s lang mit `410` und der Stoppzeit, dann schließt er. Alle Zugangsschlüssel werden ungültig.
 - Die Space-Medien bleiben für die gewählte Nachhaltefrist im Space-Speicher: sofort löschen, 1 Tag, 1 Woche oder eigene Angabe. Die Frist wird beim Anlegen festgelegt und ist jederzeit änderbar (verlängern oder verkürzen).
 - Das Nachhalten gilt nur beim Gastgeber. Teilnehmer laden während der Laufzeit selbst herunter, was sie behalten wollen. Browser-Gäste kommen nach Ablauf technisch an nichts mehr.
 - In der Nachhaltezeit wählt der Gastgeber aus, was in die eigene Galerie übernommen wird. Vorauswahl: nichts. Schaltflächen „Alle auswählen“ und „Nichts auswählen“.
