@@ -221,7 +221,8 @@ class SpaceVault internal constructor(
             val storedSize = withContext(Dispatchers.IO) { Files.size(temp) }
             // Codec aus dem Kopf, nur bei Videos (ADR 0019). Leer heißt: nicht erkannt.
             val codec = if (PreviewRules.isVideo(format.mimeType)) previews.codecOf(temp) else null
-            val result = commit(uploader, rawFileName, format, outcome.sha256, storedSize, temp, outcome.locationKept, codec)
+            val result =
+                commit(uploader, rawFileName, format, outcome.sha256, storedSize, temp, outcome.locationKept, codec)
             // Die Vorschau entsteht im Hintergrund. Der Upload wartet nicht darauf (ADR 0019).
             if (result is IngestResult.Created) previews.enqueue(result.record.id)
             return result
@@ -668,7 +669,8 @@ class SpaceVault internal constructor(
             probe: StorageProbe,
             inviteCipher: InviteSecretCipher,
             previewRenderer: PreviewRenderer = AndroidPreviewRenderer(),
-        ): SpaceVault = SpaceVault(database, SpaceStorage(spacesDir, spaceId), limits, probe, inviteCipher, previewRenderer)
+        ): SpaceVault =
+            SpaceVault(database, SpaceStorage(spacesDir, spaceId), limits, probe, inviteCipher, previewRenderer)
 
         const val MAX_PAGE = 100
         const val DEFAULT_PAGE = 50

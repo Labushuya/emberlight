@@ -5,8 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.labushuya.emberlight.share.space.BytesSource
 import io.github.labushuya.emberlight.share.space.IngestResult
 import io.github.labushuya.emberlight.share.space.MediaEntity
-import io.github.labushuya.emberlight.share.space.MediaId
 import io.github.labushuya.emberlight.share.space.MediaFixtures
+import io.github.labushuya.emberlight.share.space.MediaId
 import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.Principal
 import io.github.labushuya.emberlight.share.space.Role
@@ -109,7 +109,8 @@ class SpaceVaultPreviewTest {
     private fun previewFile(
         sha256: String,
         longEdge: Int,
-    ): File = File(spacesDir, "${space.value}/${SpaceStorage.PREVIEW_DIR}/${SpaceStorage.previewFileName(sha256, longEdge)}")
+    ): File =
+        File(spacesDir, "${space.value}/${SpaceStorage.PREVIEW_DIR}/${SpaceStorage.previewFileName(sha256, longEdge)}")
 
     @Test
     fun uploadQueuesThePreviewWithoutRenderingIt() {
@@ -255,10 +256,11 @@ class SpaceVaultPreviewTest {
         val rendered = upload(first, MediaFixtures.jpeg(100))
         runBlocking { first.renderPreviews(rendered) }
         val open = upload(first, MediaFixtures.jpeg(101))
-        val orphan = previewFile("f".repeat(64), PreviewRules.PREVIEW_LONG_EDGE).apply {
-            parentFile?.mkdirs()
-            writeText("verwaist")
-        }
+        val orphan =
+            previewFile("f".repeat(64), PreviewRules.PREVIEW_LONG_EDGE).apply {
+                parentFile?.mkdirs()
+                writeText("verwaist")
+            }
         val restarted = vault()
 
         runBlocking { restarted.recover() }

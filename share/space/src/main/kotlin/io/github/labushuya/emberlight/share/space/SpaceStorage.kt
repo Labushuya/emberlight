@@ -143,7 +143,11 @@ class SpaceStorage(
         val candidate = dir.resolve(name).normalize()
         rejectSymlinks(candidate)
         if (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) {
-            if (candidate.toRealPath().parent != realDir) throw UnsafeStoragePathException("Ziel liegt außerhalb des Space-Speichers.")
+            if (candidate.toRealPath().parent !=
+                realDir
+            ) {
+                throw UnsafeStoragePathException("Ziel liegt außerhalb des Space-Speichers.")
+            }
         }
         return candidate
     }

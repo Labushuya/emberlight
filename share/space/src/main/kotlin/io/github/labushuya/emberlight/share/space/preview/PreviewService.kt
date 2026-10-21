@@ -131,10 +131,15 @@ internal class PreviewService(
     suspend fun reconcile(ready: List<MediaEntity>) {
         val keep = mutableSetOf<String>()
         ready.forEach { row ->
-            val previewAfter = reconcileState(row.previewState, storage.existingPreview(row.sha256, PreviewRules.PREVIEW_LONG_EDGE)) {
-                media.setPreviewState(row.id, PreviewState.PENDING, 0L)
+            val previewAfter =
+                reconcileState(row.previewState, storage.existingPreview(row.sha256, PreviewRules.PREVIEW_LONG_EDGE)) {
+                    media.setPreviewState(row.id, PreviewState.PENDING, 0L)
+                }
+            if (previewAfter ==
+                PreviewState.READY
+            ) {
+                keep += SpaceStorage.previewFileName(row.sha256, PreviewRules.PREVIEW_LONG_EDGE)
             }
-            if (previewAfter == PreviewState.READY) keep += SpaceStorage.previewFileName(row.sha256, PreviewRules.PREVIEW_LONG_EDGE)
             val heic = PreviewRules.hasHeicView(row.mime)
             var viewAfter: String? = null
             if (heic) {
@@ -142,7 +147,11 @@ internal class PreviewService(
                     reconcileState(row.viewState, storage.existingPreview(row.sha256, PreviewRules.VIEW_LONG_EDGE)) {
                         media.setViewState(row.id, PreviewState.PENDING, 0L)
                     }
-                if (viewAfter == PreviewState.READY) keep += SpaceStorage.previewFileName(row.sha256, PreviewRules.VIEW_LONG_EDGE)
+                if (viewAfter ==
+                    PreviewState.READY
+                ) {
+                    keep += SpaceStorage.previewFileName(row.sha256, PreviewRules.VIEW_LONG_EDGE)
+                }
             }
             val previewOpen = previewAfter == null || previewAfter == PreviewState.PENDING
             val viewOpen = heic && (viewAfter == null || viewAfter == PreviewState.PENDING)
@@ -249,8 +258,14 @@ internal class PreviewService(
         markPending: suspend () -> Unit,
     ): String? =
         when {
-            state == PreviewState.READY && file != null -> PreviewState.READY
-            state == PreviewState.FAILED -> PreviewState.FAILED
+            state == PreviewState.READY && file != null -> {
+                PreviewState.READY
+            }
+
+            state == PreviewState.FAILED -> {
+                PreviewState.FAILED
+            }
+
             else -> {
                 markPending()
                 PreviewState.PENDING

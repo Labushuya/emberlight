@@ -154,10 +154,14 @@ interface MediaDao {
         id: String,
     ): MediaRow?
 
-    @Query("SELECT COALESCE(SUM(size_bytes + preview_bytes + view_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'")
+    @Query(
+        "SELECT COALESCE(SUM(size_bytes + preview_bytes + view_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'",
+    )
     suspend fun usedBytes(spaceId: String): Long
 
-    @Query("SELECT COALESCE(SUM(size_bytes + preview_bytes + view_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'")
+    @Query(
+        "SELECT COALESCE(SUM(size_bytes + preview_bytes + view_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'",
+    )
     fun observeUsedBytes(spaceId: String): Flow<Long>
 
     /** Erste Seite der Medienliste als Flow, für die Anzeige im laufenden Space. */

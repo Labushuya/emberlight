@@ -86,7 +86,14 @@ class AndroidPreviewRenderer : PreviewRenderer {
                     frameAt(retriever, PreviewRules.seekMicros(duration), targetWidth, targetHeight)
                         ?: frameAt(retriever, 0L, targetWidth, targetHeight)
                         ?: return@guarded false
-                val upright = if (quarterTurn && frame.isLandscape() != (orientedWidth > orientedHeight)) rotate(frame, rotation) else frame
+                val upright =
+                    if (quarterTurn &&
+                        frame.isLandscape() != (orientedWidth > orientedHeight)
+                    ) {
+                        rotate(frame, rotation)
+                    } else {
+                        frame
+                    }
                 writeJpeg(upright, longEdge, target)
             } finally {
                 retriever.release()
@@ -167,22 +174,39 @@ class AndroidPreviewRenderer : PreviewRenderer {
             ExifInterface(source).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
         val matrix = Matrix()
         when (orientation) {
-            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
-            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
-            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> {
+                matrix.postScale(-1f, 1f)
+            }
+
+            ExifInterface.ORIENTATION_ROTATE_180 -> {
+                matrix.postRotate(180f)
+            }
+
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
+                matrix.postScale(1f, -1f)
+            }
+
             ExifInterface.ORIENTATION_TRANSPOSE -> {
                 matrix.postRotate(90f)
                 matrix.postScale(-1f, 1f)
             }
 
-            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_90 -> {
+                matrix.postRotate(90f)
+            }
+
             ExifInterface.ORIENTATION_TRANSVERSE -> {
                 matrix.postRotate(270f)
                 matrix.postScale(-1f, 1f)
             }
 
-            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
-            else -> return bitmap
+            ExifInterface.ORIENTATION_ROTATE_270 -> {
+                matrix.postRotate(270f)
+            }
+
+            else -> {
+                return bitmap
+            }
         }
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }

@@ -56,7 +56,8 @@ class AndroidPreviewRendererTest {
 
     @Test
     fun anExifRotationOfNinetyDegreesTurnsTheImageToPortrait() {
-        val source = jpegFile("quer-gedreht.jpg", width = 200, height = 100, orientation = ExifInterface.ORIENTATION_ROTATE_90)
+        val source =
+            jpegFile("quer-gedreht.jpg", width = 200, height = 100, orientation = ExifInterface.ORIENTATION_ROTATE_90)
         val target = File(folder.root, "hochkant.jpg")
 
         assertTrue(renderer.renderImage(source, "image/jpeg", PreviewRules.PREVIEW_LONG_EDGE, target))
