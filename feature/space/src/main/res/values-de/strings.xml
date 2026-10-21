@@ -380,4 +380,15 @@
     <string name="space_media_remove_text">Es verschwindet für alle im Space. Das lässt sich nicht rückgängig machen.</string>
     <string name="space_media_remove_confirm">Entfernen</string>
     <string name="space_media_video_failed">Dieses Video lässt sich nicht abspielen.</string>
+    <string name="space_running_extend">Verlängern</string>
+    <string name="space_extend_title">Verlängern</string>
+    <string name="space_extend_current">Aktuelles Ende: %1$s</string>
+    <string name="space_extend_hour">+1 Std.</string>
+    <string name="space_extend_day">+1 Tag</string>
+    <string name="space_extend_custom">Eigenes Ende</string>
+    <string name="space_extend_confirm">Verlängern</string>
+    <string name="space_extend_error_not_active">Der Space läuft nicht mehr und lässt sich nicht verlängern.</string>
+    <string name="space_extend_error_future">Das neue Ende muss in der Zukunft liegen.</string>
+    <string name="space_extend_error_later">Das neue Ende muss nach dem bisherigen Ende liegen.</string>
+    <string name="space_extend_error_too_long">Ein Space darf höchstens 30 Tage ab Start laufen.</string>
 </resources>

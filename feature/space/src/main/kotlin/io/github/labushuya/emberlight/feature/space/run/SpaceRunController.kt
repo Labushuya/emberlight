@@ -3,6 +3,7 @@ package io.github.labushuya.emberlight.feature.space.run
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.labushuya.emberlight.share.server.SpaceServerService
+import io.github.labushuya.emberlight.share.space.SpaceId
 import javax.inject.Inject
 
 /**
@@ -27,6 +28,14 @@ class SpaceRunController
         /** Quittiert den Hinweis zur automatisch erneuerten Einladung. Nur aufrufen, solange ein Server läuft. */
         fun acknowledgeInvite() {
             context.startService(SpaceServerService.inviteSettledIntent(context))
+        }
+
+        /** Verlängert den laufenden Space auf eine neue Endzeit. Die Prüfung und das Speichern macht der Dienst (Paket 3.6a). */
+        fun extend(
+            spaceId: SpaceId,
+            endsAtMillis: Long,
+        ) {
+            context.startService(SpaceServerService.extendIntent(context, spaceId, endsAtMillis))
         }
 
         /**
