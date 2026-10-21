@@ -561,6 +561,7 @@ class SpaceServerService : Service() {
                 KtorLocalServer(
                     routes = serverRoutes(runtime.access, runtime.guestAssets, gates),
                     authorizer = runtime.access.live,
+                    signedMedia = runtime.access.mediaAccess,
                     requestLog = { line -> if (setup.debugLogging) Log.i(TAG, line) },
                     gates = gates,
                     closure = closure,

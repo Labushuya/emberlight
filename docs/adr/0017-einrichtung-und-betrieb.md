@@ -222,3 +222,9 @@ Der Testkatalog für die Nutzerin bzw. den Nutzer steht in der PR-Beschreibung. 
 
 - Die Keep-Regel für `KtorLocalServer` aus Paket 3.4 ist entfernt. R8 hatte die Klasse nicht entfernt, sondern zusammengelegt. Ihr Code steht im Mapping als Inline-Frame und in der dex (`api/v1/join`, `invite_invalid`). Die Prüfung `checkReleaseServerPipeline` sucht deshalb Methoden der Pipeline (Member oder Inline-Frame mit Besitzer) und nicht nur Klassenzeilen. Belege und Begründung in ADR 0018, Abweichungen.
 - Die Aussage „keine Keep-Regeln für den Serverpfad“ bleibt gültig.
+
+## Nachtrag (21.10.2026): Nachlauf nach dem Ende 60 s (Paket 3.5a)
+
+- Der Nachlauf nach dem Ablauf ist 60 s statt 1 s (`SpaceRunner.CLOSE_GRACE_MILLIS`). In dieser Zeit antworten authentifizierte Anfragen mit `410 space_closed`. Keine Medien, keine Vorschauen, kein Beitritt. Danach stoppt der Server.
+- Begründung: Die Gäste-Seite soll die Ende-Ansicht sicher erreichen, auch wenn der Gast gerade im Browser wartet. Eine Sekunde reichte dafür nicht.
+- Der Test `aRequestToAClosedSpaceAnswersAndThenTheRunStops` prüft den Zeitpunkt mit der Fake-Uhr.

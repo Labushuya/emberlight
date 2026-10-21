@@ -73,6 +73,8 @@ data class MediaRow(
     val locationKept: Boolean,
     /** `true`, wenn der Uploader inzwischen entfernt wurde. Das Medium bleibt, die Anzeige nennt das (ADR 0018). */
     val uploaderRevoked: Boolean = false,
+    /** ID des Uploaders. Die Oberfläche braucht sie für „Meine“ (ADR 0019). */
+    val uploaderId: String = "",
 )
 
 @Dao
@@ -92,7 +94,7 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
         ORDER BY m.created_at DESC, m.id DESC
@@ -107,7 +109,7 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
           AND (m.created_at < :afterCreatedAt OR (m.created_at = :afterCreatedAt AND m.id < :afterId))
@@ -122,6 +124,20 @@ interface MediaDao {
         limit: Int,
     ): List<MediaRow>
 
+    /** Ein bereites Medium mit Uploader, für `GET /media/{id}` (ADR 0019). */
+    @Query(
+        """
+        SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId
+        FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
+        WHERE m.space_id = :spaceId AND m.id = :id AND m.state = 'READY'
+        """,
+    )
+    suspend fun findRow(
+        spaceId: String,
+        id: String,
+    ): MediaRow?
+
     @Query("SELECT COALESCE(SUM(size_bytes), 0) FROM media WHERE space_id = :spaceId AND state = 'READY'")
     suspend fun usedBytes(spaceId: String): Long
 
@@ -132,7 +148,7 @@ interface MediaDao {
     @Query(
         """
         SELECT m.id AS id, m.mime AS mime, m.size_bytes AS sizeBytes, m.created_at AS createdAt,
-               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked
+               m.location_kept AS locationKept, p.display_name AS uploaderName, (p.revoked_at IS NOT NULL) AS uploaderRevoked, m.uploader_id AS uploaderId
         FROM media m LEFT JOIN participant p ON p.id = m.uploader_id
         WHERE m.space_id = :spaceId AND m.state = 'READY'
         ORDER BY m.created_at DESC, m.id DESC

@@ -17,7 +17,11 @@ class LiveAuthorizer(
     private var current: List<Credential> = initial
     private val snapshot = AtomicReference(build(initial))
 
-    override fun authorize(authorizationHeader: String?): Principal? = snapshot.get().authorize(authorizationHeader)
+    override fun authorize(authorizationHeader: String?): Principal? =
+        snapshot.get().tokens.authorize(authorizationHeader)
+
+    /** Aktiver Teilnehmer mit dieser ID, `null` wenn er entfernt oder abgemeldet ist (ADR 0019, signierte URLs). */
+    fun principalOf(id: ParticipantId): Principal? = snapshot.get().principals[id]
 
     /** Ersetzt alle Zugangsschlüssel, etwa nach einer Änderung in der Datenbank. */
     fun replace(credentials: List<Credential>) {
@@ -35,12 +39,22 @@ class LiveAuthorizer(
         }
     }
 
-    private fun build(credentials: List<Credential>): TokenAuthorizer =
-        TokenAuthorizer(
-            credentials.associate { credential ->
-                hexToBytes(credential.tokenHash) to Principal(credential.participantId, credential.role)
-            },
+    private fun build(credentials: List<Credential>): Snapshot =
+        Snapshot(
+            tokens =
+                TokenAuthorizer(
+                    credentials.associate { credential ->
+                        hexToBytes(credential.tokenHash) to Principal(credential.participantId, credential.role)
+                    },
+                ),
+            principals = credentials.associate { it.participantId to Principal(it.participantId, it.role) },
         )
+
+    /** Ein Stand der Zugangsschlüssel. Tokenprüfung und Teilnehmer kommen aus demselben Stand. */
+    private class Snapshot(
+        val tokens: TokenAuthorizer,
+        val principals: Map<ParticipantId, Principal>,
+    )
 
     private fun hexToBytes(hex: String): ByteArray =
         ByteArray(hex.length / 2) { i -> hex.substring(2 * i, 2 * i + 2).toInt(16).toByte() }

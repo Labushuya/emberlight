@@ -42,6 +42,7 @@ class KtorLocalServer(
     private val closure: SpaceClosure = SpaceClosure.Open,
     private val joinLimiter: JoinLimiter = JoinLimiter(),
     private val drainMaxBytes: Long = DRAIN_MAX_BYTES,
+    private val signedMedia: SignedMediaAuthorizer? = null,
 ) : LocalServer {
     private val lock = Mutex()
     private val mutableState = MutableStateFlow<ServerState>(ServerState.Stopped)
@@ -64,6 +65,7 @@ class KtorLocalServer(
                     closure = closure,
                     joinLimiter = joinLimiter,
                     drainMaxBytes = drainMaxBytes,
+                    signedMedia = signedMedia,
                 )
             val server =
                 embeddedServer(

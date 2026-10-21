@@ -42,6 +42,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.time.Instant
 
 /** Uhr, Grenzen und Abfragezyklus des Uploads. Im Test ersetzbar, in der Produktion die Standardwerte. */
 data class UploadTuning(
@@ -94,6 +95,20 @@ fun spaceRoutes(
                             "storageLimitBytes" to JsonPrimitive(usage.limitBytes),
                             "usedBytes" to JsonPrimitive(usage.usedBytes),
                             "warning" to JsonPrimitive(usage.warning),
+                            "remainingSeconds" to (access.remainingSeconds()?.let { JsonPrimitive(it) } ?: JsonNull),
+                            "endsAt" to
+                                (
+                                    access.endsAtMillis?.let { JsonPrimitive(Instant.ofEpochMilli(it).toString()) }
+                                        ?: JsonNull
+                                ),
+                            "revision" to JsonPrimitive(access.revision),
+                            "limits" to
+                                JsonObject(
+                                    mapOf(
+                                        "imageMaxBytes" to JsonPrimitive(access.limits.imageMaxBytes),
+                                        "videoMaxBytes" to JsonPrimitive(access.limits.videoMaxBytes),
+                                    ),
+                                ),
                         ),
                     ),
                 )
@@ -206,7 +221,7 @@ fun spaceRoutes(
                     HttpStatusCode.OK,
                     JsonObject(
                         mapOf(
-                            "items" to JsonArray(page.items.map(::listItemJson)),
+                            "items" to JsonArray(page.items.map { access.mediaItemJson(it, call.principal()) }),
                             "nextCursor" to (page.nextCursor?.encode()?.let { JsonPrimitive(it) } ?: JsonNull),
                         ),
                     ),
@@ -228,19 +243,31 @@ fun spaceRoutes(
                 }
             }
 
-            get("/media/{id}/content") {
-                call.routeTemplate("/api/v1/media/{id}/content")
-                val id = MediaId.parse(call.parameters["id"].orEmpty())
-                val file = id?.let { vault.contentOf(it) }
-                if (file == null) {
+            get("/media/{id}") {
+                call.routeTemplate("/api/v1/media/{id}")
+                val entry = MediaId.parse(call.parameters["id"].orEmpty())?.let { access.vault.entry(it) }
+                if (entry == null) {
                     call.respondError(HttpStatusCode.NotFound, "not_found")
                     return@get
                 }
-                call.respondContent(
-                    file = file.path.toFile(),
-                    contentType = ContentType.parse(file.record.mime),
-                    disposition = ContentDispositionHeader.attachment(file.record.originalName),
-                )
+                call.respondJson(HttpStatusCode.OK, access.mediaItemJson(entry, call.principal()))
+            }
+
+            get("/media/{id}/content") {
+                call.routeTemplate("/api/v1/media/{id}/content")
+                call.respondMedia(vault, gates, call.parameters["id"], inline = false)
+            }
+
+            // Ansicht im Browser: Original inline (ADR 0019). Die HEIC-JPEG-Ansicht folgt mit den Vorschauen.
+            get("/media/{id}/view") {
+                call.routeTemplate("/api/v1/media/{id}/view")
+                call.respondMedia(vault, gates, call.parameters["id"], inline = true)
+            }
+
+            // Video mit Range (ADR 0019). Nur Videos, sonst 404.
+            get("/media/{id}/stream") {
+                call.routeTemplate("/api/v1/media/{id}/stream")
+                call.respondMedia(vault, gates, call.parameters["id"], inline = true, onlyVideo = true)
             }
 
             delete("/media/{id}") {
@@ -251,13 +278,60 @@ fun spaceRoutes(
                     return@delete
                 }
                 when (vault.delete(call.principal(), id)) {
-                    DeleteOutcome.Deleted -> call.respond(HttpStatusCode.NoContent)
-                    DeleteOutcome.NotFound -> call.respondError(HttpStatusCode.NotFound, "not_found")
-                    DeleteOutcome.Forbidden -> call.respondError(HttpStatusCode.Forbidden, "forbidden")
+                    DeleteOutcome.Deleted -> {
+                        access.bumpRevision()
+                        call.respond(HttpStatusCode.NoContent)
+                    }
+
+                    DeleteOutcome.NotFound -> {
+                        call.respondError(HttpStatusCode.NotFound, "not_found")
+                    }
+
+                    DeleteOutcome.Forbidden -> {
+                        call.respondError(HttpStatusCode.Forbidden, "forbidden")
+                    }
                 }
             }
         }
     }
+
+/**
+ * Medienantwort für Download ([inline] = `false`, Anhang) und Ansicht bzw. Stream ([inline] = `true`). Fehlt das Medium,
+ * ist es kein Video bei [onlyVideo] oder ist die Datei weg, antwortet die Route mit `404`. Mehrere Bereiche ergeben `416`.
+ */
+private suspend fun ApplicationCall.respondMedia(
+    vault: SpaceVault,
+    gates: ServerGates,
+    rawId: String?,
+    inline: Boolean,
+    onlyVideo: Boolean = false,
+) {
+    val id = rawId?.let { MediaId.parse(it) }
+    val file = id?.let { vault.contentOf(it) }
+    if (file == null || (onlyVideo && !file.record.mime.startsWith("video/"))) {
+        respondError(HttpStatusCode.NotFound, "not_found")
+        return
+    }
+    if (rejectMultipleRanges(file.record.sizeBytes)) {
+        respondError(HttpStatusCode.RequestedRangeNotSatisfiable, "range_not_satisfiable")
+        return
+    }
+    // Eigene Parallelitätsgrenze für Streams und Downloads (ADR 0019). Vorschauen zählen nicht dazu.
+    if (!gates.tryEnterMedia()) {
+        response.headers.append(HttpHeaders.RetryAfter, RETRY_AFTER_SECONDS)
+        respondError(HttpStatusCode.ServiceUnavailable, "service_busy")
+        return
+    }
+    try {
+        respondContent(
+            file = file.path.toFile(),
+            contentType = ContentType.parse(file.record.mime),
+            disposition = if (inline) "inline" else ContentDispositionHeader.attachment(file.record.originalName),
+        )
+    } finally {
+        gates.leaveMedia()
+    }
+}
 
 /** Antwort 403 für Nicht-Gastgeber. Liefert `false`, wenn die Anfrage abgewiesen wurde. */
 private suspend fun ApplicationCall.requireHost(): Boolean {
@@ -405,6 +479,7 @@ private suspend fun ApplicationCall.runUpload(
                 work.cancel(CancellationException("Entfernt."))
             }
             work.await()
+            access.bumpRevision()
         } catch (cancelled: CancellationException) {
             if (!currentCoroutineContext().isActive) throw cancelled
             refuseEarly(HttpStatusCode.Unauthorized, "unauthorized")
@@ -529,18 +604,53 @@ private suspend fun ApplicationCall.respondRejected(reason: RejectReason) {
     }
 }
 
-private fun listItemJson(entry: MediaListEntry): JsonElement =
-    JsonObject(
+/**
+ * Eintrag der Medienliste für einen Teilnehmer (ADR 0019). Enthält signierte, kurzlebige Adressen für Ansicht und Download,
+ * bei Videos zusätzlich für den Stream. `mine` ist `true` für die eigenen Uploads. Die Adressen sind pro Teilnehmer.
+ */
+private fun SpaceAccess.mediaItemJson(
+    entry: MediaListEntry,
+    who: Principal,
+): JsonObject {
+    val id = entry.id.value
+    val urls = linkedMapOf<String, JsonElement>()
+    urls["viewUrl"] = JsonPrimitive(signedMediaPath(id, "view", MediaPurpose.VIEW, who.participantId))
+    urls["downloadUrl"] = JsonPrimitive(signedMediaPath(id, "content", MediaPurpose.DOWNLOAD, who.participantId))
+    if (entry.mime.startsWith("video/")) {
+        urls["streamUrl"] = JsonPrimitive(signedMediaPath(id, "stream", MediaPurpose.STREAM, who.participantId))
+    }
+    return JsonObject(
         mapOf(
-            "id" to JsonPrimitive(entry.id.value),
+            "id" to JsonPrimitive(id),
             "uploader" to (entry.uploaderName?.let { JsonPrimitive(it) } ?: JsonNull),
             "uploaderRemoved" to JsonPrimitive(entry.uploaderRemoved),
+            "mine" to JsonPrimitive(entry.uploaderId == who.participantId),
             "type" to JsonPrimitive(entry.mime),
             "size" to JsonPrimitive(entry.sizeBytes),
             "createdAt" to JsonPrimitive(entry.createdAt),
             "locationKept" to JsonPrimitive(entry.locationKept),
-        ),
+            // Die kürzeste Gültigkeit der Adressen. Die Stream-Adresse lebt länger (ADR 0019).
+            "urlsExpireInSeconds" to JsonPrimitive(MediaPurpose.VIEW.ttlSeconds),
+            // Platzhalter für Paket 3.5a-2 (Vorschauen, Video-Codec, HEIC-Ansicht). Vertrag in ADR 0019, Abschnitt
+            // „Schnittstelle für 3.5a-2 und 3.5a-3“. Bis dahin immer null.
+            "previewUrl" to JsonNull,
+            "previewState" to JsonNull,
+            "videoCodec" to JsonNull,
+            "viewState" to JsonNull,
+        ) + urls,
     )
+}
+
+/** Relativer Pfad mit Signatur für [purpose]: `pid`, `exp` und `sig` in der Abfrage (ADR 0019). */
+private fun SpaceAccess.signedMediaPath(
+    mediaId: String,
+    route: String,
+    purpose: MediaPurpose,
+    participant: ParticipantId,
+): String {
+    val grant = mediaSigner.grant(mediaId, purpose, participant)
+    return "/api/v1/media/$mediaId/$route?pid=${participant.value}&exp=${grant.expiresAt}&sig=${grant.signature}"
+}
 
 private fun participantJson(
     info: ParticipantInfo,

@@ -730,7 +730,10 @@ internal class SpaceRunner(
     }
 
     companion object {
-        /** Wartezeit vor dem Stopp bei Ablauf, damit die Antwort 410 beim Gast ankommt. */
-        const val CLOSE_GRACE_MILLIS = 1_000L
+        /**
+         * Nachlauf nach dem Ablauf (ADR 0017, Nachtrag 3.5a): Authentifizierte Anfragen bekommen 410, Medien und Vorschauen
+         * gibt es nicht mehr. Danach stoppt der Server. 60 s, damit die Gäste-Seite die Ende-Ansicht sicher erreicht.
+         */
+        const val CLOSE_GRACE_MILLIS = 60_000L
     }
 }

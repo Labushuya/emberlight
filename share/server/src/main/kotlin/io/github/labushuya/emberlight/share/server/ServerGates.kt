@@ -11,12 +11,14 @@ class ServerGates(
     private val requestLimit: Int = REQUEST_LIMIT,
     private val uploadLimit: Int = UPLOAD_LIMIT,
     private val uploadsPerParticipant: Int = UPLOADS_PER_PARTICIPANT,
+    private val mediaLimit: Int = MEDIA_LIMIT,
 ) {
     init {
-        require(requestLimit > 0 && uploadLimit > 0 && uploadsPerParticipant > 0)
+        require(requestLimit > 0 && uploadLimit > 0 && uploadsPerParticipant > 0 && mediaLimit > 0)
     }
 
     private val requests = Semaphore(requestLimit)
+    private val media = Semaphore(mediaLimit)
     private val uploadsByParticipant = HashMap<ParticipantId, Int>()
     private var uploadsRunning = 0
 
@@ -25,6 +27,16 @@ class ServerGates(
 
     fun leaveRequest() {
         requests.release()
+    }
+
+    /**
+     * Belegt einen Platz für einen Medien-Stream oder Download (ADR 0019). Zusätzlich zu [tryEnterRequest], nicht
+     * darin enthalten. Vorschauen zählen nicht dazu. Jeder Erfolg braucht ein [leaveMedia].
+     */
+    fun tryEnterMedia(): Boolean = media.tryAcquire()
+
+    fun leaveMedia() {
+        media.release()
     }
 
     /** Belegt einen Upload-Platz für [participant]. `false`, wenn die Gesamt- oder die eigene Grenze erreicht ist. */
@@ -48,5 +60,8 @@ class ServerGates(
         const val REQUEST_LIMIT = 16
         const val UPLOAD_LIMIT = 4
         const val UPLOADS_PER_PARTICIPANT = 2
+
+        /** Gleichzeitige Medien-Streams und Downloads (ADR 0019). Vorschauen sind nicht begrenzt hier. */
+        const val MEDIA_LIMIT = 4
     }
 }

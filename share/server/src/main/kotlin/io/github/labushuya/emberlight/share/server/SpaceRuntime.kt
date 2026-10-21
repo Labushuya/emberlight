@@ -123,6 +123,8 @@ internal class SpaceRuntime private constructor(
                     inviteRenewed = invite.renewed,
                     accentColor = SpaceAccentPalette.hexAt(setup.colorIndex),
                     hostToken = hostToken,
+                    endsAtMillis = setup.expiresAtMillis,
+                    limits = setup.limits,
                 )
             return SpaceRuntime(access, AssetGuestAssets(context.applicationContext.assets))
         }

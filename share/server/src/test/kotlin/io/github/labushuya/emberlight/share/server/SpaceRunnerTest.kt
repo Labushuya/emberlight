@@ -236,6 +236,11 @@ class SpaceRunnerTest {
         }
 
     @Test
+    fun theClosingGraceIsSixtySecondsAfterTheEnd() {
+        assertEquals(60_000L, SpaceRunner.CLOSE_GRACE_MILLIS)
+    }
+
+    @Test
     fun aRequestToAClosedSpaceAnswersAndThenTheRunStops() =
         runTest {
             val env = Env(this)
