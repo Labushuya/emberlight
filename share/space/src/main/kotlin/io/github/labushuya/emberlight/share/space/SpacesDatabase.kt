@@ -322,6 +322,11 @@ data class SpaceEntity(
     @ColumnInfo(name = "retention_reminded_for") val retentionRemindedFor: Long? = null,
     /** Die Löschung läuft oder ist unterbrochen (Paket 3.6b, ADR 0021). Der Start des Prozesses setzt sie fort. */
     @ColumnInfo(name = "purging", defaultValue = "0") val purging: Boolean = false,
+    /**
+     * Zeitpunkt der Löschung in UTC-Millisekunden (Paket 3.6c, ADR 0021). Gesetzt beim Übergang nach `DELETED`. Der Eintrag
+     * bleibt in der Liste, bis der Gastgeber ihn entfernt.
+     */
+    @ColumnInfo(name = "deleted_at") val deletedAt: Long? = null,
 )
 
 /**
@@ -418,6 +423,20 @@ interface SpaceDao {
     suspend fun markPurging(id: String): Int
 
     /**
+     * Übergang nach `DELETED` (Paket 3.6c, ADR 0021). Entfernt Frist, Einladung und Port, behält Name, Farbe, Titelbild und
+     * Einstellungen. Das Merkmal `purging` wird gelöscht.
+     */
+    @Query(
+        "UPDATE space SET status = 'DELETED', purging = 0, deleted_at = :now, updated_at = :now, " +
+            "retention_until = NULL, retention_reminded_for = NULL, invite_hash = NULL, invite_created_at = NULL, " +
+            "invite_rotated_at = NULL, invite_ciphertext = NULL, invite_iv = NULL, port = NULL WHERE id = :id",
+    )
+    suspend fun markDeleted(
+        id: String,
+        now: Long,
+    ): Int
+
+    /**
      * Einladung setzen: Hash, verschlüsseltes Geheimnis mit IV und die Zeitstempel. Bei einer Erneuerung bleibt
      * [rotatedAt] gesetzt. Alte Einladungen sind damit vollständig ersetzt.
      */
@@ -447,7 +466,7 @@ interface SpaceDao {
  */
 @Database(
     entities = [MediaEntity::class, ParticipantEntity::class, SpaceEntity::class, PauseEventEntity::class],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 abstract class SpacesDatabase : RoomDatabase() {
@@ -519,6 +538,17 @@ abstract class SpacesDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `retention_until` INTEGER")
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `retention_reminded_for` INTEGER")
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `purging` INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+
+        /**
+         * Version 9 → 10 (Paket 3.6c, ADR 0021): Zeitpunkt der Löschung am Space für „Gelöscht am <Datum>“ in der Liste.
+         * Additiv, bestehende Spaces bekommen `NULL`.
+         */
+        val MIGRATION_9_10: Migration =
+            object : Migration(9, 10) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `space` ADD COLUMN `deleted_at` INTEGER")
                 }
             }
 
@@ -635,6 +665,7 @@ abstract class SpacesDatabase : RoomDatabase() {
                     MIGRATION_6_7,
                     MIGRATION_7_8,
                     MIGRATION_8_9,
+                    MIGRATION_9_10,
                 ).build()
         }
     }

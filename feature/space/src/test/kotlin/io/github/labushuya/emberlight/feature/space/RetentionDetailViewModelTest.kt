@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -88,8 +89,23 @@ class RetentionDetailViewModelTest {
         vm.purge(onDone = { done = true })
 
         eventually { done }
-        assertNull(runBlocking { repository.find(SpaceId.parse(ID)!!) })
+        assertEquals("DELETED", runBlocking { repository.find(SpaceId.parse(ID)!!) }?.status?.name)
         assertFalse(vm.failure.value)
+    }
+
+    @Test
+    fun removingADeletedSpaceFromTheListGoesBackAndRemovesIt() {
+        insertEnded()
+        val vm = SpaceDetailViewModel(SavedStateHandle(mapOf("id" to ID)), repository, retention)
+        vm.select(ID)
+        vm.purge(onDone = {})
+        eventually { runBlocking { repository.find(SpaceId.parse(ID)!!) }?.status?.name == "DELETED" }
+        var done = false
+
+        vm.removeFromList(onDone = { done = true })
+
+        eventually { done }
+        assertNull(runBlocking { repository.find(SpaceId.parse(ID)!!) })
     }
 
     @Test

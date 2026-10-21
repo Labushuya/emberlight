@@ -4,6 +4,8 @@ package io.github.labushuya.emberlight.feature.space
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import io.github.labushuya.emberlight.feature.space.retention.RetentionNotifier
+import io.github.labushuya.emberlight.feature.space.retention.RetentionReminders
 import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
@@ -12,6 +14,8 @@ import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.management.SpaceRecord
 import io.github.labushuya.emberlight.share.space.management.SpaceRepository
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
+import io.github.labushuya.emberlight.share.space.retention.RetentionRepository
+import io.github.labushuya.emberlight.share.space.retention.SpacePurge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -93,7 +97,14 @@ class SpacesListViewModelTest {
         }
 
     private fun viewModel(): SpacesListViewModel {
-        val vm = SpacesListViewModel(repository)
+        val spacesDir = folder.root.resolve("spaces")
+        val retention =
+            RetentionReminders(
+                context,
+                RetentionRepository(database, SpacePurge(database, SpaceCoverStore(spacesDir)) {}),
+                RetentionNotifier(context),
+            )
+        val vm = SpacesListViewModel(repository, retention)
         collector = CoroutineScope(Dispatchers.Unconfined).launch { vm.spaces.collect { latest = it } }
         return vm
     }

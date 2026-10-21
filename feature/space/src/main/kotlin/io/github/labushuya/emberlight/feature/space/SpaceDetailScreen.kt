@@ -55,6 +55,7 @@ internal fun SpaceDetailScreen(
     onStart: (String) -> Unit = {},
     onSetup: (String) -> Unit = {},
     onOpenRunning: (String) -> Unit = {},
+    onTemplate: (String) -> Unit = {},
     viewModel: SpaceDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -82,6 +83,8 @@ internal fun SpaceDetailScreen(
             onDelete = { viewModel.delete(onDone = onBack) },
             onChangeRetention = { days -> viewModel.changeRetention(days) },
             onPurge = { viewModel.purge(onDone = onBack) },
+            onTemplate = onTemplate,
+            onRemove = { viewModel.removeFromList(onDone = onBack) },
             notificationsAllowed = viewModel.notificationsAllowed,
             purgeFailed = purgeFailed,
             confirmPurgeOnOpen = viewModel.confirmPurgeRequested,
@@ -112,6 +115,8 @@ internal fun SpaceDetailPane(
     notificationsAllowed: Boolean = true,
     purgeFailed: Boolean = false,
     confirmPurgeOnOpen: Boolean = false,
+    onTemplate: (String) -> Unit = {},
+    onRemove: () -> Unit = {},
 ) {
     val record = state.record
     when {
@@ -136,6 +141,8 @@ internal fun SpaceDetailPane(
                 onStart = { onStart(record.id.value) },
                 onSetup = { onSetup(record.id.value) },
                 onOpenRunning = { onOpenRunning(record.id.value) },
+                onTemplate = { onTemplate(record.id.value) },
+                onRemove = onRemove,
                 onChangeRetention = onChangeRetention,
                 onPurge = onPurge,
                 notificationsAllowed = notificationsAllowed,
@@ -167,11 +174,14 @@ internal fun SpaceDetailContent(
     notificationsAllowed: Boolean = true,
     purgeFailed: Boolean = false,
     confirmPurgeOnOpen: Boolean = false,
+    onTemplate: () -> Unit = {},
+    onRemove: () -> Unit = {},
     media: @Composable () -> Unit = {},
 ) {
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var changingRetention by rememberSaveable { mutableStateOf(false) }
     var confirmPurge by rememberSaveable { mutableStateOf(confirmPurgeOnOpen) }
+    var confirmRemove by rememberSaveable { mutableStateOf(false) }
     val settings = record.settings
     val editable = record.status == SpaceStatus.DRAFT
     val ended = record.status == SpaceStatus.ENDED
@@ -282,11 +292,33 @@ internal fun SpaceDetailContent(
                         OutlinedButton(onClick = { changingRetention = true }, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.space_retention_change))
                         }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = onTemplate, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.space_template_action))
+                        }
                     }
                     media()
                 }
 
-                SpaceStatus.DELETED -> {}
+                SpaceStatus.DELETED -> {
+                    record.deletedAt?.let {
+                        Text(
+                            text = stringResource(R.string.space_deleted_at, formatDate(it)),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.space_deleted_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(onClick = onTemplate, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.space_template_action))
+                    }
+                }
             }
             if (!editable) {
                 Spacer(Modifier.height(8.dp))
@@ -317,13 +349,21 @@ internal fun SpaceDetailContent(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-            } else if (record.status != SpaceStatus.ACTIVE && !ended) {
+            } else if (record.status == SpaceStatus.DRAFT) {
                 OutlinedButton(
                     onClick = { confirmDelete = true },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 ) {
                     Text(stringResource(R.string.space_detail_delete))
+                }
+            } else if (record.status == SpaceStatus.DELETED) {
+                OutlinedButton(
+                    onClick = { confirmRemove = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.space_list_remove))
                 }
             }
         }
@@ -352,6 +392,30 @@ internal fun SpaceDetailContent(
                     onPurge()
                 },
                 onDismiss = { confirmPurge = false },
+            )
+        }
+
+        if (confirmRemove) {
+            AlertDialog(
+                onDismissRequest = { confirmRemove = false },
+                title = { Text(stringResource(R.string.space_list_remove_title)) },
+                text = { Text(stringResource(R.string.space_list_remove_text, settings.name)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmRemove = false
+                            onRemove()
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) {
+                        Text(stringResource(R.string.space_list_remove_confirm))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmRemove = false }) {
+                        Text(stringResource(R.string.space_cancel))
+                    }
+                },
             )
         }
 

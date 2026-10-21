@@ -66,6 +66,7 @@ internal fun SpacesScreen(
     onCreate: () -> Unit = {},
     onOpen: (String) -> Unit = {},
     onEdit: (String) -> Unit = {},
+    onTemplate: (String) -> Unit = {},
     viewModel: SpacesListViewModel = hiltViewModel(),
     detailViewModel: SpaceDetailViewModel = hiltViewModel(),
 ) {
@@ -103,6 +104,8 @@ internal fun SpacesScreen(
                         onDelete = { detailViewModel.delete(onDone = {}) },
                         onChangeRetention = { days -> detailViewModel.changeRetention(days) },
                         onPurge = { detailViewModel.purge(onDone = {}) },
+                        onTemplate = onTemplate,
+                        onRemove = { detailViewModel.removeFromList(onDone = {}) },
                         notificationsAllowed = detailViewModel.notificationsAllowed,
                         purgeFailed = purgeFailed,
                         confirmPurgeOnOpen = detailViewModel.confirmPurgeRequested,
@@ -261,6 +264,16 @@ private fun SpaceCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Gelöschte Spaces bleiben in der Liste mit dem Löschdatum (Paket 3.6c).
+                if (record.status == SpaceStatus.DELETED) {
+                    record.deletedAt?.let {
+                        Text(
+                            text = stringResource(R.string.space_deleted_at, formatDate(it)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 // Beendete Spaces zeigen das Löschdatum, sobald die Aufbewahrung läuft (Paket 3.6b).
                 if (record.status == SpaceStatus.ENDED && !record.purging) {
                     val until =

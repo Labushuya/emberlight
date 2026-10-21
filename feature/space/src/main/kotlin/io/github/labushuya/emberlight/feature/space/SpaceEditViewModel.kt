@@ -10,6 +10,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.labushuya.emberlight.feature.space.form.LifetimeOption
 import io.github.labushuya.emberlight.feature.space.form.NameIdeas
 import io.github.labushuya.emberlight.feature.space.form.SpaceForm
+import io.github.labushuya.emberlight.feature.space.form.SpaceTemplate
 import io.github.labushuya.emberlight.feature.space.form.changedFields
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.management.CoverResult
@@ -54,6 +55,9 @@ class SpaceEditViewModel
         private val zone: ZoneId = ZoneId.systemDefault()
         private val routeId: String? = savedStateHandle.get<String>(ARG_ID)
 
+        /** Kennung des Space, dessen Einstellungen als Vorlage dienen (Paket 3.6c). Ohne Vorlage `null`. */
+        private val templateId: String? = savedStateHandle.get<String>(ARG_TEMPLATE)
+
         /** Kennung des Entwurfs. Bleibt über einen Prozesstod hinweg erhalten. */
         private val draftId: SpaceId =
             savedStateHandle.get<String>(KEY_DRAFT)?.let { SpaceId.parse(it) }
@@ -74,9 +78,32 @@ class SpaceEditViewModel
                 val existing = if (routeId != null) repository.find(spaceId) else null
                 saved = existing
                 val ceiling = repository.storageCeilingBytes()
+                // Vorlage (Paket 3.6c): nur ein beendeter oder gelöschter Space dient als Vorlage.
+                val source =
+                    if (routeId == null) {
+                        templateId
+                            ?.let { SpaceId.parse(it) }
+                            ?.let { repository.find(it) }
+                            ?.takeIf { it.status == SpaceStatus.ENDED || it.status == SpaceStatus.DELETED }
+                    } else {
+                        null
+                    }
+                val template = source?.let { SpaceTemplate.of(it, System.currentTimeMillis(), zone, ceiling) }
                 // Ein neuer Space bekommt die größte zulässige Voreinstellung, wenn die übliche 4 GiB nicht passen.
-                val initial = existing?.let { SpaceForm.from(it, zone) } ?: SpaceForm.forNewSpace(ceiling)
+                val initial =
+                    existing?.let { SpaceForm.from(it, zone) }
+                        ?: template?.form
+                        ?: SpaceForm.forNewSpace(ceiling)
                 val editable = routeId == null || (existing != null && existing.status == SpaceStatus.DRAFT)
+                val notes =
+                    template
+                        ?.let { t ->
+                            buildSet {
+                                add(TemplateNote.TEMPLATE)
+                                if (t.lifetimeReset) add(TemplateNote.LIFETIME_RESET)
+                                if (t.limitReset) add(TemplateNote.LIMIT_RESET)
+                            }
+                        }.orEmpty()
                 _state.value =
                     SpaceEditUiState(
                         loaded = true,
@@ -85,7 +112,14 @@ class SpaceEditViewModel
                         form = initial,
                         initial = initial,
                         storageMaxBytes = ceiling,
+                        templateNotes = notes,
                     ).withDerived(initial)
+                // Das Titelbild der Vorlage wird in den neuen Space kopiert. Die Prüfung läuft wie bei jedem Titelbild.
+                source?.let { template ->
+                    template.coverSha256?.let { sha ->
+                        importCoverFrom { repository.coverFile(template.id, sha).inputStream() }
+                    }
+                }
             }
         }
 
@@ -276,6 +310,7 @@ class SpaceEditViewModel
 
         private companion object {
             const val ARG_ID = "id"
+            const val ARG_TEMPLATE = "template"
             const val KEY_DRAFT = "draftId"
         }
     }

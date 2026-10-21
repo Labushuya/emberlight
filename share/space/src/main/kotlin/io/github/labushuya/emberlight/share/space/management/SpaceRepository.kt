@@ -232,6 +232,7 @@ internal fun SpaceEntity.toSpaceRecord(): SpaceRecord =
         retentionUntil = retentionUntil,
         retentionRemindedFor = retentionRemindedFor,
         purging = purging,
+        deletedAt = deletedAt,
     )
 
 private fun lifetimeFrom(

@@ -160,6 +160,45 @@ class RetentionRepositoryTest {
                 repository.purge(SpaceId(ID))
             },
         )
+        assertEquals("DELETED", runBlocking { database.spaces().find(ID) }?.status)
+    }
+
+    @Test
+    fun purgeDueDeletesOnlyEndedSpacesWhoseKeepingHasRunOut() {
+        insertEnded(ID, retentionDays = 1)
+        insertEnded(OTHER_ID, retentionDays = 3)
+
+        val dueBeforeTheDay = runBlocking { repository.purgeDue(now = endedAt + day - 1) }
+        assertTrue(dueBeforeTheDay.isEmpty())
+
+        val due = runBlocking { repository.purgeDue(now = endedAt + day) }
+        assertEquals(listOf(SpaceId(ID)), due)
+        assertEquals("DELETED", runBlocking { database.spaces().find(ID) }?.status)
+        assertEquals("ENDED", runBlocking { database.spaces().find(OTHER_ID) }?.status)
+    }
+
+    @Test
+    fun aSpaceWithImmediateDeletionIsPurgedAtTheEnd() {
+        insertEnded(ID, retentionDays = 0)
+
+        assertEquals(listOf(SpaceId(ID)), runBlocking { repository.purgeDue(now = endedAt) })
+    }
+
+    @Test
+    fun aChangedDeadlineMovesThePurge() {
+        insertEnded(ID, retentionDays = 1)
+        runBlocking { repository.changeUntil(SpaceId(ID), days = 5, now = endedAt + day) }
+
+        assertTrue(runBlocking { repository.purgeDue(now = endedAt + 2 * day) }.isEmpty())
+        assertEquals(listOf(SpaceId(ID)), runBlocking { repository.purgeDue(now = endedAt + 6 * day) })
+    }
+
+    @Test
+    fun aRemovedDeletedSpaceIsNoLongerInTheDatabase() {
+        insertEnded(ID, retentionDays = 1)
+        runBlocking { repository.purgeDue(now = endedAt + day) }
+
+        assertEquals(RemoveResult.Removed, runBlocking { repository.remove(SpaceId(ID)) })
         assertNull(runBlocking { database.spaces().find(ID) })
     }
 

@@ -83,6 +83,13 @@ class SpaceCoverStore(
             storage(spaceId).deleteCoversExcept(keep)
         }
 
+    /**
+     * Entfernt Medien und Vorschauen des Space, das Titelbild bleibt (Paket 3.6c, ADR 0021). Der Eintrag „Gelöscht“ zeigt es.
+     */
+    suspend fun deleteMediaOf(spaceId: SpaceId) {
+        withContext(Dispatchers.IO) { storage(spaceId).deleteAllButCovers() }
+    }
+
     /** Entfernt den gesamten Speicher des Space: Titelbilder, Medien und Verzeichnis. */
     suspend fun deleteSpace(spaceId: SpaceId) {
         withContext(Dispatchers.IO) { storage(spaceId).deleteEverything() }

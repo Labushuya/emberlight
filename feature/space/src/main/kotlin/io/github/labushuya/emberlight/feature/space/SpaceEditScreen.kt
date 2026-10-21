@@ -194,6 +194,16 @@ internal fun SpaceEditContent(
         Column(
             modifier = Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         ) {
+            if (state.templateNotes.isNotEmpty()) {
+                SupportText(stringResource(R.string.space_template_hint))
+                if (TemplateNote.LIFETIME_RESET in state.templateNotes) {
+                    SupportText(stringResource(R.string.space_template_lifetime_reset))
+                }
+                if (TemplateNote.LIMIT_RESET in state.templateNotes) {
+                    SupportText(stringResource(R.string.space_template_limit_reset))
+                }
+                Spacer(Modifier.height(16.dp))
+            }
             FormSection(stringResource(R.string.space_section_name)) {
                 val nameError = errorFor(SpaceField.NAME)
                 OutlinedTextField(

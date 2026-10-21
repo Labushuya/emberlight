@@ -28,6 +28,8 @@ data class RetentionReminder(
 data class RetentionPlan(
     val due: List<RetentionReminder>,
     val nextCheckAt: Long?,
+    /** Beendete Spaces, deren Aufbewahrung abgelaufen ist und die jetzt gelöscht werden (Paket 3.6c, ADR 0021). */
+    val purgeDue: List<SpaceId>,
 )
 
 /**
@@ -41,7 +43,15 @@ object RetentionReminderPlanner {
     ): RetentionPlan {
         val due = mutableListOf<RetentionReminder>()
         val later = mutableListOf<Long>()
+        val purgeDue = mutableListOf<SpaceId>()
         for (space in spaces) {
+            val until = purgeAt(space)
+            if (until != null && until <= now) {
+                // Ein Space, dessen Aufbewahrung abgelaufen ist, wird gelöscht und bekommt keine Erinnerung mehr.
+                purgeDue += space.id
+                continue
+            }
+            if (until != null) later += until
             val reminder = reminderOf(space) ?: continue
             if (RetentionRules.isDue(reminder.plannedAt, space.retentionRemindedFor, now)) {
                 due += reminder
@@ -49,7 +59,17 @@ object RetentionReminderPlanner {
                 later += reminder.plannedAt
             }
         }
-        return RetentionPlan(due = due, nextCheckAt = later.minOrNull())
+        return RetentionPlan(due = due, nextCheckAt = later.minOrNull(), purgeDue = purgeDue)
+    }
+
+    /**
+     * Zeitpunkt der automatischen Löschung eines beendeten Space: das Ende der Aufbewahrung, wie es gilt. `null` für alles,
+     * was nicht beendet ist oder gerade gelöscht wird.
+     */
+    fun purgeAt(space: SpaceRecord): Long? {
+        if (space.purging || space.status != SpaceStatus.ENDED) return null
+        val endedAt = space.endedAt ?: return null
+        return RetentionRules.effectiveUntil(endedAt, space.settings.retentionDays, space.retentionUntil)
     }
 
     /** Die Erinnerung eines Space, oder `null`, wenn er keine braucht (aktiv mit Frist, Entwurf, Löschung läuft). */
