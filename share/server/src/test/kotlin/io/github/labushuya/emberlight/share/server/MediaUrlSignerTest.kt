@@ -71,7 +71,10 @@ class MediaUrlSignerTest {
     fun aSignatureFromAnotherKeyIsRejected() {
         val grant = signer.grant(media, MediaPurpose.VIEW, guest)
         val otherKey = MediaUrlSigner.forTest(ByteArray(32) { 9 }) { now }
-        assertEquals(MediaVerdict.BAD_SIGNATURE, verify(MediaPurpose.VIEW, grant.signature, grant.expiresAt, using = otherKey))
+        assertEquals(
+            MediaVerdict.BAD_SIGNATURE,
+            verify(MediaPurpose.VIEW, grant.signature, grant.expiresAt, using = otherKey),
+        )
     }
 
     @Test
@@ -91,8 +94,7 @@ class MediaUrlSignerTest {
 
     private val guestPrincipal = Principal(guest, Role.GUEST)
 
-    private fun authorizer(active: Map<ParticipantId, Principal>) =
-        SignedMediaAuthorizer(signer) { active[it] }
+    private fun authorizer(active: Map<ParticipantId, Principal>) = SignedMediaAuthorizer(signer) { active[it] }
 
     @Test
     fun noSignatureParametersMeansAbsent() {
@@ -121,7 +123,14 @@ class MediaUrlSignerTest {
     fun validGrantForActiveParticipantIsGranted() {
         val grant = signer.grant(media, MediaPurpose.STREAM, guest)
         val auth = authorizer(mapOf(guest to guestPrincipal))
-        val result = auth.authorize(media, MediaPurpose.STREAM, guest.value, grant.expiresAt.toString(), grant.signature)
+        val result =
+            auth.authorize(
+                media,
+                MediaPurpose.STREAM,
+                guest.value,
+                grant.expiresAt.toString(),
+                grant.signature,
+            )
         assertEquals(SignedMediaAccess.Granted(guestPrincipal), result)
     }
 

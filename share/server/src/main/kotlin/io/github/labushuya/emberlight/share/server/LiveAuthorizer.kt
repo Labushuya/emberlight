@@ -17,7 +17,8 @@ class LiveAuthorizer(
     private var current: List<Credential> = initial
     private val snapshot = AtomicReference(build(initial))
 
-    override fun authorize(authorizationHeader: String?): Principal? = snapshot.get().tokens.authorize(authorizationHeader)
+    override fun authorize(authorizationHeader: String?): Principal? =
+        snapshot.get().tokens.authorize(authorizationHeader)
 
     /** Aktiver Teilnehmer mit dieser ID, `null` wenn er entfernt oder abgemeldet ist (ADR 0019, signierte URLs). */
     fun principalOf(id: ParticipantId): Principal? = snapshot.get().principals[id]

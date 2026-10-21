@@ -28,6 +28,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -135,7 +136,11 @@ class SignedMediaApiTest {
                 setBody(bytes)
             }
         assertEquals(HttpStatusCode.Created, response.status)
-        return Json.parseToJsonElement(response.bodyAsText()).jsonObject.getValue("id").jsonPrimitive.content
+        return Json
+            .parseToJsonElement(response.bodyAsText())
+            .jsonObject
+            .getValue("id")
+            .jsonPrimitive.content
     }
 
     /** Signierte Adresse für [route] mit dem zugehörigen Zweck, ausgestellt jetzt. */
@@ -161,7 +166,10 @@ class SignedMediaApiTest {
     private fun mediaHeaders(response: HttpResponse) {
         assertEquals(listOf("no-referrer"), response.headers.getAll("Referrer-Policy"))
         assertEquals(listOf("same-origin"), response.headers.getAll("Cross-Origin-Resource-Policy"))
-        assertEquals(listOf("default-src 'none'; frame-ancestors 'none'"), response.headers.getAll("Content-Security-Policy"))
+        assertEquals(
+            listOf("default-src 'none'; frame-ancestors 'none'"),
+            response.headers.getAll("Content-Security-Policy"),
+        )
         assertEquals(listOf("nosniff"), response.headers.getAll("X-Content-Type-Options"))
         assertEquals(listOf("no-store"), response.headers.getAll(HttpHeaders.CacheControl))
     }
@@ -257,7 +265,8 @@ class SignedMediaApiTest {
             install()
             val id = client.upload(MediaFixtures.jpeg(300), "bild.jpg")
 
-            val response = client.signedGet("/api/v1/media/$id/view", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN")
+            val response =
+                client.signedGet("/api/v1/media/$id/view", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN")
 
             assertEquals(HttpStatusCode.OK, response.status)
         }
@@ -319,7 +328,8 @@ class SignedMediaApiTest {
             install()
             val id = client.upload(MediaFixtures.jpeg(300), "bild.jpg")
             val grant = signer.grant(id, MediaPurpose.VIEW, guest.participantId)
-            val url = "/api/v1/media/$id/view?pid=${guest.participantId.value}&exp=${grant.expiresAt}&sig=${grant.signature}"
+            val url =
+                "/api/v1/media/$id/view?pid=${guest.participantId.value}&exp=${grant.expiresAt}&sig=${grant.signature}"
 
             client.signedGet(url)
 
@@ -343,7 +353,12 @@ class SignedMediaApiTest {
                     header(HttpHeaders.Authorization, "Bearer $GUEST_TOKEN")
                 }
             assertEquals(HttpStatusCode.OK, list.status)
-            val items = Json.parseToJsonElement(list.bodyAsText()).jsonObject.getValue("items").jsonArray
+            val items =
+                Json
+                    .parseToJsonElement(list.bodyAsText())
+                    .jsonObject
+                    .getValue("items")
+                    .jsonArray
             assertEquals(2, items.size)
             val video = items.map { it.jsonObject }.single { it.getValue("type").jsonPrimitive.content == "video/mp4" }
             val image = items.map { it.jsonObject }.single { it.getValue("type").jsonPrimitive.content == "image/jpeg" }
@@ -368,7 +383,13 @@ class SignedMediaApiTest {
                     header(HttpHeaders.Host, "localhost")
                     header(HttpHeaders.Authorization, "Bearer $HOST_TOKEN")
                 }
-            val item = Json.parseToJsonElement(list.bodyAsText()).jsonObject.getValue("items").jsonArray.single().jsonObject
+            val items =
+                Json
+                    .parseToJsonElement(list.bodyAsText())
+                    .jsonObject
+                    .getValue("items")
+                    .jsonArray
+            val item = items.single().jsonObject
             assertFalse(item.getValue("mine").jsonPrimitive.boolean)
         }
 
@@ -383,10 +404,20 @@ class SignedMediaApiTest {
 
             val with = client.signedGet("/api/v1/media/$id", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN")
             assertEquals(HttpStatusCode.OK, with.status)
-            assertEquals(id, Json.parseToJsonElement(with.bodyAsText()).jsonObject.getValue("id").jsonPrimitive.content)
+            assertEquals(
+                id,
+                Json
+                    .parseToJsonElement(with.bodyAsText())
+                    .jsonObject
+                    .getValue("id")
+                    .jsonPrimitive.content,
+            )
 
             val unknown =
-                client.signedGet("/api/v1/media/mediaZZZZZZZZZZZZZZZZZZZZ", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN")
+                client.signedGet(
+                    "/api/v1/media/mediaZZZZZZZZZZZZZZZZZZZZ",
+                    HttpHeaders.Authorization to "Bearer $GUEST_TOKEN",
+                )
             assertEquals(HttpStatusCode.NotFound, unknown.status)
         }
 
@@ -394,16 +425,21 @@ class SignedMediaApiTest {
     fun spaceInfoCarriesRevisionLimitsAndNoEndWithoutOne() =
         testApplication {
             install()
-            val before = Json.parseToJsonElement(
-                client.signedGet("/api/v1/space", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN").bodyAsText(),
-            ).jsonObject
+
+            suspend fun spaceInfo(): JsonObject {
+                val text =
+                    client.get("/api/v1/space") {
+                        header(HttpHeaders.Host, "localhost")
+                        header(HttpHeaders.Authorization, "Bearer $GUEST_TOKEN")
+                    }
+                return Json.parseToJsonElement(text.bodyAsText()).jsonObject
+            }
+            val before = spaceInfo()
             client.upload(MediaFixtures.jpeg(300), "bild.jpg")
 
-            val after =
-                client.signedGet("/api/v1/space", HttpHeaders.Authorization to "Bearer $GUEST_TOKEN").bodyAsText().let {
-                    Json.parseToJsonElement(it).jsonObject
-                }
-            assertTrue(after.getValue("revision").jsonPrimitive.long > before.getValue("revision").jsonPrimitive.long)
+            val after = spaceInfo()
+            val revisionBefore = before.getValue("revision").jsonPrimitive.long
+            assertTrue(after.getValue("revision").jsonPrimitive.long > revisionBefore)
             assertEquals(JsonNull, after.getValue("remainingSeconds"))
             assertEquals(JsonNull, after.getValue("endsAt"))
             val limits = after.getValue("limits").jsonObject

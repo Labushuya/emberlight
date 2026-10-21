@@ -251,6 +251,7 @@ internal fun ApplicationCall.signedMediaAccess(authorizer: SignedMediaAuthorizer
     if (authorizer == null || request.local.method != HttpMethod.Get) return SignedMediaAccess.Absent
     val route = mediaRouteOf(request.path()) ?: return SignedMediaAccess.Absent
     val query = request.queryParameters
+
     fun one(name: String): String? = query.getAll(name)?.let { values -> if (values.size == 1) values.single() else "" }
     return authorizer.authorize(route.id, route.purpose, one("pid"), one("exp"), one("sig"))
 }

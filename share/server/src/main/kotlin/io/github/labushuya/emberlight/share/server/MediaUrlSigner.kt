@@ -69,7 +69,13 @@ class MediaUrlSigner internal constructor(
         signature: String,
     ): MediaVerdict {
         val expected = sign(message(mediaId, purpose, participantId, expiresAt)).toByteArray(Charsets.US_ASCII)
-        if (!MessageDigest.isEqual(expected, signature.toByteArray(Charsets.US_ASCII))) return MediaVerdict.BAD_SIGNATURE
+        if (!MessageDigest.isEqual(
+                expected,
+                signature.toByteArray(Charsets.US_ASCII),
+            )
+        ) {
+            return MediaVerdict.BAD_SIGNATURE
+        }
         return if (nowSeconds() < expiresAt) MediaVerdict.VALID else MediaVerdict.EXPIRED
     }
 
@@ -143,11 +149,18 @@ class SignedMediaAuthorizer internal constructor(
         val expiresAt = expires.toLongOrNull() ?: return SignedMediaAccess.Denied(URL_INVALID)
         val pid = ParticipantId.parse(participant) ?: return SignedMediaAccess.Denied(URL_INVALID)
         return when (signer.verify(mediaId, purpose, pid.value, expiresAt, signature)) {
-            MediaVerdict.BAD_SIGNATURE -> SignedMediaAccess.Denied(URL_INVALID)
-            MediaVerdict.EXPIRED -> SignedMediaAccess.Denied(URL_EXPIRED)
-            MediaVerdict.VALID ->
+            MediaVerdict.BAD_SIGNATURE -> {
+                SignedMediaAccess.Denied(URL_INVALID)
+            }
+
+            MediaVerdict.EXPIRED -> {
+                SignedMediaAccess.Denied(URL_EXPIRED)
+            }
+
+            MediaVerdict.VALID -> {
                 activePrincipal(pid)?.let { SignedMediaAccess.Granted(it) }
                     ?: SignedMediaAccess.Denied(PARTICIPANT_INACTIVE)
+            }
         }
     }
 

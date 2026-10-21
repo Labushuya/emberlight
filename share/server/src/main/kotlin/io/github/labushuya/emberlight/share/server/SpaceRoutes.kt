@@ -28,7 +28,6 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.utils.io.readBuffer
-import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -43,6 +42,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.time.Instant
 
 /** Uhr, Grenzen und Abfragezyklus des Uploads. Im Test ersetzbar, in der Produktion die Standardwerte. */
 data class UploadTuning(
@@ -97,7 +97,10 @@ fun spaceRoutes(
                             "warning" to JsonPrimitive(usage.warning),
                             "remainingSeconds" to (access.remainingSeconds()?.let { JsonPrimitive(it) } ?: JsonNull),
                             "endsAt" to
-                                (access.endsAtMillis?.let { JsonPrimitive(Instant.ofEpochMilli(it).toString()) } ?: JsonNull),
+                                (
+                                    access.endsAtMillis?.let { JsonPrimitive(Instant.ofEpochMilli(it).toString()) }
+                                        ?: JsonNull
+                                ),
                             "revision" to JsonPrimitive(access.revision),
                             "limits" to
                                 JsonObject(
@@ -279,8 +282,14 @@ fun spaceRoutes(
                         access.bumpRevision()
                         call.respond(HttpStatusCode.NoContent)
                     }
-                    DeleteOutcome.NotFound -> call.respondError(HttpStatusCode.NotFound, "not_found")
-                    DeleteOutcome.Forbidden -> call.respondError(HttpStatusCode.Forbidden, "forbidden")
+
+                    DeleteOutcome.NotFound -> {
+                        call.respondError(HttpStatusCode.NotFound, "not_found")
+                    }
+
+                    DeleteOutcome.Forbidden -> {
+                        call.respondError(HttpStatusCode.Forbidden, "forbidden")
+                    }
                 }
             }
         }

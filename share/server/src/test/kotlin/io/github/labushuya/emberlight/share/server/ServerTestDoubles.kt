@@ -77,7 +77,9 @@ internal fun testAccess(
     credentials: List<io.github.labushuya.emberlight.share.space.participants.Credential> = emptyList(),
     name: String = "Test",
     mediaSigner: MediaUrlSigner = MediaUrlSigner.random(),
-    limits: io.github.labushuya.emberlight.share.space.SpaceLimits = io.github.labushuya.emberlight.share.space.SpaceLimits(),
+    limits: io.github.labushuya.emberlight.share.space.SpaceLimits =
+        io.github.labushuya.emberlight.share.space
+            .SpaceLimits(),
 ): SpaceAccess =
     SpaceAccess(
         vault = vault,
