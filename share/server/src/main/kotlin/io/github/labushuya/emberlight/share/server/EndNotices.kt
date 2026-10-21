@@ -49,6 +49,9 @@ internal interface EndNoticeStore {
 
     fun markWarned(spaceId: String)
 
+    /** Nimmt die Merkung der Vorwarnung weg, etwa nach einer Verlängerung. Die neue Endzeit bekommt eine eigene Vorwarnung. */
+    fun clearWarned(spaceId: String)
+
     fun ended(spaceId: String): Boolean
 
     fun markEnded(spaceId: String)
@@ -62,6 +65,10 @@ internal class PrefsEndNoticeStore(
 
     override fun markWarned(spaceId: String) {
         prefs.edit { putBoolean(key(WARNED, spaceId), true) }
+    }
+
+    override fun clearWarned(spaceId: String) {
+        prefs.edit { remove(key(WARNED, spaceId)) }
     }
 
     override fun ended(spaceId: String): Boolean = prefs.getBoolean(key(ENDED, spaceId), false)
@@ -94,6 +101,10 @@ internal class MemoryEndNoticeStore : EndNoticeStore {
 
     override fun markWarned(spaceId: String) {
         warned += spaceId
+    }
+
+    override fun clearWarned(spaceId: String) {
+        warned -= spaceId
     }
 
     override fun ended(spaceId: String): Boolean = spaceId in ended

@@ -93,4 +93,16 @@ class PrefsEndNoticeStoreTest {
         assertTrue(store().ended("space-1"))
         assertFalse(store().warned("space-1"))
     }
+
+    @Test
+    fun anExtensionClearsTheWarningSoTheNewEndGetsItsOwnOne() {
+        store().markWarned("space-1")
+
+        store().clearWarned("space-1")
+
+        assertFalse(store().warned("space-1"))
+        // Die neue Vorwarnung ist fällig, sobald die neue Endzeit in der Vorlaufzeit liegt (Paket 3.6a).
+        val newEnd = 10_000_000L
+        assertTrue(EndNotices.warningDue(newEnd - EndNotices.WARNING_LEAD_MILLIS, newEnd, store().warned("space-1")))
+    }
 }

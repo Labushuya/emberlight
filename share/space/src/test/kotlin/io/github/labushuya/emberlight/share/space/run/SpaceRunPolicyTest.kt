@@ -171,4 +171,46 @@ class SpaceRunPolicyTest {
         detector.reset()
         assertNull(detector.beat(wallMillis = start + 9_000, elapsedMillis = 9_000L, uptimeMillis = 9_000L))
     }
+
+    @Test
+    fun anExtensionIsAllowedUpToThirtyDaysFromTheStartAndNotBeyond() {
+        val day = 86_400_000L
+        val end = start + day
+        assertNull(extend(newEnd = start + 30 * day, currentEnd = end))
+        assertEquals(ExtendProblem.TOO_LONG, extend(newEnd = start + 30 * day + 1, currentEnd = end))
+    }
+
+    @Test
+    fun anExtensionNeedsAnEndInTheFutureAndLaterThanTheCurrentOne() {
+        val now = start + 60_000L
+        val current = start + 3_600_000L
+        assertEquals(ExtendProblem.NOT_IN_FUTURE, extend(newEnd = now, currentEnd = current, now = now))
+        assertEquals(ExtendProblem.NOT_LATER, extend(newEnd = current, currentEnd = current, now = now))
+        assertEquals(ExtendProblem.NOT_LATER, extend(newEnd = current - 1, currentEnd = current, now = now))
+        assertNull(extend(newEnd = current + 1, currentEnd = current, now = now))
+    }
+
+    @Test
+    fun onlyAnActiveSpaceCanBeExtended() {
+        val end = start + 3_600_000L
+        for (status in listOf(SpaceStatus.DRAFT, SpaceStatus.ENDED)) {
+            assertEquals(
+                ExtendProblem.NOT_ACTIVE,
+                SpaceRunPolicy.extendProblem(status, start, end, end + 1, start),
+            )
+        }
+    }
+
+    private fun extend(
+        newEnd: Long,
+        currentEnd: Long,
+        now: Long = start,
+    ): ExtendProblem? =
+        SpaceRunPolicy.extendProblem(
+            status = SpaceStatus.ACTIVE,
+            startedAtMillis = start,
+            currentEndsAtMillis = currentEnd,
+            newEndsAtMillis = newEnd,
+            nowWallMillis = now,
+        )
 }

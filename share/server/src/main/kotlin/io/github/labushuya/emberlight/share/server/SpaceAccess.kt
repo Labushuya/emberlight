@@ -34,8 +34,7 @@ class SpaceAccess internal constructor(
     val hostToken: String?,
     /** Schlüssel für signierte Medien-URLs, nur im Speicher je Serverlauf (ADR 0019). */
     val mediaSigner: MediaUrlSigner = MediaUrlSigner.random(),
-    /** Geplantes Ende in UTC-Millisekunden, `null` ohne Ende (ADR 0017). Für `/space` (ADR 0019). */
-    val endsAtMillis: Long? = null,
+    endsAtMillis: Long? = null,
     /** Grenzen für Dateigrößen und Speicher. Die Gäste-Seite prüft vorab (ADR 0019). */
     val limits: SpaceLimits = SpaceLimits(),
     /** Uhr in Millisekunden seit der Epoche. Tests ersetzen sie. */
@@ -56,6 +55,20 @@ class SpaceAccess internal constructor(
     /** Erhöht den Zähler der Revision. */
     fun bumpRevision() {
         revisionCounter.incrementAndGet()
+    }
+
+    /**
+     * Geplantes Ende in UTC-Millisekunden, `null` ohne Ende (ADR 0017). Für `/space` (ADR 0019). Ändert sich nur über
+     * [extendEnd] (Paket 3.6a).
+     */
+    @Volatile
+    var endsAtMillis: Long? = endsAtMillis
+        private set
+
+    /** Neue Endzeit nach dem Verlängern (Paket 3.6a). Die Revision steigt, die Gäste-Seite lädt `/space` neu. */
+    fun extendEnd(newEndsAtMillis: Long) {
+        endsAtMillis = newEndsAtMillis
+        bumpRevision()
     }
 
     /** Restzeit in Sekunden bis zum Ende, ab 0. `null` ohne festes Ende. */

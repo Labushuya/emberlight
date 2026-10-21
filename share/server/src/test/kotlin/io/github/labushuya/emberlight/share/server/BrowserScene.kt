@@ -185,6 +185,12 @@ internal class BrowserScene(
     /** Markiert den Space als beendet. Der nächste Aufruf eines Gastes bekommt `410`. */
     fun markClosed() = closure.markClosed()
 
+    /** Verlängert das Ende um [millis], wie der Gastgeber über den Dienst (Paket 3.6a). Die Revision steigt dabei. */
+    fun extendBy(millis: Long) {
+        val current = access.endsAtMillis ?: System.currentTimeMillis()
+        access.extendEnd(current + millis)
+    }
+
     /**
      * Der Gastgeber-Pfad der App: dasselbe Repository wie die Oberfläche, auf derselben Datenbank wie der Server
      * (ADR 0016). Damit prüft ein Browser-Fall, was der Gastgeber nach Beitritt und Upload tatsächlich sieht.

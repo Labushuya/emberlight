@@ -119,6 +119,52 @@ class SpaceRunRepositoryTest {
         }
 
     @Test
+    fun anActiveSpaceCanBeExtendedAndKeepsItsStart() =
+        runBlocking {
+            draft(FIRST)
+            runs.start(FIRST, freeBytes = 100 * gib)
+
+            assertNull(runs.extend(FIRST, START + 2 * DAY))
+
+            val row = database.spaces().find(FIRST.value)
+            assertEquals(START + 2 * DAY, row?.expiresAt)
+            assertEquals(START, row?.startedAt)
+            assertEquals("ACTIVE", row?.status)
+        }
+
+    @Test
+    fun anExtensionBeyondThirtyDaysFromTheStartIsRefusedAndNothingChanges() =
+        runBlocking {
+            draft(FIRST)
+            runs.start(FIRST, freeBytes = 100 * gib)
+
+            assertNull(runs.extend(FIRST, START + 30 * DAY))
+            assertEquals(ExtendProblem.TOO_LONG, runs.extend(FIRST, START + 30 * DAY + 1))
+            assertEquals(START + 30 * DAY, database.spaces().find(FIRST.value)?.expiresAt)
+        }
+
+    @Test
+    fun anEndNotLaterThanTheCurrentOneIsRefused() =
+        runBlocking {
+            draft(FIRST)
+            runs.start(FIRST, freeBytes = 100 * gib)
+
+            assertEquals(ExtendProblem.NOT_LATER, runs.extend(FIRST, START + DAY))
+            assertEquals(START + DAY, database.spaces().find(FIRST.value)?.expiresAt)
+        }
+
+    @Test
+    fun anEndedOrDraftSpaceCannotBeExtended() =
+        runBlocking {
+            draft(FIRST)
+            assertEquals(ExtendProblem.NOT_ACTIVE, runs.extend(FIRST, START + 2 * DAY))
+
+            runs.start(FIRST, freeBytes = 100 * gib)
+            runs.end(FIRST, START + 5_000)
+            assertEquals(ExtendProblem.NOT_ACTIVE, runs.extend(FIRST, START + 2 * DAY))
+        }
+
+    @Test
     fun aFailedStartReturnsTheSpaceToDraft() =
         runBlocking {
             draft(FIRST)
