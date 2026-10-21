@@ -73,8 +73,6 @@ dependencies {
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
-    // Konfiguration für WorkManager (Paket 3.6c): der Application-Provider startet den Lauf der Aufbewahrung.
-    implementation(libs.androidx.work.runtime)
     implementation(libs.coil.core)
     implementation(libs.telephoto.zoomable.image)
     implementation(libs.coil.video)

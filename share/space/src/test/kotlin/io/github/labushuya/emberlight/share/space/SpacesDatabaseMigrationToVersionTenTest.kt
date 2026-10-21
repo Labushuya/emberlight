@@ -52,8 +52,9 @@ class SpacesDatabaseMigrationToVersionTenTest {
         assertNull(space?.retentionRemindedFor)
         assertFalse(space?.purging ?: true)
         assertNull(space?.deletedAt)
-        assertTrue("Spalte preview_reason fehlt", columns.contains("preview_reason"))
-        assertTrue("Spalte view_reason fehlt", columns.contains("view_reason"))
+        val mediaColumns = columnsOf(opened, "media")
+        assertTrue("Spalte preview_reason fehlt", mediaColumns.contains("preview_reason"))
+        assertTrue("Spalte view_reason fehlt", mediaColumns.contains("view_reason"))
     }
 
     @Test
