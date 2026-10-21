@@ -4,12 +4,17 @@ import android.Manifest
 import android.app.AlarmManager
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.Configuration
+import androidx.work.testing.SynchronousExecutor
+import androidx.work.testing.WorkManagerTestInitHelper
 import io.github.labushuya.emberlight.share.space.SpaceEntity
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.retention.PurgeResult
+import io.github.labushuya.emberlight.share.space.retention.RemoveResult
 import io.github.labushuya.emberlight.share.space.retention.RetentionChange
 import io.github.labushuya.emberlight.share.space.retention.RetentionRepository
 import io.github.labushuya.emberlight.share.space.retention.RetentionRules
@@ -52,6 +57,14 @@ class RetentionRemindersTest {
 
     @Before
     fun setUp() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(
+            context,
+            Configuration
+                .Builder()
+                .setMinimumLoggingLevel(Log.DEBUG)
+                .setExecutor(SynchronousExecutor())
+                .build(),
+        )
         spacesDir = folder.newFolder("spaces")
         database = SpacesDatabase.open(context, spacesDir)
         repository = RetentionRepository(database, SpacePurge(database, SpaceCoverStore(spacesDir)) {})
@@ -72,8 +85,8 @@ class RetentionRemindersTest {
         assertEquals(1, shownNotifications())
         assertEquals(endedAt + 12 * hour, runBlocking { database.spaces().find(ID) }?.retentionRemindedFor)
 
-        // Ein Neustart prüft erneut: die Erinnerung ist schon gesendet, es kommt keine zweite.
-        runBlocking { reminders.startupCatchUp() }
+        // Eine erneute Prüfung: die Erinnerung ist schon gesendet, es kommt keine zweite.
+        runBlocking { reminders.checkNow(now) }
         assertEquals(1, shownNotifications())
     }
 
@@ -127,6 +140,38 @@ class RetentionRemindersTest {
         val result = runBlocking { reminders.purge(SpaceId.parse(ID)!!) }
 
         assertEquals(PurgeResult.Purged, result)
+        assertEquals("DELETED", runBlocking { database.spaces().find(ID) }?.status)
+    }
+
+    @Test
+    fun aSpaceWhoseKeepingHasRunOutIsDeletedAutomaticallyAtTheCheck() {
+        grantNotifications()
+        insertEnded(ID, retentionDays = 1)
+
+        // Die Frist ist um. Die Löschung kommt vor der Erinnerung, für den gelöschten Space geht keine mehr.
+        runBlocking { reminders.checkNow(endedAt + day) }
+
+        assertEquals("DELETED", runBlocking { database.spaces().find(ID) }?.status)
+        assertEquals(0, shownNotifications())
+    }
+
+    @Test
+    fun theStartupDeletesWhatExpiredWhileTheAppWasNotRunning() {
+        insertEnded(ID, retentionDays = 1)
+
+        runBlocking { reminders.startupCatchUp() }
+
+        assertEquals("DELETED", runBlocking { database.spaces().find(ID) }?.status)
+    }
+
+    @Test
+    fun onlyDeletedSpacesCanBeRemovedFromTheList() {
+        insertEnded(ID, retentionDays = 1)
+        assertEquals(RemoveResult.NotDeleted, runBlocking { reminders.removeFromList(SpaceId.parse(ID)!!) })
+
+        runBlocking { reminders.purge(SpaceId.parse(ID)!!) }
+
+        assertEquals(RemoveResult.Removed, runBlocking { reminders.removeFromList(SpaceId.parse(ID)!!) })
         assertNull(runBlocking { database.spaces().find(ID) })
     }
 
@@ -136,7 +181,7 @@ class RetentionRemindersTest {
         insertEnded(ID, retentionDays = 1)
         runBlocking { reminders.checkNow(endedAt + 20 * day) }
 
-        // Die Erinnerung ist fällig und ohne Berechtigung offen. Es gibt keinen weiteren Termin, also keinen Wecker.
+        // Der Space ist nach der Frist gelöscht. Es gibt keinen weiteren Termin, also keinen Wecker.
         assertNull(shadowOf(context.getSystemService(AlarmManager::class.java)).nextScheduledAlarm)
     }
 

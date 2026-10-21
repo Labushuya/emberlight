@@ -38,6 +38,8 @@ data class SpaceEditUiState(
     val storageMaxBytes: Long = SpaceRules.STORAGE_MAX_BYTES,
     val pendingName: String? = null,
     val showDiscard: Boolean = false,
+    /** Hinweise zur Vorlage. Leer, wenn der Space nicht aus einer Vorlage entsteht. */
+    val templateNotes: Set<TemplateNote> = emptySet(),
 ) {
     /** Ungespeicherte Änderungen gegenüber dem geladenen Stand. */
     val dirty: Boolean get() = form != initial
@@ -51,4 +53,11 @@ data class SpaceEditUiState(
     /** Fehler, die jetzt angezeigt werden. */
     fun visibleErrors(): Set<SettingsError> =
         if (attempted) errors else errors.filterTo(mutableSetOf()) { it.field() in touched }
+}
+
+/** Hinweise zur Vorlage: die Vorlage selbst und, was angepasst wurde (Paket 3.6c). */
+enum class TemplateNote {
+    TEMPLATE,
+    LIFETIME_RESET,
+    LIMIT_RESET,
 }

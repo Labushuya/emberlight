@@ -63,6 +63,7 @@ import io.github.labushuya.emberlight.feature.space.navigateToSpaceDetail
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceEdit
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceRunning
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceSetup
+import io.github.labushuya.emberlight.feature.space.navigateToSpaceTemplate
 import io.github.labushuya.emberlight.feature.space.navigateToSpaces
 import io.github.labushuya.emberlight.feature.space.retention.RetentionRoutes
 import io.github.labushuya.emberlight.feature.space.spacesScreens
@@ -208,6 +209,7 @@ private fun AppNavHost(navController: NavHostController) {
             onCreate = { navController.navigateToSpaceEdit() },
             onOpen = { id -> navController.navigateToSpaceDetail(id) },
             onEdit = { id -> navController.navigateToSpaceEdit(id) },
+            onTemplate = { id -> navController.navigateToSpaceTemplate(id) },
             onStart = { id -> navController.navigateToSpaceSetup(id, startMode = true) },
             onSetup = { id -> navController.navigateToSpaceSetup(id) },
             onOpenRunning = { id -> navController.navigateToSpaceRunning(id) },
