@@ -114,6 +114,14 @@ class SpaceServerService : Service() {
                 runner.submit(RunCommand.InviteSettled)
                 return START_STICKY
             }
+
+            ACTION_EXTEND -> {
+                // Ohne gültige Angaben nichts tun. Die Prüfung der Endzeit macht der Verarbeiter.
+                val spaceId = intent.getStringExtra(EXTRA_SPACE_ID)?.let(::SpaceId)
+                val endsAt = intent.getLongExtra(EXTRA_ENDS_AT, -1L)
+                if (spaceId != null && endsAt > 0L) runner.submit(RunCommand.Extend(spaceId, endsAt))
+                return START_STICKY
+            }
         }
         // Vordergrund zuerst: Android verlangt den Aufruf kurz nach startForegroundService. Auch unbekannte Aufrufe
         // erfüllen diese Pflicht, bevor der Dienst wieder endet.
@@ -333,6 +341,22 @@ class SpaceServerService : Service() {
                     notificationId = END_WARNING_NOTIFICATION_ID,
                 )
             }
+        }
+
+        override suspend fun extendSpace(
+            spaceId: SpaceId,
+            endsAtMillis: Long,
+        ): Boolean = runs.extend(spaceId, endsAtMillis) == null
+
+        override fun onExtended(
+            spaceId: SpaceId,
+            endsAtMillis: Long,
+        ) {
+            // Die Gäste-Seite liest `/space` mit der neuen Endzeit und der neuen Revision (ADR 0019).
+            ActiveSpaces.current()?.takeIf { it.spaceId == spaceId }?.extendEnd(endsAtMillis)
+            // Die Vorwarnung gilt der neuen Endzeit. Die alte Meldung und ihre Merkung fallen weg (Paket 3.6a).
+            endNotices.clearWarned(spaceId.value)
+            NotificationManagerCompat.from(this@SpaceServerService).cancel(END_WARNING_NOTIFICATION_ID)
         }
 
         override fun onIdle() {
@@ -572,9 +596,11 @@ class SpaceServerService : Service() {
         const val ACTION_EXPIRE = "io.github.labushuya.emberlight.share.server.EXPIRE"
         const val ACTION_CONFIRM_NETWORK = "io.github.labushuya.emberlight.share.server.CONFIRM_NETWORK"
         const val ACTION_INVITE_SETTLED = "io.github.labushuya.emberlight.share.server.INVITE_SETTLED"
+        const val ACTION_EXTEND = "io.github.labushuya.emberlight.share.server.EXTEND"
         const val EXTRA_PORT = "io.github.labushuya.emberlight.share.server.PORT"
         const val EXTRA_SPACE_ID = "io.github.labushuya.emberlight.share.server.SPACE_ID"
         const val EXTRA_RESUME = "io.github.labushuya.emberlight.share.server.RESUME"
+        const val EXTRA_ENDS_AT = "io.github.labushuya.emberlight.share.server.ENDS_AT"
 
         /** Ziel, das die App beim Öffnen per Benachrichtigung bekommt. Die App wertet es aus. */
         const val EXTRA_ROUTE = "io.github.labushuya.emberlight.share.server.ROUTE"
@@ -688,6 +714,17 @@ class SpaceServerService : Service() {
         /** Quittiert den Hinweis zur erneuerten Einladung. Kein Start, kein Vordergrund nötig. */
         fun inviteSettledIntent(context: Context): Intent =
             Intent(context, SpaceServerService::class.java).setAction(ACTION_INVITE_SETTLED)
+
+        /** Verlängert den Space auf eine neue Endzeit (UTC-Millisekunden). Kein Start, die Prüfung macht der Verarbeiter (Paket 3.6a). */
+        fun extendIntent(
+            context: Context,
+            spaceId: SpaceId,
+            endsAtMillis: Long,
+        ): Intent =
+            Intent(context, SpaceServerService::class.java)
+                .setAction(ACTION_EXTEND)
+                .putExtra(EXTRA_SPACE_ID, spaceId.value)
+                .putExtra(EXTRA_ENDS_AT, endsAtMillis)
 
         private fun minutesOf(event: PauseEvent): Long =
             (event.durationMillis + MILLIS_PER_MINUTE / 2) / MILLIS_PER_MINUTE
