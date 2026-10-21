@@ -25,6 +25,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.time.Instant
 
 /** Teilnehmer der Anfrage. Die Zugriffsprüfung setzt ihn, Routen lesen ihn. */
 internal val PrincipalKey = AttributeKey<Principal>("emberlight.principal")
@@ -176,7 +177,10 @@ internal fun Application.installEmberlightModule(
         // Nach dem Ablauf antwortet jede Anfrage mit 410, auch ohne gültigen Schlüssel. Der Betrieb stoppt danach (ADR 0017).
         if (!context.isPublicSite() && env.closure.isClosed()) {
             env.closure.onClosedRequest()
-            context.refuseEarly(HttpStatusCode.Gone, "space_closed")
+            val endedAt = env.closure.endedAtMillis()
+            val extra =
+                endedAt?.let { mapOf("endedAt" to JsonPrimitive(Instant.ofEpochMilli(it).toString())) }.orEmpty()
+            context.refuseEarly(HttpStatusCode.Gone, "space_closed", extra)
             finish()
         }
     }

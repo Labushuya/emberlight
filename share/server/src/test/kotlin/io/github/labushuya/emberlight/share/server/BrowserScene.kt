@@ -226,11 +226,18 @@ internal class BrowserScene(
 internal class FlagClosure : SpaceClosure {
     private val closed = AtomicBoolean(false)
 
-    fun markClosed() {
+    @Volatile
+    private var endedAt: Long? = null
+
+    /** Markiert das Ende. [endedAtMillis] ist die Stoppzeit, die die Antwort 410 nennt. */
+    fun markClosed(endedAtMillis: Long = System.currentTimeMillis()) {
+        endedAt = endedAtMillis
         closed.set(true)
     }
 
     override fun isClosed(): Boolean = closed.get()
+
+    override fun endedAtMillis(): Long? = endedAt
 
     override fun onClosedRequest() {}
 }
