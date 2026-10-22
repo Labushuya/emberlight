@@ -65,13 +65,13 @@ Dieses ADR beschreibt die Entfernung von Standortdaten, die Einwilligung für ni
 
 | Code | Bedeutung |
 |---|---|
-| `metadata_track` | Metadaten-Track mit Standort (`gpmd`, `camm`, `mebx` mit `location`-Key) oder Handler `meta` |
+| `metadata_track` | Datenspur (Handler außer `vide`, `soun`, `pict`, `auxv`), deren Sample-Tabellen nicht lesbar sind, oder Datenspur in einem fragmentierten MP4 (`moof`). Nach Nachtrag 3.6d werden Datenspuren sonst immer geleert (siehe dort) |
 | `trailing_data` | Lücke innerhalb einer Struktur (zwischen zwei bekannten Teilen, nach dem EOI eines eingebetteten Thumbnails), die sich nicht abschneiden lässt. Anhänge hinter dem logischen Dateiende werden abgeschnitten und lösen diesen Code nicht aus |
-| `compressed_text` | Komprimierter Text (zTXt, iTXt) mit Standort, der nicht sicher geändert werden kann |
+| `compressed_text` | Seit Nachtrag 3.6d nicht mehr erzeugt: Komprimierter Text (zTXt, komprimiertes iTXt) wird immer neutralisiert |
 | `extended_xmp` | Erweitertes XMP (APP1 `http://ns.adobe.com/xmp/extension/`) mit Standort. Es wird nur geprüft |
 | `free_box_location` | `free`- oder `skip`-Box mit Standort-Muster oder `gps `-Box (Pittasoft-Muster) |
 | `structure` | Unlesbare oder widersprüchliche Struktur, Grenzen überschritten, unparsbares XMP mit Standortverdacht, mehrdeutige HEIF-Boxen, fehlende `infe`-Einträge |
-| `unsupported` | Format ohne Walker, nicht unterstützte HEIF-Konstruktion (Methode 2 bei Exif/XMP, fremde Datei, `infe` Version 0/1), unbekannte Box mit Standort-Text |
+| `unsupported` | Format ohne Walker, nicht unterstützte HEIF-Konstruktion (Methode 2 bei Exif/XMP, fremde Datei, `infe` Version 0/1), unbekannte Box mit Standort-Text, PNG-Chunk mit unbekanntem Typ und Großbuchstabe am Anfang (kritisch, nicht lesbar), unbekanntes HEIF-Item mit Methode 2 |
 | `verification_failed` | Nach dem Planen findet die Prüfung noch Standort |
 
 ## Fundorte und Verfahren je Format
@@ -263,6 +263,56 @@ Der Abschnitt „Restrisiko und offene Punkte (Hotfix 2)“ oben gilt bis hierhe
 Geschlossen sind damit: der binäre Standort in HEIF-Items unbekannter Art, in MP4-Metadaten-Tracks (GPMF, camm, djmd) und in unbekannten Boxen, der Hex-TIFF-Befund in PNG-Text mit fremdem Schlüsselwort sowie die Teildatei nach einem Absturz (Start). Gerätetests mit echten Aufnahmen stehen aus (Testkatalog 9.8 bis 9.12).
 
 Verifikation: `BinaryLocationScrubTest` mit synthetischen Dateien (`BinaryLocationFixtures`, im Testcode erzeugt, keine Nutzerdateien). Jeder Fall prüft Befund vorher, Bereinigung, unveränderte Länge, gültige CRC und Wiederholung ohne Befund. Gegenproben mit zufälligen Bytes und TIFF-Kopf in Bild-Items und komprimierten PNG-Daten zeigen keinen Fehlalarm. Ein Video-Sample mit dem Text `GPS5` bleibt unverändert.
+
+## Nachtrag 3.6d: Neutralisieren statt Erkennen (22.10.2026)
+
+**Entscheidung der Nutzerin bzw. des Nutzers:** Herstellerextras dürfen entfernt werden. Daraus folgt das Prinzip „fail closed“ für Metadaten:
+
+- Ohne Einwilligung werden **unbekannte und nicht benötigte Metadaten immer neutralisiert**, auch wenn die Erkennung nichts findet. Dazu gehören Datenspuren, Herstellerboxen und Textblöcke mit unbekanntem Schlüsselwort.
+- Die Erkennung bleibt für die Rückfrage (422, `location_not_removable`) und als Nachkontrolle nach dem Plan.
+- Mit Einwilligung (Header `X-Emberlight-Keep-Location: 1`) wird die Datei **unverändert** gespeichert, ohne Bereinigung und ohne Abschneiden. `locationKept = true` markiert die Einwilligung, nicht den Nachweis eines Standorts.
+- **Neutralisieren** heißt: Der Typ wird geändert (MP4 zu `free`, PNG zu einem privaten, unbekannten Ancillary-Typ `emBl`), der Inhalt wird mit Nullen geleert, die Länge bleibt gleich. Leser überspringen solche Boxen und Chunks. PNG-CRCs werden neu berechnet.
+
+Überholt durch diesen Nachtrag sind die Aussagen: „Ein `gpmd`- oder `camm`-Track ohne Befund bleibt unverändert“ (Nachtrag 3.1b-2), „zTXt und komprimiertes iTXt mit Standortbefund sind `compressed_text`“ (Nachtrag 3.1b-2) und „Mit Einwilligung bleibt die Datei unverändert und gilt als „Standort enthalten““ in der Übersicht zu `location_not_removable` (dort nur noch die Einwilligung, siehe oben).
+
+**Was geleert wird (MP4):**
+
+- **Datenspuren.** Die Samples aller Spuren, deren Handler nicht `vide`, `soun`, `pict` oder `auxv` ist. Dazu gehören `gpmd`, `camm`, `djmd`, `meta`, Text- und Untertitelspuren (`text`, `sbtl`, `tx3g`, Dashcams schreiben dort oft GPS) und unbekannte Spuren. Die Bild- und Videodaten der Mediaspuren bleiben unberührt. Die Sample-Tabellen (`stsz`, `stsc`, `stco`/`co64`) werden gelesen, bis zu `ScrubLimits.MAX_TRACK_SAMPLES` Einträge. Aufeinanderfolgende Samples werden zu einem Bereich zusammengefasst.
+- **Nicht lesbar.** Sind die Sample-Tabellen einer Datenspur nicht lesbar, wird der Upload mit `metadata_track` abgelehnt. Mit Einwilligung bleibt die Datei unverändert.
+- **Fragmente.** Gibt es Fragmente (`moof`), werden die Samples der Datenspuren in `mdat` über `trun` nicht gelesen. Eine Datenspur darin führt daher zu `metadata_track`. Mediaspuren sind nicht betroffen.
+- **Unbekannte Kinder von `udta` und `meta`.** Sie werden neutralisiert. Ausnahmen (Liste mit Begründung):
+  - `udta`: `meta`, `udta` und `uuid` sind Container, die der Walker selbst verarbeitet (XMP läuft über den XMP-Scrubber). `©xyz` und `loci` haben eigene Regeln.
+  - `meta`: `hdlr`, `keys`, `ilst` und `dinf` sind die Struktur, mit der Metadaten gelesen werden (ISO 14496-12 bzw. QuickTime). `free` und `skip` werden von Lesern ignoriert und nur geprüft. `uuid` wie oben.
+  - Alles andere in `udta` (3GPP-Textboxen wie `titl`, `cprt`, Herstellerboxen) wird für die Wiedergabe nicht gebraucht und geleert.
+- **`mebx`.** Der Schlüsselname `location` wird in der Sample-Beschreibung durch gleich lange `x` ersetzt (`location_key`).
+
+**Was geleert wird (HEIF):** Items, die weder Exif, XMP noch ein bekannter Bildtyp sind, werden über alle Extents geleert (`heif_item_location`), ohne Befund. Bekannte Bildtypen (`hvc1`, `hev1`, `avc1`, `avc3`, `av01`, `av02`, `vvc1`, `evc1`, `lhv1`, `hvc2`, `grid`, `iden`, `iovl`, `tmap`, `unci`, `jpeg`) bleiben. Dazu gehören Haupt-, Thumbnail- und Hilfsbilder wie Alpha oder Tiefe, die als Bildtyp angelegt sind. Items mit Konstruktionsmethode 2 bleiben `unsupported` (422). Exif und XMP laufen wie bisher durch ihre Bereiniger.
+
+**Was geleert wird (PNG):**
+
+- Text mit unbekanntem Schlüsselwort (`tEXt`, unkomprimiertes `iTXt`) wird neutralisiert.
+- Komprimierter Text (`zTXt`, komprimiertes `iTXt`) wird immer neutralisiert, unabhängig vom Schlüsselwort. Ablehnung und Dekomprimierung entfallen.
+- Unbekannte Ancillary-Chunks (nicht in der Liste der Standard-Chunks, etwa `caBX`) werden neutralisiert.
+- **Bekannte Schlüsselwörter bleiben** (`Title`, `Author`, `Description`, `Copyright`, `Creation Time`, `Software`, `Disclaimer`, `Warning`, `Source`, `Comment`). Sie laufen durch die Text-Standortprüfung (ISO 6709 bzw. GPS-Eigenschaft mit Ziffern führt zu `verification_failed`). Ein binäres TIFF mit GPS-Befund darin wird geleert.
+- Ein unbekannter kritischer Chunk (Großbuchstabe am Anfang) ist nicht lesbar und führt zu `unsupported`.
+- `IDAT`, `IHDR`, `PLTE`, `tRNS`, `pHYs`, `tIME` und die übrigen Standard-Chunks bleiben unangetastet.
+
+**Gültigkeit.** Video- und Audio-Samples, Bild-Items (`hvc1` und Verwandte) und `IDAT` bleiben byteidentisch. Das prüfen `BinaryLocationScrubTest` und die Gegenproben. Die Längen bleiben gleich, PNG-CRCs stimmen. Eine wiederholte Bereinigung ist ohne Änderung.
+
+**Grenzen.** `PlanStore` speichert höchstens `ScrubLimits.MAX_PLANNED` (100 000) Bereiche und `ScrubLimits.MAX_READ` (16 MiB) Bytes. Darüber gilt `structure` (fail closed). Das Lesen des Plans nutzt einen Index nach Anfangsoffset, damit viele Samples nicht quadratisch Zeit kosten.
+
+**Restrisiko nach Nachtrag 3.6d:**
+
+1. **`mdat` außerhalb der Samples.** Bytes in `mdat`, die von keiner Spur referenziert werden, werden nicht genullt (optional im Auftrag, nicht umgesetzt). Ein Standort darin wird nur über die Textsuche und den Binär-Befund erkannt.
+2. **Fragmentierte MP4.** Datenspuren in Fragmenten führen zur Ablehnung (`metadata_track`), werden aber nicht selbst geleert. Die Samples der Mediaspuren in Fragmenten bleiben unangetastet.
+3. **Unbekannte Top-Level-Boxen und Kinder von `moov`** (außer `udta` und `meta`). Sie werden nur bei einem Befund geleert, nicht immer. Der Grund ist die Wiedergabestruktur (`edts`, `cmov` und andere Kinder von `moov` sind für Decoder nötig).
+4. **`ilst`-Items ohne Standort-Schlüssel** (Titel, Datum, Gerätemodell) bleiben. Sie gelten nicht als Herstellerextras, die der Auftrag einschließt. Diese Entscheidung ist offen.
+5. **Bekannte PNG-Schlüsselwörter und Exif/XMP-Inhalte** bleiben, außer bei einem Befund. Ein Standort als Text darin lehnt den Upload ab (`verification_failed`).
+6. **Bildtypen in HEIF** werden nicht geleert, auch wenn sie einen Standort tragen. Damit bleibt die Bildfläche gültig (Abwägung gegen Fehlalarme in Bilddaten).
+7. **Einwilligung.** `locationKept = true` ist die Einwilligung, nicht der Nachweis, dass ein Standort vorhanden ist.
+8. **Gerätetests** mit echten Aufnahmen (Testkatalog 9.8 bis 9.12) stehen aus.
+
+Verifikation: `BinaryLocationScrubTest` (28 Fälle), `LocationScrubberTest`, `PlanApplyTest`, `SpaceVaultTest` (Einwilligung: Datei unverändert), `SpaceCoverStoreTest`.
 
 ## Quellen
 
