@@ -195,6 +195,27 @@ class BinaryLocationScrubTest {
     }
 
     @Test
+    fun longVideoWithManySamplesStaysClean() {
+        // Regression: Ein Video mit mehr als 10 000 Samples darf nicht als Strukturfehler abgelehnt werden.
+        val samples = List(12_000) { index -> ByteArray(4) { (index and 0x7F).toByte() } }
+        val mp4 = BinaryLocationFixtures.mp4("vide", "avc1", samples)
+
+        val (result, out) = scrub(mp4.bytes, mp4Format)
+
+        assertUnchanged(result, mp4.bytes, out)
+    }
+
+    @Test
+    fun cammTrackWithManySamplesWithoutGpsStaysClean() {
+        val samples = List(12_000) { cammSample(0) }
+        val mp4 = BinaryLocationFixtures.mp4("meta", "camm", samples)
+
+        val (result, out) = scrub(mp4.bytes, mp4Format)
+
+        assertUnchanged(result, mp4.bytes, out)
+    }
+
+    @Test
     fun unknownTopLevelBoxWithBinaryGpsIsNulledAndKeepsLength() {
         val mp4 =
             BinaryLocationFixtures.mp4(

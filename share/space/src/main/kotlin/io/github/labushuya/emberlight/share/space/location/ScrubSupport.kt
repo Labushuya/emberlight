@@ -43,6 +43,12 @@ internal fun bail(reason: NotRemovableReason): Nothing = throw Unremovable(reaso
 internal object ScrubLimits {
     const val MAX_DEPTH = 8
     const val MAX_ENTRIES = 10_000
+
+    /**
+     * Samples eines Metadaten-Tracks und Einträge der Sample-Tabellen (`stsz`, `stsc`, `stco`). Großzügiger als [MAX_ENTRIES],
+     * weil ein langes Video viele Samples hat. Auch Videotracks dürfen so viele haben, sie werden aber nicht gelesen.
+     */
+    const val MAX_TRACK_SAMPLES = 1_000_000
     const val MAX_READ = 16 * 1024 * 1024
     const val MAX_TEXT = 8 * 1024 * 1024
 }

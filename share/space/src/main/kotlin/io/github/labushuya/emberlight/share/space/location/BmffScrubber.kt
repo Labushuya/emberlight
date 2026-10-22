@@ -71,16 +71,13 @@ internal object BmffScrubber {
     )
 
     /**
-     * Sammelt Angaben je `trak`: Handler-Typ, Sample-Einträge und die Sample-Tabellen (ISO 14496-12, §8.7).
-     * [sampleSizes] aus `stsz`, [chunkOffsets] aus `stco`/`co64`, [sampleToChunk] aus `stsc` als Paare (erster Chunk,
-     * Samples je Chunk).
+     * Sammelt Angaben je `trak`: Handler-Typ, Sample-Einträge und die Sample-Tabellen (`stsz`, `stsc`, `stco`/`co64`) als
+     * Boxen. Gelesen werden die Tabellen erst, wenn ein Metadaten-Track mit Samples geprüft wird ([sampleSpans]).
      */
     private class Track {
         var handler: String? = null
         val entries = ArrayList<SampleEntry>()
-        var sampleSizes: LongArray? = null
-        var chunkOffsets: LongArray? = null
-        var sampleToChunk: List<LongArray>? = null
+        val tables = ArrayList<Box>()
     }
 
     /**
@@ -224,7 +221,7 @@ internal object BmffScrubber {
                 }
 
                 "stsz", "stco", "co64", "stsc" -> {
-                    if (track != null) sampleTable(pass, box, track) else generic(pass, box)
+                    if (track != null) track.tables.add(box) else generic(pass, box)
                 }
 
                 "udta" -> {
@@ -268,65 +265,80 @@ internal object BmffScrubber {
         }
     }
 
-    /**
-     * `stsz` (Größen), `stco`/`co64` (Chunk-Offsets), `stsc` (Samples je Chunk). Nur die Felder der Tabellen, keine
-     * Sample-Daten. Ein Eintrag über [ScrubLimits.MAX_ENTRIES] gilt als Strukturfehler.
-     */
-    private fun sampleTable(
+    /** Eine Sample-Tabelle des Typs [type]. Doppelte sind mehrdeutig und gelten als Strukturfehler. */
+    private fun tableBox(
+        track: Track,
+        type: String,
+    ): Box? {
+        val matches = track.tables.filter { it.type == type }
+        if (matches.size > 1) bail(NotRemovableReason.STRUCTURE)
+        return matches.firstOrNull()
+    }
+
+    /** `stsz`: Version und Flags, Standardgröße (0 = je Sample), Anzahl, dann die Größen je Sample. */
+    private fun sampleSizes(
         pass: ScrubPass,
         box: Box,
-        track: Track,
-    ) {
-        val p = box.payload + 4
-        when (box.type) {
-            "stsz" -> {
-                val fixed = pass.u32Be(p, box.end)
-                val count = pass.u32Be(p + 4, box.end)
-                if (count > ScrubLimits.MAX_ENTRIES) bail(NotRemovableReason.STRUCTURE)
-                track.sampleSizes =
-                    LongArray(count.toInt()) { index ->
-                        if (fixed != 0L) fixed else pass.u32Be(p + 8 + 4L * index, box.end)
-                    }
-            }
+    ): LongArray {
+        val fixed = pass.u32Be(box.payload + 4, box.end)
+        val count = pass.u32Be(box.payload + 8, box.end)
+        if (count > ScrubLimits.MAX_TRACK_SAMPLES) bail(NotRemovableReason.STRUCTURE)
+        return LongArray(count.toInt()) { index ->
+            if (fixed != 0L) fixed else pass.u32Be(box.payload + 12 + 4L * index, box.end)
+        }
+    }
 
-            "stco" -> {
-                val count = pass.u32Be(p, box.end)
-                if (count > ScrubLimits.MAX_ENTRIES) bail(NotRemovableReason.STRUCTURE)
-                track.chunkOffsets = LongArray(count.toInt()) { index -> pass.u32Be(p + 4 + 4L * index, box.end) }
-            }
-
-            "co64" -> {
-                val count = pass.u32Be(p, box.end)
-                if (count > ScrubLimits.MAX_ENTRIES) bail(NotRemovableReason.STRUCTURE)
-                track.chunkOffsets =
-                    LongArray(count.toInt()) { index ->
-                        val at = p + 4 + 8L * index
-                        val high = pass.u32Be(at, box.end)
-                        if (high > 0x7FFF_FFFFL) bail(NotRemovableReason.STRUCTURE)
-                        (high shl 32) or pass.u32Be(at + 4, box.end)
-                    }
-            }
-
-            "stsc" -> {
-                val count = pass.u32Be(p, box.end)
-                if (count > ScrubLimits.MAX_ENTRIES) bail(NotRemovableReason.STRUCTURE)
-                track.sampleToChunk =
-                    List(count.toInt()) { index ->
-                        val at = p + 4 + 12L * index
-                        longArrayOf(pass.u32Be(at, box.end), pass.u32Be(at + 4, box.end))
-                    }
+    /** `stco` (32 Bit) oder `co64` (64 Bit): Anzahl der Chunks, dann ihre absoluten Dateioffsets. */
+    private fun chunkOffsets(
+        pass: ScrubPass,
+        box: Box,
+    ): LongArray {
+        val count = pass.u32Be(box.payload + 4, box.end)
+        if (count > ScrubLimits.MAX_TRACK_SAMPLES) bail(NotRemovableReason.STRUCTURE)
+        val wide = box.type == "co64"
+        return LongArray(count.toInt()) { index ->
+            if (!wide) {
+                pass.u32Be(box.payload + 8 + 4L * index, box.end)
+            } else {
+                val at = box.payload + 8 + 8L * index
+                val high = pass.u32Be(at, box.end)
+                if (high > 0x7FFF_FFFFL) bail(NotRemovableReason.STRUCTURE)
+                (high shl 32) or pass.u32Be(at + 4, box.end)
             }
         }
     }
 
+    /** `stsc`: Anzahl, dann je Eintrag der erste Chunk und die Samples je Chunk (Paare aus zwei Zahlen). */
+    private fun sampleToChunk(
+        pass: ScrubPass,
+        box: Box,
+    ): List<LongArray> {
+        val count = pass.u32Be(box.payload + 4, box.end)
+        if (count > ScrubLimits.MAX_TRACK_SAMPLES) bail(NotRemovableReason.STRUCTURE)
+        return List(count.toInt()) { index ->
+            val at = box.payload + 8 + 12L * index
+            longArrayOf(pass.u32Be(at, box.end), pass.u32Be(at + 4, box.end))
+        }
+    }
+
     /**
-     * Byte-Bereiche aller Samples eines Tracks. Fehlt eine der drei Tabellen, liefert es `null`. Passen die Tabellen nicht
-     * zusammen, ist die Struktur fehlerhaft.
+     * Byte-Bereiche aller Samples eines Tracks aus `stsz`, `stsc` und `stco`/`co64`. Die Tabellen werden erst hier gelesen,
+     * damit Bild- und Videotracks mit vielen Samples nicht betroffen sind. Fehlt eine Tabelle, liefert es `null`. Passen
+     * die Tabellen nicht zusammen, ist die Struktur fehlerhaft.
      */
-    private fun sampleSpans(track: Track): List<Span>? {
-        val sizes = track.sampleSizes ?: return null
-        val chunks = track.chunkOffsets ?: return null
-        val map = track.sampleToChunk ?: return null
+    private fun sampleSpans(
+        pass: ScrubPass,
+        track: Track,
+    ): List<Span>? {
+        val stco = tableBox(track, "stco")
+        val co64 = tableBox(track, "co64")
+        if (stco != null && co64 != null) bail(NotRemovableReason.STRUCTURE)
+        val chunkBox = stco ?: co64 ?: return null
+        val sizeBox = tableBox(track, "stsz") ?: return null
+        val mapBox = tableBox(track, "stsc") ?: return null
+        val chunks = chunkOffsets(pass, chunkBox)
+        val sizes = sampleSizes(pass, sizeBox)
+        val map = sampleToChunk(pass, mapBox)
         if (map.isEmpty() || map[0][0] != 1L) bail(NotRemovableReason.STRUCTURE)
         val spans = ArrayList<Span>(sizes.size)
         var sample = 0
@@ -362,7 +374,6 @@ internal object BmffScrubber {
     ): Boolean {
         if (type == "djmd") return true
         return spans.any { span ->
-            pass.count("track_samples")
             val bytes = pass.bytes(span.start, span.size, pass.store.length)
             when (type) {
                 "gpmd" -> containsAscii(bytes, "GPS5") || containsAscii(bytes, "GPS9")
@@ -397,7 +408,7 @@ internal object BmffScrubber {
         track: Track,
         type: String,
     ) {
-        val spans = sampleSpans(track) ?: bail(NotRemovableReason.METADATA_TRACK)
+        val spans = sampleSpans(pass, track) ?: bail(NotRemovableReason.METADATA_TRACK)
         if (!carriesGps(pass, type, spans)) return
         for (span in spans) pass.blank(span.start, span.size, 0, TRACK_FINDING)
     }
