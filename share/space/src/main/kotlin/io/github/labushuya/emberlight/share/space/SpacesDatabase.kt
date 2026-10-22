@@ -16,6 +16,9 @@ import androidx.room.RoomDatabase
 import androidx.room.Upsert
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import io.github.labushuya.emberlight.share.space.export.ExportDao
+import io.github.labushuya.emberlight.share.space.export.ExportedMediaEntity
+import io.github.labushuya.emberlight.share.space.export.SpaceExportEntity
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 
@@ -469,8 +472,16 @@ interface SpaceDao {
  * unter `databases/`, damit sie aus Backups und Geräte-Übertragungen herausfällt.
  */
 @Database(
-    entities = [MediaEntity::class, ParticipantEntity::class, SpaceEntity::class, PauseEventEntity::class],
-    version = 10,
+    entities =
+        [
+            MediaEntity::class,
+            ParticipantEntity::class,
+            SpaceEntity::class,
+            PauseEventEntity::class,
+            SpaceExportEntity::class,
+            ExportedMediaEntity::class,
+        ],
+    version = 11,
     exportSchema = false,
 )
 abstract class SpacesDatabase : RoomDatabase() {
@@ -481,6 +492,8 @@ abstract class SpacesDatabase : RoomDatabase() {
     abstract fun spaces(): SpaceDao
 
     abstract fun pauses(): PauseDao
+
+    abstract fun exports(): ExportDao
 
     companion object {
         const val FILE_NAME = "spaces.db"
@@ -553,6 +566,25 @@ abstract class SpacesDatabase : RoomDatabase() {
             object : Migration(9, 10) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE `space` ADD COLUMN `deleted_at` INTEGER")
+                }
+            }
+
+        /**
+         * Version 10 → 11 (Paket 3.7, ADR 0022): Zielordner je Space und Vermerk je übernommenem Medium. Zwei neue Tabellen,
+         * additiv. Bestehende Spaces haben noch keine Zeile, also ist nichts übernommen.
+         */
+        val MIGRATION_10_11: Migration =
+            object : Migration(10, 11) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `space_export` (`space_id` TEXT NOT NULL, " +
+                            "`folder_name` TEXT NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`space_id`))",
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `export_media` (`media_id` TEXT NOT NULL, " +
+                            "`space_id` TEXT NOT NULL, `target_name` TEXT NOT NULL, `target_uri` TEXT NOT NULL, " +
+                            "`exported_at` INTEGER NOT NULL, PRIMARY KEY(`media_id`))",
+                    )
                 }
             }
 
@@ -670,6 +702,7 @@ abstract class SpacesDatabase : RoomDatabase() {
                     MIGRATION_7_8,
                     MIGRATION_8_9,
                     MIGRATION_9_10,
+                    MIGRATION_10_11,
                 ).build()
         }
     }

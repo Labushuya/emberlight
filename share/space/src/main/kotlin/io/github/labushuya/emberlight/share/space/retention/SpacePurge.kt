@@ -3,6 +3,7 @@ package io.github.labushuya.emberlight.share.space.retention
 import androidx.room.withTransaction
 import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
+import io.github.labushuya.emberlight.share.space.export.SpaceExportGate
 import io.github.labushuya.emberlight.share.space.management.SpaceCoverStore
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
 import kotlinx.coroutines.CancellationException
@@ -44,6 +45,7 @@ class SpacePurge(
     private val database: SpacesDatabase,
     private val covers: SpaceCoverStore,
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val exportGate: SpaceExportGate = SpaceExportGate.shared,
     private val forgetVault: suspend (SpaceId) -> Unit,
 ) {
     private val spaces = database.spaces()
@@ -53,14 +55,20 @@ class SpacePurge(
         if (row.status == SpaceStatus.DELETED.name && !row.purging) return PurgeResult.Purged
         if (!row.purging && row.status != SpaceStatus.ENDED.name) return PurgeResult.NotEnded
         if (!row.purging) spaces.markPurging(id.value)
-        // Eine offene Vorschau-Vault darf danach nichts mehr schreiben. Ihr Eintrag wird vergessen, bevor Dateien gehen.
-        forgetVault(id)
-        covers.deleteMediaOf(id)
-        database.withTransaction {
-            spaces.deleteMediaOf(id.value)
-            database.participants().deleteOf(id.value)
-            database.pauses().deleteOf(id.value)
-            spaces.markDeleted(id.value, nowMillis())
+        // Eine laufende Übernahme sieht `purging` vor der nächsten Datei und bricht ab. Hier wird auf sie gewartet,
+        // damit nie eine Kopie mitten im Schreiben aus dem Space fällt (Paket 3.7, ADR 0022).
+        exportGate.exclusive(id) {
+            // Eine offene Vorschau-Vault darf danach nichts mehr schreiben. Ihr Eintrag wird vergessen, bevor Dateien gehen.
+            forgetVault(id)
+            covers.deleteMediaOf(id)
+            database.withTransaction {
+                spaces.deleteMediaOf(id.value)
+                database.participants().deleteOf(id.value)
+                database.pauses().deleteOf(id.value)
+                database.exports().deleteExportedOf(id.value)
+                database.exports().deleteFolderOf(id.value)
+                spaces.markDeleted(id.value, nowMillis())
+            }
         }
         // Nach dem Übergang nochmals räumen: Eine Teildatei aus einem Upload, der im Strom lief, bleibt sonst bis zum Start.
         clearLeftovers(id)
