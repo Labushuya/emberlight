@@ -10,6 +10,9 @@ package io.github.labushuya.emberlight.share.space.location
  *   durch den XMP-Scrubber. Alle Items dieser Typen werden erfasst, auch Thumbnails und Hilfsbilder.
  * - Items ohne `infe`, doppelte Einträge, mehrfache `iinf`/`iloc`/`idat`/`hdlr` und unbekannte Versionen gelten als
  *   nicht bereinigbar (fail closed).
+ * - Items, die weder Exif, XMP noch ein bekannter Bildtyp ([KNOWN_IMAGE_TYPES]) sind (etwa `uri ` oder fremde `mime`):
+ *   Ihre Extents werden immer geleert, ohne Befund (`heif_item_location`, ADR 0015, Nachtrag 3.6d). Sie werden für
+ *   die Anzeige nicht gebraucht. Bildtypen werden nie geleert und nicht nach Standort abgesucht.
  *
  * `moov` auf Top-Level (HEIF-Sequenzen, Bursts) wird wie bei MP4 geprüft. Mediendaten (`mdat`) werden nie gelesen.
  */
@@ -21,6 +24,28 @@ internal object HeifScrubber {
     private const val METHOD_IDAT = 1
     private const val METHOD_ITEM = 2
     private const val HANDLER_PICTURE = "pict"
+    private const val ITEM_FINDING = "heif_item_location"
+
+    /** Item-Typen, deren Inhalt Bilddaten ist (ISO/IEC 23008-12, Codecs). Sie werden nie nach Standort abgesucht. */
+    private val KNOWN_IMAGE_TYPES =
+        setOf(
+            "hvc1",
+            "hev1",
+            "avc1",
+            "avc3",
+            "av01",
+            "av02",
+            "vvc1",
+            "evc1",
+            "lhv1",
+            "hvc2",
+            "grid",
+            "iden",
+            "iovl",
+            "tmap",
+            "unci",
+            "jpeg",
+        )
     private val EXIF_ID = ascii("Exif\u0000\u0000")
     private val SIZES = setOf(0, 4, 8)
 
@@ -44,6 +69,7 @@ internal object HeifScrubber {
     /** Ganze Datei ab Offset 0. */
     fun scrubFile(pass: ScrubPass) {
         val end = BmffScrubber.logicalEnd(pass, 0, pass.store.length)
+        val fragmented = BmffScrubber.hasMoof(pass, 0, end)
         var p = 0L
         while (p < end) {
             pass.count("heif_boxes")
@@ -51,7 +77,7 @@ internal object HeifScrubber {
             when (box.type) {
                 "ftyp", "mdat", "wide" -> Unit
                 "meta" -> meta(pass, box, depth = 1)
-                "moov" -> BmffScrubber.moov(pass, box)
+                "moov" -> BmffScrubber.moov(pass, box, fragmented)
                 "free", "skip" -> BmffScrubber.freeBox(pass, box)
                 "uuid" -> BmffScrubber.uuid(pass, box)
                 else -> BmffScrubber.generic(pass, box)
@@ -93,7 +119,10 @@ internal object HeifScrubber {
             val info = infos[location.itemId] ?: bail(NotRemovableReason.STRUCTURE)
             val isExif = info.type == EXIF_TYPE
             val isXmp = info.type == MIME_TYPE && info.contentType == XMP_CONTENT_TYPE
-            if (!isExif && !isXmp) continue
+            if (!isExif && !isXmp) {
+                if (info.type !in KNOWN_IMAGE_TYPES) unknownItem(pass, location, idat)
+                continue
+            }
             if (location.method == METHOD_ITEM) bail(NotRemovableReason.UNSUPPORTED)
             val item = pass.view(itemStore(pass, location, idat))
             if (isExif) {
@@ -102,6 +131,21 @@ internal object HeifScrubber {
                 XmpScrubber.scrubRegion(item, 0, item.store.length)
             }
         }
+    }
+
+    /**
+     * Item eines unbekannten Typs oder Nicht-Bild-Items. Seine Extents werden immer mit Nullen geleert, ohne Befund
+     * (ADR 0015, Nachtrag 3.6d). Das Item braucht kein Decoder, die Länge bleibt. Liegt es über ein anderes Item
+     * (Methode 2) oder ist es zu groß für den Speicher, ist die Bereinigung nicht möglich (fail closed).
+     */
+    private fun unknownItem(
+        pass: ScrubPass,
+        location: Location,
+        idat: BmffScrubber.Box?,
+    ) {
+        if (location.method == METHOD_ITEM) bail(NotRemovableReason.UNSUPPORTED)
+        val item = pass.view(itemStore(pass, location, idat))
+        item.blank(0, item.store.length, 0, ITEM_FINDING)
     }
 
     /** Das einzige Kind mit [type]. Mehrere gleichartige Kinder sind mehrdeutig und gelten als Strukturfehler. */

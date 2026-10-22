@@ -236,7 +236,7 @@ class SpaceEditViewModelTest {
         // Ein frischer Zustand ohne das Gegenbeispiel: Das nicht bereinigbare Bild darf keine weitere cover-Datei hinterlassen.
         val refusing = viewModel()
         awaitLoaded(refusing)
-        val notRemovable = CoverFixtures.pngWithCompressedLocation()
+        val notRemovable = CoverFixtures.pngThatCannotBeCleaned()
 
         runBlocking { refusing.importCoverFrom { ByteArrayInputStream(notRemovable) } }
 

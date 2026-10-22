@@ -56,6 +56,28 @@ internal object StrictLocationProbe {
         return found
     }
 
+    /**
+     * Binärer Standort in einem Bereich: ein eingebettetes TIFF mit GPS-Befund, ohne Textsuche. Dient der Erkennung in
+     * Bereichen, die kein bekanntes Bild, Video oder Audio sind (ADR 0015, Nachtrag 3.1b-2). Nutzdaten werden dort nicht
+     * gelesen. Der Aufrufer wählt die Bereiche.
+     */
+    fun containsBinaryLocation(store: ByteStore): Boolean {
+        val length = store.length
+        var pos = 0L
+        while (pos < length) {
+            val count = minOf(WINDOW.toLong(), length - pos).toInt()
+            val last = pos + count >= length
+            val bytes = store.read(pos, count)
+            val headerEnd = if (last) count - 3 else count - OVERLAP
+            for (i in 0 until headerEnd) {
+                if (isTiffHeader(bytes, i) && tiffFinding(store, pos + i) != null) return true
+            }
+            if (last) break
+            pos += count - OVERLAP
+        }
+        return false
+    }
+
     /** Ein TIFF-Header bei [at]. Liest IFD0 und das GPS-IFD. Liefert den Befundnamen oder `null`. */
     private fun tiffFinding(
         store: ByteStore,

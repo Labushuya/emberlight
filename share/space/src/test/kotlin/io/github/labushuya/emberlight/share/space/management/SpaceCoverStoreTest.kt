@@ -108,17 +108,16 @@ class SpaceCoverStoreTest {
     @Test
     fun locationThatCannotBeRemovedIsRejectedWithoutConsent() {
         setUp()
+        // Ein unbekannter kritischer Chunk ist nicht lesbar und lässt sich nicht bereinigen (Nachtrag 3.6d).
         val notRemovable =
             LocationFixtures.png(
-                LocationFixtures.pngChunk(
-                    "zTXt",
-                    LocationFixtures.ztxtDeflated("Comment", "Ort +48.8566+002.3522/"),
-                ),
+                LocationFixtures.pngChunk("eXIf", LocationFixtures.exifTiff().bytes),
+                LocationFixtures.pngChunk("ABCD", ByteArray(4)),
             )
 
         val result = store(notRemovable)
 
-        assertEquals(CoverResult.LocationNotRemovable(NotRemovableReason.COMPRESSED_TEXT), result)
+        assertEquals(CoverResult.LocationNotRemovable(NotRemovableReason.UNSUPPORTED), result)
         assertTrue(filesInSpace().none { it.startsWith("tmp-") || it.startsWith("cover-") })
     }
 

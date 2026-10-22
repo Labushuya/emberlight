@@ -87,7 +87,7 @@ Grundsätze; Details folgen als ADR in Meilenstein 3.
 - Kein Überschreiben fremder Dateien.
 - Größenlimits.
 - Zugangsschlüssel pro Teilnehmer. Mit dem Space werden sie ungültig.
-- GPS-Standortdaten werden beim Hochladen in einen Space standardmäßig entfernt (EXIF-Ortsdaten). Das ist pro Upload oder in den Einstellungen abschaltbar. Herstellerextras am Dateiende (etwa Trailer nach dem Bild- oder Videoteil) werden beim Teilen entfernt.
+- GPS-Standortdaten werden beim Hochladen in einen Space standardmäßig entfernt (EXIF-Ortsdaten). Das ist pro Upload oder in den Einstellungen abschaltbar. Herstellerextras am Dateiende (etwa Trailer nach dem Bild- oder Videoteil) werden beim Teilen entfernt. Herstellerextras dürfen entfernt werden: Ohne Einwilligung werden unbekannte und nicht benötigte Metadaten (Datenspuren, Herstellerboxen, unbekannter Text) immer neutralisiert, auch ohne gefundenen Standort (Entscheidung der Nutzerin bzw. des Nutzers, Umsetzung in [ADR 0015, Nachtrag 3.6d](adr/0015-entfernung-von-standortdaten.md)).
 - Lässt sich der Standort nicht sicher entfernen (etwa bei HEIC, bei Sonderformaten oder bei Metadaten-Tracks), lehnt der Upload ab. Die Gästeseite fragt dann: „Standort kann nicht entfernt werden. Trotzdem mit Standort hochladen?“ Bei Ja wird die Datei unverändert gespeichert und in der Liste als „Standort enthalten“ markiert. Entscheidung der Nutzerin bzw. des Nutzers vom 19.10.2026, Umsetzung in [ADR 0015](adr/0015-entfernung-von-standortdaten.md).
 
 #### Speicher

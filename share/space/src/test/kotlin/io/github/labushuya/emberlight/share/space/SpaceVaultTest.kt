@@ -169,20 +169,21 @@ class SpaceVaultTest {
     }
 
     /**
-     * Die Einwilligung ändert hier nichts: Das Abschneiden gelingt, also gibt es nichts, was man behalten müsste. Die
-     * Datei ist identisch zu der ohne Einwilligung (ADR 0015, Einwilligung).
+     * Mit Einwilligung wird die Datei unverändert gespeichert, also samt Anhang hinter IEND (ADR 0015, Nachtrag 3.6d).
+     * `locationKept` markiert die Einwilligung, nicht den Nachweis eines Standorts.
      */
     @Test
-    fun polyglotPngWithConsentIsCutTheSameWay() {
+    fun polyglotPngWithConsentIsStoredUnchanged() {
         val vault = vault()
         val bytes = MediaFixtures.png(MediaFixtures.ascii("<html></html>"))
 
         val record = createdRecord(runBlocking { vault.ingest(guest, "polyglot.png", null, BytesSource(bytes), true) })
 
         assertEquals("image/png", record.mime)
-        assertEquals(false, record.locationKept)
-        assertEquals(MediaFixtures.png().size.toLong(), record.sizeBytes)
-        assertEquals(listOf(record.sha256), storedFiles())
+        assertEquals(true, record.locationKept)
+        assertEquals(bytes.size.toLong(), record.sizeBytes)
+        assertEquals(sha256Hex(bytes), record.sha256)
+        assertArrayEquals(bytes, File(spacesDir, "${space.value}/${record.sha256}").readBytes())
     }
 
     /**

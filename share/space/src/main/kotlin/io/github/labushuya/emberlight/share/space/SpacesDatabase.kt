@@ -403,6 +403,10 @@ interface SpaceDao {
     @Query("SELECT * FROM space WHERE purging = 1")
     suspend fun allPurging(): List<SpaceEntity>
 
+    /** Gelöschte Spaces. Nach einem Absturz kann im Ordner eines solchen Space eine Teildatei liegen (ADR 0021, Nachtrag 3.6d-2). */
+    @Query("SELECT * FROM space WHERE status = 'DELETED'")
+    suspend fun allDeleted(): List<SpaceEntity>
+
     /** Neues Ende der Aufbewahrung. Eine bereits gesendete Erinnerung gilt dann nicht mehr. */
     @Query("UPDATE space SET retention_until = :until, retention_reminded_for = NULL, updated_at = :now WHERE id = :id")
     suspend fun setRetentionUntil(

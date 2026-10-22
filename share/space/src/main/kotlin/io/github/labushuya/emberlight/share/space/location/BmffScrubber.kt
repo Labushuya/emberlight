@@ -4,19 +4,28 @@ import io.github.labushuya.emberlight.share.space.ByteReader
 import io.github.labushuya.emberlight.share.space.ContentInspector
 
 /**
- * ISO-BMFF-Scrubber für MP4, MOV und 3GP (ADR 0015, Fundorte). Box-Walker mit 64-bit-Größen, `size 0` bis zum Ende,
- * Grenzen und Schachtelungstiefe.
+ * ISO-BMFF-Scrubber für MP4, MOV und 3GP (ADR 0015, Fundorte, Nachtrag 3.6d). Box-Walker mit 64-bit-Größen, `size 0` bis
+ * zum Ende, Grenzen und Schachtelungstiefe.
  *
- * - `udta` (auch in `trak`): `©xyz` (Text ab Offset 4), `loci` (3GPP). Beide werden geleert und danach in `free` umbenannt
- *   (längenerhaltend, ADR 0015). `meta` mit `keys` und `ilst`: Items der Keys
- *   `com.apple.quicktime.location.*` und `©xyz` werden in der `data`-Nutzlast überschrieben. `keys` und Indizes
- *   bleiben unverändert.
- * - XMP-`uuid`: XMP-Scrubber. `free`/`skip` mit Standort: `free_box_location`.
- * - Metadaten-Tracks (`gpmd`, `camm`, `mebx` mit `location`, Handler `meta`): `metadata_track`.
+ * - `udta` (auch in `trak`): `©xyz` (Text ab Offset 4) und `loci` (3GPP) werden geleert und in `free` umbenannt. Alle
+ *   anderen Kinder (außer `meta`, `udta`, `uuid`) sind unbekannt und werden immer neutralisiert ([neutralize]). `meta` mit `keys` und
+ *   `ilst`: Items der Keys `com.apple.quicktime.location.*` und `©xyz` werden in der `data`-Nutzlast überschrieben.
+ *   `keys` und Indizes bleiben unverändert. Andere Kinder von `meta` werden ebenfalls neutralisiert (außer [META_KEEP]).
+ * - Spuren (`trak`): Die Samples aller Spuren, deren Handler nicht in [MEDIA_HANDLERS] liegt, werden immer geleert
+ *   (`location_track`). Dazu gehören `gpmd`, `camm`, `djmd`, `meta`, Text- und Untertitelspuren und unbekannte Handler.
+ *   Die Samples kommen aus `stsz`, `stsc` und `stco`/`co64`. Sind die Tabellen nicht lesbar, gilt `metadata_track`
+ *   (Ablehnung). Gibt es Fragmente (`moof`), gilt `metadata_track` für jede Datenspur, weil ihre Samples in `mdat`
+ *   bei `trun` liegen und hier nicht gelesen werden.
+ * - `mebx`-Sample-Einträge: Der Schlüsselname `location` wird in den Key-Namen überschrieben (gleiche Länge).
+ * - XMP-`uuid`: XMP-Scrubber. Andere `uuid` unter `udta` oder `meta` sind unbekannt und werden neutralisiert.
+ * - `free`/`skip` mit Standort: `free_box_location`.
+ * - Unbekannte Boxen mit binärem Standort (TIFF mit GPS-IFD) werden geleert (`location_box_binary`). Ist die Box zu groß
+ *   für den Speicher, gilt `location_not_removable`.
  * - Alles, was nicht eingeordnet werden kann und Standort-Text enthält: `unsupported`.
  *
- * Mediendaten (`mdat`) werden nie gelesen. Ein Anhang hinter der letzten gültigen Top-Level-Box wird abgeschnitten
- * (ADR 0015, Anhänge).
+ * Mediendaten (`mdat`) werden nie gelesen, außer den Samples von Datenspuren oben. Ein Anhang hinter der letzten gültigen
+ * Top-Level-Box wird abgeschnitten (ADR 0015, Anhänge). Unbekannte Top-Level-Boxen und unbekannte Kinder von `moov`
+ * (außerhalb von `udta`, `meta`) werden nur bei einem Befund geleert (siehe Restrisiken in ADR 0015).
  */
 internal object BmffScrubber {
     private val XMP_UUID =
@@ -40,8 +49,24 @@ internal object BmffScrubber {
         )
     private const val COPYRIGHT_XYZ = "©xyz"
     private val FREE_TYPE = ascii("free")
-    private const val LOCATION_KEY_PREFIX = "com.apple.quicktime.location."
-    private val METADATA_SAMPLE_TYPES = setOf("gpmd", "camm")
+    private const val LOCATION_KEY_WORD = "location"
+    private val LOCATION_KEY_MASK = ascii("xxxxxxxx")
+
+    /**
+     * Handler, deren Samples Bild-, Video- oder Audiodaten sind. Sie werden nie geleert (ADR 0015, Nachtrag 3.6d). `pict`
+     * (Bildsequenz) und `auxv` (Hilfsvideo, etwa Alpha) gehören dazu, damit Bilddaten keinen Fehlalarm auslösen.
+     */
+    private val MEDIA_HANDLERS = setOf("vide", "soun", "pict", "auxv")
+
+    /**
+     * Unterkinder von `meta`, die nicht neutralisiert werden. `hdlr`, `keys`, `ilst` und `dinf` sind die Struktur, mit der
+     * Metadaten gelesen werden (ISO 14496-12 bzw. QuickTime). `free`/`skip` werden von Lesern ignoriert und nur geprüft.
+     */
+    private val META_KEEP = setOf("hdlr", "keys", "ilst", "dinf", "free", "skip", "uuid")
+    private const val TRACK_FINDING = "location_track"
+    private const val BOX_FINDING = "location_box_binary"
+    private const val NEUTRAL_FINDING = "metadata_box"
+    private const val KEY_FINDING = "location_key"
 
     internal class Box(
         val type: String,
@@ -56,10 +81,20 @@ internal object BmffScrubber {
         val end: Long,
     )
 
-    /** Sammelt Angaben je `trak`: Handler-Typ und Sample-Einträge. */
+    /** Ein Byte-Bereich eines Samples: Start und Länge. */
+    private class Span(
+        val start: Long,
+        val size: Long,
+    )
+
+    /**
+     * Sammelt Angaben je `trak`: Handler-Typ, Sample-Einträge und die Sample-Tabellen (`stsz`, `stsc`, `stco`/`co64`) als
+     * Boxen. Gelesen werden die Tabellen erst, wenn die Spur geprüft wird ([sampleSpans]).
+     */
     private class Track {
         var handler: String? = null
         val entries = ArrayList<SampleEntry>()
+        val tables = ArrayList<Box>()
     }
 
     /**
@@ -111,13 +146,14 @@ internal object BmffScrubber {
         start: Long,
         end: Long,
     ) {
+        val fragmented = hasMoof(pass, start, end)
         var p = start
         while (p < end) {
             pass.count("bmff_boxes")
             val box = box(pass, p, end, top = true)
             when (box.type) {
                 "ftyp", "mdat", "wide" -> Unit
-                "moov" -> children(pass, box.payload, box.end, 1, null)
+                "moov" -> children(pass, box.payload, box.end, 1, null, fragmented)
                 "free", "skip" -> freeBox(pass, box)
                 "uuid" -> uuid(pass, box)
                 "meta" -> bail(NotRemovableReason.UNSUPPORTED)
@@ -125,6 +161,22 @@ internal object BmffScrubber {
             }
             p = box.end
         }
+    }
+
+    /** Gibt es eine Top-Level-Box `moof` (fragmentiertes MP4) zwischen [start] und [end]? */
+    internal fun hasMoof(
+        pass: ScrubPass,
+        start: Long,
+        end: Long,
+    ): Boolean {
+        var p = start
+        while (p < end) {
+            pass.count("bmff_scan")
+            val box = box(pass, p, end, top = true)
+            if (box.type == "moof") return true
+            p = box.end
+        }
+        return false
     }
 
     internal fun box(
@@ -159,12 +211,16 @@ internal object BmffScrubber {
         return Box(type, start, payload, end)
     }
 
-    /** `moov` auf Top-Level (auch in HEIF-Sequenzen und Bursts): Kinder wie bei MP4. */
+    /**
+     * `moov` auf Top-Level (auch in HEIF-Sequenzen und Bursts): Kinder wie bei MP4. [fragmented] gibt an, ob ein `moof`
+     * in der Datei liegt (siehe [hasMoof]).
+     */
     internal fun moov(
         pass: ScrubPass,
         box: Box,
+        fragmented: Boolean,
     ) {
-        children(pass, box.payload, box.end, 1, null)
+        children(pass, box.payload, box.end, 1, null, fragmented)
     }
 
     private fun children(
@@ -173,6 +229,7 @@ internal object BmffScrubber {
         end: Long,
         depth: Int,
         track: Track?,
+        fragmented: Boolean,
     ) {
         if (depth > ScrubLimits.MAX_DEPTH) bail(NotRemovableReason.STRUCTURE)
         var p = start
@@ -181,17 +238,17 @@ internal object BmffScrubber {
             val box = box(pass, p, end, top = false)
             when (box.type) {
                 "moov" -> {
-                    children(pass, box.payload, box.end, depth + 1, null)
+                    children(pass, box.payload, box.end, depth + 1, null, fragmented)
                 }
 
                 "trak" -> {
                     val fresh = Track()
-                    children(pass, box.payload, box.end, depth + 1, fresh)
-                    verifyTrack(pass, fresh)
+                    children(pass, box.payload, box.end, depth + 1, fresh, fragmented)
+                    verifyTrack(pass, fresh, fragmented)
                 }
 
                 "mdia", "minf", "stbl" -> {
-                    children(pass, box.payload, box.end, depth + 1, track)
+                    children(pass, box.payload, box.end, depth + 1, track, fragmented)
                 }
 
                 "hdlr" -> {
@@ -200,6 +257,10 @@ internal object BmffScrubber {
 
                 "stsd" -> {
                     if (track != null) sampleEntries(pass, box, track) else generic(pass, box)
+                }
+
+                "stsz", "stco", "co64", "stsc" -> {
+                    if (track != null) track.tables.add(box) else generic(pass, box)
                 }
 
                 "udta" -> {
@@ -243,31 +304,164 @@ internal object BmffScrubber {
         }
     }
 
-    /** Metadaten-Tracks: `gpmd` und `camm` immer, `mebx` nur mit Standort-Key, Handler `meta` immer. */
-    private fun verifyTrack(
-        pass: ScrubPass,
+    /** Eine Sample-Tabelle des Typs [type]. Doppelte sind mehrdeutig und gelten als Strukturfehler. */
+    private fun tableBox(
         track: Track,
-    ) {
-        if (track.handler == "meta" && track.entries.isEmpty()) bail(NotRemovableReason.METADATA_TRACK)
-        for (entry in track.entries) {
-            when {
-                entry.type in METADATA_SAMPLE_TYPES -> {
-                    bail(NotRemovableReason.METADATA_TRACK)
-                }
+        type: String,
+    ): Box? {
+        val matches = track.tables.filter { it.type == type }
+        if (matches.size > 1) bail(NotRemovableReason.STRUCTURE)
+        return matches.firstOrNull()
+    }
 
-                entry.type == "mebx" -> {
-                    val text = pass.bytes(entry.start, entry.end - entry.start, entry.end).toString(Charsets.ISO_8859_1)
-                    if (text.contains("location", ignoreCase = true)) bail(NotRemovableReason.METADATA_TRACK)
-                }
+    /** `stsz`: Version und Flags, Standardgröße (0 = je Sample), Anzahl, dann die Größen je Sample. */
+    private fun sampleSizes(
+        pass: ScrubPass,
+        box: Box,
+    ): LongArray {
+        val fixed = pass.u32Be(box.payload + 4, box.end)
+        val count = pass.u32Be(box.payload + 8, box.end)
+        if (count > ScrubLimits.MAX_TRACK_SAMPLES) bail(NotRemovableReason.STRUCTURE)
+        return LongArray(count.toInt()) { index ->
+            if (fixed != 0L) fixed else pass.u32Be(box.payload + 12 + 4L * index, box.end)
+        }
+    }
 
-                track.handler == "meta" -> {
-                    bail(NotRemovableReason.METADATA_TRACK)
-                }
+    /** `stco` (32 Bit) oder `co64` (64 Bit): Anzahl der Chunks, dann ihre absoluten Dateioffsets. */
+    private fun chunkOffsets(
+        pass: ScrubPass,
+        box: Box,
+    ): LongArray {
+        val count = pass.u32Be(box.payload + 4, box.end)
+        if (count > ScrubLimits.MAX_TRACK_SAMPLES) bail(NotRemovableReason.STRUCTURE)
+        val wide = box.type == "co64"
+        return LongArray(count.toInt()) { index ->
+            if (!wide) {
+                pass.u32Be(box.payload + 8 + 4L * index, box.end)
+            } else {
+                val at = box.payload + 8 + 8L * index
+                val high = pass.u32Be(at, box.end)
+                if (high > 0x7FFF_FFFFL) bail(NotRemovableReason.STRUCTURE)
+                (high shl 32) or pass.u32Be(at + 4, box.end)
             }
         }
     }
 
-    /** `udta` mit `©xyz`, `loci`, `meta`, XMP-`uuid` und übrigen Boxen. */
+    /** `stsc`: Anzahl, dann je Eintrag der erste Chunk und die Samples je Chunk (Paare aus zwei Zahlen). */
+    private fun sampleToChunk(
+        pass: ScrubPass,
+        box: Box,
+    ): List<LongArray> {
+        val count = pass.u32Be(box.payload + 4, box.end)
+        if (count > ScrubLimits.MAX_TRACK_SAMPLES) bail(NotRemovableReason.STRUCTURE)
+        return List(count.toInt()) { index ->
+            val at = box.payload + 8 + 12L * index
+            longArrayOf(pass.u32Be(at, box.end), pass.u32Be(at + 4, box.end))
+        }
+    }
+
+    /**
+     * Byte-Bereiche aller Samples eines Tracks aus `stsz`, `stsc` und `stco`/`co64`. Die Tabellen werden erst hier gelesen,
+     * damit Bild- und Videotracks mit vielen Samples nicht betroffen sind. Fehlt eine Tabelle, liefert es `null`. Passen
+     * die Tabellen nicht zusammen, ist die Struktur fehlerhaft.
+     */
+    private fun sampleSpans(
+        pass: ScrubPass,
+        track: Track,
+    ): List<Span>? {
+        val stco = tableBox(track, "stco")
+        val co64 = tableBox(track, "co64")
+        if (stco != null && co64 != null) bail(NotRemovableReason.STRUCTURE)
+        val chunkBox = stco ?: co64 ?: return null
+        val sizeBox = tableBox(track, "stsz") ?: return null
+        val mapBox = tableBox(track, "stsc") ?: return null
+        val chunks = chunkOffsets(pass, chunkBox)
+        val sizes = sampleSizes(pass, sizeBox)
+        // Eine Spur ohne Samples hat nichts zu leeren. Ihre Tabellen dürfen leer sein (etwa ein leerer Text-Track).
+        if (sizes.isEmpty()) return emptyList()
+        val map = sampleToChunk(pass, mapBox)
+        if (map.isEmpty() || map[0][0] != 1L) bail(NotRemovableReason.STRUCTURE)
+        val spans = ArrayList<Span>(sizes.size)
+        var sample = 0
+        var entry = 0
+        for (chunk in chunks.indices) {
+            val chunkNumber = chunk + 1L
+            // Der letzte Eintrag mit erstem Chunk ≤ aktueller Chunk gilt (ISO 14496-12, stsc). Die Liste ist aufsteigend.
+            while (entry + 1 < map.size && map[entry + 1][0] <= chunkNumber) entry++
+            if (map[entry][0] > chunkNumber) bail(NotRemovableReason.STRUCTURE)
+            val perChunk = map[entry][1]
+            var offset = chunks[chunk]
+            for (inChunk in 0L until perChunk) {
+                if (sample >= sizes.size) bail(NotRemovableReason.STRUCTURE)
+                val size = sizes[sample++]
+                spans.add(Span(offset, size))
+                offset += size
+            }
+        }
+        if (sample != sizes.size) bail(NotRemovableReason.STRUCTURE)
+        return spans
+    }
+
+    /**
+     * Prüft eine Spur (fail closed). Mediaspuren (Handler in [MEDIA_HANDLERS]) bleiben unberührt. Alle anderen Spuren
+     * werden geleert, ohne Befund und ohne Rücksicht auf den Inhalt: Ihre Samples werden nicht zur Wiedergabe gebraucht.
+     * Ohne lesbare Sample-Tabellen oder bei Fragmenten wird der Upload abgelehnt (`metadata_track`).
+     */
+    private fun verifyTrack(
+        pass: ScrubPass,
+        track: Track,
+        fragmented: Boolean,
+    ) {
+        val handler = track.handler
+        if (handler != null && handler in MEDIA_HANDLERS) return
+        if (fragmented) bail(NotRemovableReason.METADATA_TRACK)
+        val spans = sampleSpans(pass, track) ?: bail(NotRemovableReason.METADATA_TRACK)
+        blankSpans(pass, spans)
+        for (entry in track.entries) {
+            if (entry.type == "mebx") neutralizeKeyNames(pass, entry)
+        }
+    }
+
+    /**
+     * Leert die Samples einer Spur. Aufeinanderfolgende Samples liegen am Stück in der Datei und werden zu einem Bereich
+     * zusammengefasst. Die Bereiche gehören nur zu dieser Spur (Spuren überlappen sich nicht mit ihren eigenen Bytes).
+     */
+    private fun blankSpans(
+        pass: ScrubPass,
+        spans: List<Span>,
+    ) {
+        var index = 0
+        while (index < spans.size) {
+            val start = spans[index].start
+            var end = start + spans[index].size
+            var next = index + 1
+            while (next < spans.size && spans[next].start == end) {
+                end += spans[next].size
+                next++
+            }
+            pass.blank(start, end - start, 0, TRACK_FINDING)
+            index = next
+        }
+    }
+
+    /**
+     * Sample-Eintrag `mebx`: Der Schlüsselname `location` wird in den Key-Namen durch gleich lange Zeichen ersetzt.
+     * Die Key-Struktur bleibt, damit die Sample-Beschreibung gültig bleibt.
+     */
+    private fun neutralizeKeyNames(
+        pass: ScrubPass,
+        entry: SampleEntry,
+    ) {
+        val size = entry.end - entry.start
+        val text = pass.bytes(entry.start, size, entry.end).toString(Charsets.ISO_8859_1).lowercase()
+        var at = text.indexOf(LOCATION_KEY_WORD)
+        while (at >= 0) {
+            pass.overwrite(entry.start + at, LOCATION_KEY_MASK, KEY_FINDING)
+            at = text.indexOf(LOCATION_KEY_WORD, at + LOCATION_KEY_WORD.length)
+        }
+    }
+
+    /** `udta` mit `©xyz`, `loci`, `meta`, XMP-`uuid`, und unbekannten Kindern, die neutralisiert werden. */
     private fun userData(
         pass: ScrubPass,
         box: Box,
@@ -298,11 +492,15 @@ internal object BmffScrubber {
                 }
 
                 "uuid" -> {
-                    uuid(pass, item)
+                    embeddedUuid(pass, item)
+                }
+
+                "free", "skip" -> {
+                    generic(pass, item)
                 }
 
                 else -> {
-                    generic(pass, item)
+                    neutralize(pass, item)
                 }
             }
             p = item.end
@@ -320,6 +518,31 @@ internal object BmffScrubber {
     ) {
         pass.overwrite(item.start + 4, FREE_TYPE, "location_box")
     }
+
+    /**
+     * Unbekannte Metadaten-Box ohne Befund (ADR 0015, Nachtrag 3.6d): Der Typ wird in `free` geändert, die Nutzlast mit
+     * Nullen geleert. Die Länge bleibt, Leser überspringen `free`.
+     */
+    private fun neutralize(
+        pass: ScrubPass,
+        box: Box,
+    ) {
+        pass.overwrite(box.start + 4, FREE_TYPE, NEUTRAL_FINDING)
+        pass.blank(box.payload, box.end - box.payload, 0, NEUTRAL_FINDING)
+    }
+
+    /** `uuid` unter `udta` oder `meta`: XMP wird gescrubbt, jede andere `uuid` ist unbekannt und wird neutralisiert. */
+    private fun embeddedUuid(
+        pass: ScrubPass,
+        box: Box,
+    ) {
+        if (isXmp(pass, box)) XmpScrubber.scrubRegion(pass, box.payload + 16, box.end) else neutralize(pass, box)
+    }
+
+    private fun isXmp(
+        pass: ScrubPass,
+        box: Box,
+    ): Boolean = box.end - box.payload >= 16 && pass.bytes(box.payload, 16, box.end).contentEquals(XMP_UUID)
 
     /** `©xyz`: 2 Byte Länge, 2 Byte Sprache, dann der Text. Länge und Sprache bleiben. */
     private fun xyzText(
@@ -365,7 +588,7 @@ internal object BmffScrubber {
 
     /**
      * `meta`. QuickTime kennt keine FullBox-Kopfzeile, ISO schon (vier Bytes Version und Flags). Die Kinder werden
-     * unterschieden: `keys` liefert die Namen, `ilst` die Items.
+     * unterschieden: `keys` liefert die Namen, `ilst` die Items. Kinder außerhalb von [META_KEEP] werden neutralisiert.
      */
     private fun meta(
         pass: ScrubPass,
@@ -388,8 +611,9 @@ internal object BmffScrubber {
             when (child.type) {
                 "keys" -> Unit
                 "ilst" -> ilst(pass, child, keyNames)
-                "uuid" -> uuid(pass, child)
-                else -> generic(pass, child)
+                "uuid" -> embeddedUuid(pass, child)
+                in META_KEEP -> generic(pass, child)
+                else -> neutralize(pass, child)
             }
         }
     }
@@ -424,7 +648,7 @@ internal object BmffScrubber {
         val locationIndexes = HashSet<Long>()
         // Jeder Key mit „location“ im Namen zählt, nicht nur das Apple-Präfix (andere Schreiber nutzen andere Namen).
         keyNames.forEachIndexed { index, name ->
-            if (name.contains("location", ignoreCase = true)) locationIndexes.add(index + 1L)
+            if (name.contains(LOCATION_KEY_WORD, ignoreCase = true)) locationIndexes.add(index + 1L)
         }
         var p = list.payload
         while (p < list.end) {
@@ -464,7 +688,7 @@ internal object BmffScrubber {
         pass: ScrubPass,
         box: Box,
     ) {
-        if (box.end - box.payload >= 16 && pass.bytes(box.payload, 16, box.end).contentEquals(XMP_UUID)) {
+        if (isXmp(pass, box)) {
             XmpScrubber.scrubRegion(pass, box.payload + 16, box.end)
         } else {
             generic(pass, box)
@@ -482,11 +706,20 @@ internal object BmffScrubber {
         if (text.contains("gps ") || LocationText.containsIn(text)) bail(NotRemovableReason.FREE_BOX_LOCATION)
     }
 
-    /** Alles, was der Walker nicht einordnet: Standort-Text darin führt zu `unsupported`, sonst bleibt es. */
+    /**
+     * Alles, was der Walker nicht einordnet. Enthält es ein eingebettetes TIFF mit GPS-Befund, wird die Nutzlast geleert
+     * (`location_box_binary`, längenerhaltend). Standort-Text darin führt zu `unsupported`, sonst bleibt es.
+     */
     internal fun generic(
         pass: ScrubPass,
         box: Box,
     ) {
+        if (StrictLocationProbe.containsBinaryLocation(RangeStore(pass.store, box.payload, box.end))) {
+            val count = box.end - box.payload
+            if (count > ScrubLimits.MAX_READ) bail(NotRemovableReason.LOCATION_NOT_REMOVABLE)
+            pass.blank(box.payload, count, 0, BOX_FINDING)
+            return
+        }
         if (LocationText.containsIn(pass.store, box.payload, box.end)) bail(NotRemovableReason.UNSUPPORTED)
     }
 }

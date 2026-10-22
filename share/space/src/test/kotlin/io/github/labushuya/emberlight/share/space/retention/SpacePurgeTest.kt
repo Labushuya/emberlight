@@ -238,6 +238,35 @@ class SpacePurgeTest {
         assertEquals(RemoveResult.Removed, runBlocking { purger().remove(SpaceId(ID)) })
     }
 
+    @Test
+    fun aTempFileLeftByACrashIsRemovedOnStartAndTheDeletedEntryKeepsItsCover() {
+        // Absturz mitten im Upload nach der Löschung: Die Teildatei liegt im Ordner des gelöschten Space (ADR 0021, 3.6d-2).
+        insertSpace(ID, "DELETED", purging = false)
+        val dir = File(spacesDir, ID).apply { mkdirs() }
+        val cover = dir.resolve("cover-" + "a".repeat(64))
+        cover.writeText("titelbild")
+        dir.resolve("tmp-abc123.part").writeText("teil")
+
+        runBlocking { purger().resumeAll() }
+
+        assertFalse(dir.resolve("tmp-abc123.part").exists())
+        assertTrue("Titelbild bleibt", cover.exists())
+        val row = runBlocking { database.spaces().find(ID) }
+        assertEquals("DELETED", row?.status)
+        assertEquals("Test", row?.name)
+        assertEquals(1, row?.colorIndex)
+    }
+
+    @Test
+    fun aDeletedSpaceWithoutFolderGetsNoFolderOnStart() {
+        insertSpace(ID, "DELETED", purging = false)
+
+        runBlocking { purger().resumeAll() }
+
+        assertFalse(File(spacesDir, ID).exists())
+        assertEquals("DELETED", runBlocking { database.spaces().find(ID) }?.status)
+    }
+
     private companion object {
         const val ID = "AAAAAAAAAAAAAAAAAAAAAA"
         const val OTHER_ID = "BBBBBBBBBBBBBBBBBBBBBB"

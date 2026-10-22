@@ -1,8 +1,6 @@
 package io.github.labushuya.emberlight.feature.space
 
-import java.io.ByteArrayOutputStream
 import java.util.zip.CRC32
-import java.util.zip.Deflater
 
 /**
  * Synthetische Bilddateien für die Titelbild-Tests der Oberfläche. Jede ist eine minimale Byte-Folge mit der richtigen
@@ -24,13 +22,13 @@ internal object CoverFixtures {
         box("ftyp", ascii("isom") + ByteArray(4)) + box("moov", box("free", ByteArray(8))) + box("mdat", ByteArray(16))
 
     /**
-     * PNG, dessen Text mit einem Ort komprimiert im zTXt-Chunk liegt. Das lässt sich nicht sicher ändern, also ist der
-     * Standort nicht bereinigbar.
+     * PNG mit einem unbekannten kritischen Chunk (Großbuchstabe am Anfang). Ein Decoder kann ihn nicht überspringen, also
+     * ist die Datei nicht bereinigbar und wird abgewiesen (ADR 0015, Nachtrag 3.6d). Komprimierter Text wird dagegen
+     * neutralisiert und nicht abgewiesen.
      */
-    fun pngWithCompressedLocation(): ByteArray {
+    fun pngThatCannotBeCleaned(): ByteArray {
         val ihdr = be32(1) + be32(1) + byteArrayOf(8, 2, 0, 0, 0)
-        val text = "Comment".toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0, 0) + deflate("Ort +48.8566+002.3522/")
-        return PNG_SIGNATURE + chunk("IHDR", ihdr) + chunk("zTXt", text) + chunk("IEND", ByteArray(0))
+        return PNG_SIGNATURE + chunk("IHDR", ihdr) + chunk("ABCD", ByteArray(4)) + chunk("IEND", ByteArray(0))
     }
 
     private val PNG_SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
@@ -47,20 +45,6 @@ internal object CoverFixtures {
         val typeBytes = ascii(type)
         val crc = CRC32().apply { update(typeBytes + data) }.value
         return be32(data.size.toLong()) + typeBytes + data + be32(crc)
-    }
-
-    private fun deflate(text: String): ByteArray {
-        val deflater = Deflater()
-        deflater.setInput(text.toByteArray(Charsets.ISO_8859_1))
-        deflater.finish()
-        val out = ByteArrayOutputStream()
-        val buffer = ByteArray(256)
-        while (!deflater.finished()) {
-            val count = deflater.deflate(buffer)
-            out.write(buffer, 0, count)
-        }
-        deflater.end()
-        return out.toByteArray()
     }
 
     private fun ascii(text: String): ByteArray = text.toByteArray(Charsets.ISO_8859_1)
