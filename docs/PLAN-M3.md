@@ -24,7 +24,7 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 | 3.5c (umgesetzt 21.10.2026, PR #40, ADR 0019 Nachtrag 3.5c; Gerätetest offen) | Gastgeber-Upload und Medienansicht in der App: eine gemeinsame SpaceVault je Space im Prozess (Befund 3.5a-2), System-Fotoauswahl, Kopie mit Standort-Entfernung und Rückfrage je Datei, Fortschritt und Abbrechen, Uploader ist der Gastgeber, Medienraster mit Vorschau und Filter „Meine“, Detail mit Entfernen im laufenden Space. |
 | 3.6b (umgesetzt 21.10.2026, PR #46, ADR 0021; Gerätetest offen) | Aufbewahrung nach dem Ende: Löschdatum und Frist ändern (ab jetzt), Jetzt löschen mit Bestätigung, Erinnerung zur Frist (24 h, bei kurzen Fristen nach der Hälfte, „sofort“ mit der Vorwarnung), Aktionen „Ansehen“, „1 Tag länger aufbewahren“, „Jetzt löschen“ (ohne direktes Löschen), Nachholen nach Neustart, eine gemeinsame Lösch-Funktion mit Fortsetzen. Schema 7 → 8 mit Migrationstest. Umfang und Auslegungen: ADR 0021. Nicht enthalten: automatische Löschung und Status `DELETED` (3.6c), Verlängern während der Laufzeit (3.6a), Vorlage (3.6a). |
 | 3.6 (3.6a umgesetzt 21.10.2026, PR #45; 3.6b umgesetzt 21.10.2026, PR #46; 3.6c umgesetzt 21.10.2026, PR #49, Gerätetest offen) | Ende und Nachhalten: Ablauf erzwingen, Aufbewahrung nach dem Ende (Feld heißt in der Oberfläche „Aufbewahrung nach dem Ende“, Begriff Nachhaltefrist im Konzept), Erinnerung mit Aktionen (Vorauswahl „nichts behalten“, Alles/Nichts auswählen), automatische Löschung (3.6c: Start, Liste, Wecker, WorkManager, Wiederaufnahme), Status `DELETED` mit Eintrag „Gelöscht am“, „Aus Liste entfernen“, Vorlage für neuen Space. Designentscheidungen: (a) „Jetzt löschen“ in der Erinnerung nur mit Bestätigung. (f) Bei „Sofort löschen“ kommt die Erinnerung kurz **vor** dem Ende. Nutzerentscheidung „a“ vom 21.10.2026, Verlängern und Vorlage: **Verlängern** während der Laufzeit, mit Banner bei Gästen. **„Als Vorlage für neuen Space“** nach dem Ende, ohne Medien. Ein beendeter Space bleibt geschlossen. Gastgeber-Benachrichtigung 10 Min. vor dem Ende und beim Ende, Hinweis im Beenden-Dialog (Zuordnung zu 3.6 ist ein Vorschlag). |
-| 3.7 | Gezielte Übernahme in `Pictures/Emberlight/<Space>`, danach Release `v0.3.0`. Pflicht (vorgezogen und umgesetzt, ADR 0020): „Über/Lizenzen“-Seite in der App mit Lizenzhinweisen aller mitgelieferten Bibliotheken (Apache-2.0 verlangt Lizenz bzw. NOTICE bei Weitergabe; ohne Play-Services-Plugin, z. B. AboutLibraries, prüfen), Hinweis auf GPL-3.0 und Link auf den Quellcode. Ausdrücklich nennen: die OFL-Schriften Fraunces und Inter (SIL OFL 1.1) mit Copyright-Zeile und Lizenztext aus `core/design/src/main/assets/licenses`. |
+| 3.7 (umgesetzt 22.10.2026, ADR 0022; Gerätetest offen, Testkatalog Abschnitt 11) | Gezielte Übernahme in `Pictures/Emberlight/<Space>`, danach Release `v0.3.0`. Pflicht (vorgezogen und umgesetzt, ADR 0020): „Über/Lizenzen“-Seite in der App mit Lizenzhinweisen aller mitgelieferten Bibliotheken (Apache-2.0 verlangt Lizenz bzw. NOTICE bei Weitergabe; ohne Play-Services-Plugin, z. B. AboutLibraries, prüfen), Hinweis auf GPL-3.0 und Link auf den Quellcode. Ausdrücklich nennen: die OFL-Schriften Fraunces und Inter (SIL OFL 1.1) mit Copyright-Zeile und Lizenztext aus `core/design/src/main/assets/licenses`. |
 | nach 3.5c (nur geplant, nicht umgesetzt) | Vorab-Release `v0.3.0-alpha.1` nach den Paketen 3.5a bis 3.5c, damit die Gäste-Webseite früh auf Geräten erprobt werden kann. Mit einem Endtest durch die Nutzerin bzw. den Nutzer anhand von [TESTKATALOG-M3.md](TESTKATALOG-M3.md). Die Versionslogik für Vorab-Tags ist umgesetzt (CLAUDE.md, ADR 0004, Nachtrag): `versionName` führt das Suffix (`0.3.0-alpha.1`), `versionCode` bleibt monoton. Der Release-Workflow (`release.yml`) setzt Vorab-Tags als GitHub-Prerelease, ohne „latest“. Der Probelauf per Dispatch bleibt. |
 
 ## Stand Paket 3.6 (21.10.2026)
@@ -128,3 +128,21 @@ Entscheidungen 1 bis 4 vom 20.10.2026 (Namensvorschläge, harte Speichergrenze, 
 - Die automatische Löschung, der Status `DELETED` und die Vorlage sind mit 3.6c umgesetzt (siehe unten).
 - „In Galerie übernehmen“ kommt mit 3.7, nicht in 3.6b.
 - Ein großes Display ist nicht eigens als Golden aufgenommen. Die Karte in der Liste ist dieselbe wie auf dem Telefon.
+
+## Stand Paket 3.7 (22.10.2026)
+
+Branch `feature/m3-3.7-galerie-uebernahme`, Draft-PR #54. Umfang nach [ADR 0022](adr/0022-uebernahme-in-die-galerie.md):
+
+- Domäne und Speicher (`share:space`, Paket `export`), Migration 10 → 11, Gate gegen die Löschung.
+- Medienspeicher-Schreiber (`share:export`): ab Android 10 mit `IS_PENDING`, Android 8 und 9 über den Legacy-Weg.
+- Auswahl, Hintergrundauftrag, Fortschritt, Abbrechen, Einstieg im Detail, Aktion „Ansehen“ der Erinnerung.
+- Goldens der Detailansichten neu aufgenommen, visuell geprüft.
+
+Offen (Stand dieses Eintrags):
+
+- Gerätetests (Testkatalog Abschnitt 11).
+- Goldens und Oberflächentests für die Auswahl selbst (Telefon de und en, breites Display, Touch-Injection auf dem Faltdisplay).
+- Vorschaubilder im Raster der Auswahl.
+- Bereinigung verwaister ausstehender Einträge nach einem Absturz.
+- Eigener Isolationsfilter für `share:export`.
+- Release `v0.3.0` erst nach dem Gerätetest und dem Endtest durch die Nutzerin bzw. den Nutzer.

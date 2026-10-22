@@ -487,3 +487,10 @@ Grenzwerte, bestätigt am 18.10.2026: Bild 50 MiB, Video 2 GiB, Standard-Speiche
 - Begründung: Ein Browser lädt Bilder, Videos und Downloads direkt von einer URL und kann dabei keinen Header senden. Ein dauerhafter Token in der URL wäre ein Risiko für Verlauf, Proxys und Weitergabe. Eine Signatur mit kurzer Laufzeit, die nur für den einzelnen Abruf gilt, hält dieses Risiko klein.
 - Das Protokoll (Route-Templates) enthält weder Query noch Signatur. Der Test `logLinesNeverContainTheQueryOrTheSignature` prüft das.
 - Details und Abgrenzung: [ADR 0019](0019-medienzugriff-und-vorschauen.md).
+
+## Nachtrag 22.10.2026: Bindung an die WLAN-Adresse (Korrektur)
+
+Der Hinweis in diesem ADR, der Server binde auf `0.0.0.0` und `BIND_HOST` stehe auf `0.0.0.0`, war zum Zeitpunkt des Entwurfs
+überholt. Tatsächlich bindet der Server an die IPv4-Adresse der WLAN-Schnittstelle: `KtorLocalServer.kt`, Zeilen 76 bis 79
+(`host = config.subnet.address`). Es gibt keine Konstante `BIND_HOST`. Maßgeblich ist der Code. Siehe auch ADR 0012, Nachtrag
+vom 22.10.2026.

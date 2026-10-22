@@ -229,3 +229,10 @@ Die Aussage zu R8 oben („Der Release-Build prüft so R8 mit dem Server“) gil
 Die Entscheidung `START_NOT_STICKY` aus diesem ADR ist ersetzt. Der Dienst läuft mit `START_STICKY`. Ein Prozess-Tod oder ein Abbruch durch das System beendet einen Space nicht. Nach dem Neustart setzt der Dienst einen aktiven, nicht abgelaufenen Space fort, wenn die Akku-Ausnahme besteht. Sonst bleibt der Space aktiv und unterbrochen, bis der Gastgeber ihn in der App fortsetzt.
 
 Begründung: Ein Space darf nicht durch einen Prozess-Tod enden. Der Gast verliert die Verbindung in beiden Fällen, aber nur ein beendeter Space ist verloren. Der Ablauf steht in [ADR 0017](0017-einrichtung-und-betrieb.md), Abschnitt „Neustart nach Prozess-Tod“.
+
+## Nachtrag 22.10.2026: Bindung an die WLAN-Adresse (Korrektur)
+
+Die Zeilen oben zur Bindung (Abschnitt „Bindung“ und „Erreichbarkeit nur über WLAN bzw. Hotspot“) beschreiben einen
+früheren Stand mit `0.0.0.0`. Der Server bindet tatsächlich an die Adresse der WLAN-Schnittstelle, nicht an `0.0.0.0`:
+`KtorLocalServer.kt`, Zeilen 76 bis 79 (`connector { host = config.subnet.address }`). Eine Konstante `BIND_HOST` gibt es nicht.
+Die Aussagen oben bleiben als Verlauf stehen. Maßgeblich ist dieser Nachtrag und der Code.
