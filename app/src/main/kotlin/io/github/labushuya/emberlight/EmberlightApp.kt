@@ -61,6 +61,7 @@ import io.github.labushuya.emberlight.feature.gallery.viewer.LocalViewerImageSou
 import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerImageSourceContribution
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceDetail
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceEdit
+import io.github.labushuya.emberlight.feature.space.navigateToSpaceExport
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceRunning
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceSetup
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceTemplate
@@ -210,6 +211,7 @@ private fun AppNavHost(navController: NavHostController) {
             onOpen = { id -> navController.navigateToSpaceDetail(id) },
             onEdit = { id -> navController.navigateToSpaceEdit(id) },
             onTemplate = { id -> navController.navigateToSpaceTemplate(id) },
+            onExport = { id -> navController.navigateToSpaceExport(id) },
             onStart = { id -> navController.navigateToSpaceSetup(id, startMode = true) },
             onSetup = { id -> navController.navigateToSpaceSetup(id) },
             onOpenRunning = { id -> navController.navigateToSpaceRunning(id) },
@@ -232,7 +234,11 @@ private fun NavHostController.openLaunchRoute(route: String) {
 
         else -> {
             RetentionRoutes.parse(route)?.let { target ->
-                navigateToSpaceDetail(target.spaceId, confirmPurge = target.confirmPurge)
+                if (target.openExport) {
+                    navigateToSpaceExport(target.spaceId)
+                } else {
+                    navigateToSpaceDetail(target.spaceId, confirmPurge = target.confirmPurge)
+                }
             }
         }
     }

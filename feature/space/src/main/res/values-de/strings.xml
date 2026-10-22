@@ -427,4 +427,33 @@
     <string name="space_list_remove_text">„%1$s“ verschwindet aus der Liste, das Titelbild wird ebenfalls entfernt. Das lässt sich nicht rückgängig machen.</string>
     <string name="space_list_remove_confirm">Entfernen</string>
     <string name="space_upload_deleting">Der Space wird gelöscht. Uploads werden nicht mehr angenommen.</string>
+    <!-- Übernahme in die Galerie (Paket 3.7, ADR 0022) -->
+    <string name="space_export_entry">In Galerie übernehmen</string>
+    <string name="space_export_title">In Galerie übernehmen</string>
+    <string name="space_export_hint">Die gewählten Medien werden nach Pictures/Emberlight/&lt;Space&gt; kopiert. Die Kopien bleiben auch nach dem Löschen des Space in der Galerie.</string>
+    <string name="space_export_all">Alle</string>
+    <string name="space_export_none">Nichts</string>
+    <string name="space_export_summary">%1$d ausgewählt · %2$s</string>
+    <string name="space_export_start">Übernehmen</string>
+    <string name="space_export_cancel">Abbrechen</string>
+    <string name="space_export_already">Bereits übernommen</string>
+    <string name="space_export_location">Standort enthalten</string>
+    <string name="space_export_progress">%1$d von %2$d Dateien · %3$s</string>
+    <string name="space_export_done">%1$d übernommen, %2$d bereits vorhanden, %3$d mit Fehler</string>
+    <string name="space_export_done_purged">Der Space wird gelöscht. Die Übernahme ist nach %1$d Dateien angehalten.</string>
+    <string name="space_export_no_space">Nicht genug Platz. Benötigt: %1$s, frei: %2$s. Die 2-GiB-Reserve ist enthalten.</string>
+    <string name="space_export_failed_hash">Die Prüfung ist fehlgeschlagen, die Kopie wurde verworfen.</string>
+    <string name="space_export_failed_write">Die Datei konnte nicht geschrieben werden.</string>
+    <string name="space_export_failed_missing">Die Datei fehlt im Space.</string>
+    <string name="space_export_failed_unknown">Unbekannter Fehler.</string>
+    <string name="space_export_not_exportable">Dieser Space lässt sich nicht übernehmen.</string>
+    <string name="space_export_running">Wird übernommen …</string>
+    <string name="space_export_none_selected">Noch nichts ausgewählt.</string>
+    <string name="space_export_empty">Dieser Space hat noch keine Medien.</string>
+    <string name="space_export_channel">In Galerie übernehmen</string>
+    <string name="space_export_notification_text">%1$d von %2$d Dateien</string>
+    <string name="space_export_cancelled">Die Übernahme wurde abgebrochen.</string>
+    <string name="space_export_failed">Die Übernahme konnte nicht gestartet werden.</string>
+    <string name="space_export_kind_image">Bild</string>
+    <string name="space_export_kind_video">Video</string>
 </resources>

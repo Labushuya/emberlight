@@ -5,6 +5,8 @@ data class ExportCandidate(
     val mediaId: String,
     val sizeBytes: Long,
     val locationKept: Boolean,
+    /** Videos statt Bilder. Nur für die Anzeige und die Kennzeichnung der Kachel. */
+    val isVideo: Boolean = false,
     /** Schon übernommen: wird gekennzeichnet und lässt sich nicht erneut auswählen (keine Duplikate). */
     val alreadyExported: Boolean,
 )

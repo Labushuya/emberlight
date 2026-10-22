@@ -77,6 +77,9 @@ class RetentionNotifier
                     .setOnlyAlertOnce(true)
             activityIntent(RetentionRoutes.open(id.value), requestFor(RetentionRoutes.open(id.value)))?.let {
                 builder.setContentIntent(it)
+            }
+            // „Ansehen“ als Aktion öffnet die Auswahl zur Übernahme in die Galerie (Paket 3.7, ADR 0022).
+            activityIntent(RetentionRoutes.export(id.value), requestFor(RetentionRoutes.export(id.value)))?.let {
                 builder.addAction(0, context.getString(R.string.space_retention_action_view), it)
             }
             if (reminder.ended) {
