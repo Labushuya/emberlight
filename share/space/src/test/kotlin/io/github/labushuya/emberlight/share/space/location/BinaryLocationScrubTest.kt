@@ -13,6 +13,7 @@ import io.github.labushuya.emberlight.share.space.location.BinaryLocationFixture
 import io.github.labushuya.emberlight.share.space.location.BinaryLocationFixtures.textChunk
 import io.github.labushuya.emberlight.share.space.location.LocationFixtures.ascii
 import io.github.labushuya.emberlight.share.space.location.LocationFixtures.box
+import io.github.labushuya.emberlight.share.space.location.LocationFixtures.concat
 import io.github.labushuya.emberlight.share.space.location.LocationFixtures.png
 import io.github.labushuya.emberlight.share.space.location.LocationFixtures.pngChunk
 import io.github.labushuya.emberlight.share.space.location.LocationFixtures.ztxtDeflated
@@ -23,13 +24,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.awt.image.BufferedImage
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.zip.CRC32
+import javax.imageio.ImageIO
 
 /**
- * Binäre Restrisiken aus ADR 0015 (Nachtrag 3.1b-2): MP4-Metadaten-Tracks, unbekannte HEIF-Items, PNG-Text mit
- * unbekanntem Schlüsselwort. Jeder Fall prüft: Befund vorher, Bereinigung nachher, Datei weiterhin gültig (Länge, CRC),
- * Wiederholung ohne Befund. Gegenproben ohne Standort dürfen nichts ändern.
+ * Restrisiken aus ADR 0015 (Nachtrag 3.1b-2, Nachtrag 3.6d): MP4-Datenspuren, unbekannte Boxen und Herstellerdaten,
+ * unbekannte HEIF-Items, PNG-Text und Chunks. Seit Nachtrag 3.6d gilt: Ohne Einwilligung werden unbekannte und nicht
+ * benötigte Metadaten immer neutralisiert, auch ohne Standortbefund. Jeder Fall prüft: Ergebnis, Länge, Gültigkeit
+ * (CRC bzw. Struktur), Wiederholung ohne Änderung. Bild-, Video- und Audio-Daten bleiben unverändert.
  */
 class BinaryLocationScrubTest {
     @get:Rule
@@ -88,6 +94,14 @@ class BinaryLocationScrubTest {
         }
     }
 
+    /** Alle Samples in [ranges] sind auf null geleert. */
+    private fun assertZeroed(
+        out: ByteArray,
+        ranges: List<IntRange>,
+    ) {
+        for (range in ranges) assertTrue("Sample $range ist nicht geleert", range.all { out[it] == 0.toByte() })
+    }
+
     private fun binaryLocation(bytes: ByteArray): Boolean =
         StrictLocationProbe.containsBinaryLocation(MemoryStore(bytes))
 
@@ -116,10 +130,21 @@ class BinaryLocationScrubTest {
 
     private fun text(bytes: ByteArray): String = String(bytes, Charsets.ISO_8859_1)
 
-    // ---------- Restrisiko 2: MP4-Metadaten-Tracks und unbekannte Boxen ----------
+    /** Position von [needle] in [haystack], oder -1. */
+    private fun indexOf(
+        haystack: ByteArray,
+        needle: ByteArray,
+    ): Int {
+        for (start in 0..haystack.size - needle.size) {
+            if ((needle.indices).all { haystack[start + it] == needle[it] }) return start
+        }
+        return -1
+    }
+
+    // ---------- MP4: Datenspuren werden immer geleert (Nachtrag 3.6d) ----------
 
     @Test
-    fun gpmdTrackWithGps5IsNulledInItsSamplesOnly() {
+    fun gpmdTrackWithGpsIsNulledInItsSamplesOnly() {
         val mp4 = BinaryLocationFixtures.mp4("meta", "gpmd", listOf(gpmfSample(true), gpmfSample(true)))
         assertTrue("Vorher: GPS5 im Sample", text(mp4.bytes).contains("GPS5"))
 
@@ -132,18 +157,21 @@ class BinaryLocationScrubTest {
     }
 
     @Test
-    fun gpmdTrackWithoutGpsStaysUnchanged() {
+    fun gpmdTrackWithoutGpsIsNulledToo() {
+        // Nachtrag 3.6d: Die Herstellerdaten einer Datenspur gehen auch ohne GPS-Befund.
         val mp4 = BinaryLocationFixtures.mp4("meta", "gpmd", listOf(gpmfSample(false)))
 
         val (result, out) = scrub(mp4.bytes, mp4Format)
 
-        assertUnchanged(result, mp4.bytes, out)
+        assertCleanChanged(result)
+        assertChangesWithin(mp4.bytes, out, mp4.sampleRanges)
+        assertZeroed(out, mp4.sampleRanges)
+        assertRepeatIsClean(out, mp4Format)
     }
 
     @Test
     fun cammTrackWithGpsRecordIsNulled() {
-        val mp4 =
-            BinaryLocationFixtures.mp4("meta", "camm", listOf(cammSample(0), cammSample(5)))
+        val mp4 = BinaryLocationFixtures.mp4("meta", "camm", listOf(cammSample(0), cammSample(5)))
         val gpsRange = mp4.sampleRanges[1]
         assertEquals("Vorher: Typ 5 im Record", 5.toByte(), mp4.bytes[gpsRange.first + 2])
 
@@ -156,16 +184,18 @@ class BinaryLocationScrubTest {
     }
 
     @Test
-    fun cammTrackWithoutGpsRecordStaysUnchanged() {
+    fun cammTrackWithoutGpsRecordIsNulledToo() {
         val mp4 = BinaryLocationFixtures.mp4("meta", "camm", listOf(cammSample(0), cammSample(1)))
 
         val (result, out) = scrub(mp4.bytes, mp4Format)
 
-        assertUnchanged(result, mp4.bytes, out)
+        assertCleanChanged(result)
+        assertZeroed(out, mp4.sampleRanges)
+        assertRepeatIsClean(out, mp4Format)
     }
 
     @Test
-    fun djmdTrackIsNulledBecauseItsGpsFieldsAreNotReadable() {
+    fun djmdTrackIsNulled() {
         val mp4 = BinaryLocationFixtures.mp4("meta", "djmd", listOf(djmdSample(), djmdSample()))
 
         val (result, out) = scrub(mp4.bytes, mp4Format)
@@ -176,8 +206,48 @@ class BinaryLocationScrubTest {
     }
 
     @Test
+    fun textTrackWithLocationTextIsNulled() {
+        // Dashcams schreiben GPS auch in Text- und Untertitelspuren.
+        val mp4 = BinaryLocationFixtures.mp4("text", "tx3g", listOf(ascii("+48.8566+002.3522/")))
+        assertTrue("Vorher: Standort als Text im Sample", text(mp4.bytes).contains("+48.8566+002.3522"))
+
+        val (result, out) = scrub(mp4.bytes, mp4Format)
+
+        assertCleanChanged(result)
+        assertChangesWithin(mp4.bytes, out, mp4.sampleRanges)
+        assertFalse(text(out).contains("+48.8566+002.3522"))
+        assertRepeatIsClean(out, mp4Format)
+    }
+
+    @Test
     fun gpmdTrackWithoutSampleTableStaysMetadataTrack() {
         val mp4 = BinaryLocationFixtures.mp4("meta", "gpmd", listOf(gpmfSample(true)), withTables = false)
+
+        val (result, _) = scrub(mp4.bytes, mp4Format)
+
+        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.METADATA_TRACK), result)
+    }
+
+    @Test
+    fun emptyDataTrackWithoutSamplesIsAccepted() {
+        // Eine Datenspur ohne Samples hat nichts zu leeren und darf den Upload nicht ablehnen.
+        val mp4 = BinaryLocationFixtures.mp4("text", "tx3g", emptyList())
+
+        val (result, out) = scrub(mp4.bytes, mp4Format)
+
+        assertUnchanged(result, mp4.bytes, out)
+    }
+
+    @Test
+    fun fragmentedFileWithDataTrackIsNotRemovable() {
+        // Samples in Fragmenten (moof) werden nicht gelesen. Eine Datenspur darin lehnt den Upload ab.
+        val mp4 =
+            BinaryLocationFixtures.mp4(
+                "meta",
+                "gpmd",
+                listOf(gpmfSample(true)),
+                topLevel = box("moof", ByteArray(8)),
+            )
 
         val (result, _) = scrub(mp4.bytes, mp4Format)
 
@@ -206,13 +276,44 @@ class BinaryLocationScrubTest {
     }
 
     @Test
-    fun cammTrackWithManySamplesWithoutGpsStaysClean() {
+    fun dataTrackWithManySamplesInOneChunkIsNulled() {
         val samples = List(12_000) { cammSample(0) }
         val mp4 = BinaryLocationFixtures.mp4("meta", "camm", samples)
 
         val (result, out) = scrub(mp4.bytes, mp4Format)
 
-        assertUnchanged(result, mp4.bytes, out)
+        assertCleanChanged(result)
+        assertZeroed(out, mp4.sampleRanges)
+        assertRepeatIsClean(out, mp4Format)
+    }
+
+    @Test
+    fun dataTrackWithManyChunksIsNulledWithoutQuadraticCost() {
+        // Regression: Jedes Sample in einem eigenen Chunk ergibt viele getrennte Bereiche. Die Bereinigung bleibt
+        // innerhalb der Grenzen und läuft ohne Aussetzer durch.
+        val samples = List(12_000) { cammSample(0) }
+        val mp4 = BinaryLocationFixtures.mp4("meta", "camm", samples, chunkPerSample = true)
+
+        val (result, out) = scrub(mp4.bytes, mp4Format)
+
+        assertCleanChanged(result)
+        assertZeroed(out, mp4.sampleRanges)
+        assertRepeatIsClean(out, mp4Format)
+    }
+
+    @Test
+    fun udtaChildrenWithoutLocationAreNeutralizedAndKeepLength() {
+        // Nachtrag 3.6d: Unbekannte Kinder von udta werden geleert, ohne Befund. Die Box wird zu `free`.
+        val udta = box("udta", box("xyzw", ByteArray(24) { 7 }) + box("titl", ascii("Urlaub 2026")))
+        val original = box("ftyp", ascii("isom") + ByteArray(4)) + box("moov", udta) + box("mdat", ByteArray(16))
+
+        val (result, out) = scrub(original, mp4Format)
+
+        assertCleanChanged(result)
+        assertEquals(original.size, out.size)
+        assertFalse(text(out).contains("xyzw"))
+        assertFalse(text(out).contains("Urlaub"))
+        assertRepeatIsClean(out, mp4Format)
     }
 
     @Test
@@ -244,7 +345,7 @@ class BinaryLocationScrubTest {
         assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.LOCATION_NOT_REMOVABLE), result)
     }
 
-    // ---------- Restrisiko 1: unbekannte HEIF-Items ----------
+    // ---------- HEIF: unbekannte Items werden immer geleert (Nachtrag 3.6d) ----------
 
     @Test
     fun unknownItemWithBinaryGpsIsNulledAndKeepsLength() {
@@ -286,27 +387,45 @@ class BinaryLocationScrubTest {
     }
 
     @Test
-    fun imageItemsAndRandomBytesWithTiffHeaderGiveNoFalseAlarm() {
-        // Gegenprobe: Bilddaten mit zufälligem TIFF-Kopf und unbrauchbarem IFD-Zeiger sind kein Standort.
+    fun unknownItemWithoutLocationIsNulledAndImageItemIsKept() {
+        // Nachtrag 3.6d: Ein unbekanntes Item wird auch ohne Befund geleert. Das Bild-Item bleibt unverändert.
+        val image = ByteArray(128) { (it * 13).toByte() }
+        val unknown = ByteArray(64) { 5 }
         val original =
             HeifFixtures.standard(
                 "heic",
                 listOf(
-                    HeifFixtures.Item(1, "hvc1", randomWithTiffHeader(3, 2048)),
-                    HeifFixtures.Item(2, "uri ", randomWithTiffHeader(4, 512)),
+                    HeifFixtures.Item(1, "hvc1", image),
+                    HeifFixtures.Item(2, "uri ", unknown),
                 ),
             )
+        assertTrue("Vorher: Item vorhanden", indexOf(original, unknown) >= 0)
+
+        val (result, out) = scrub(original, heicFormat)
+
+        assertCleanChanged(result)
+        assertEquals(original.size, out.size)
+        assertEquals("Nachher: unbekanntes Item geleert", -1, indexOf(out, unknown))
+        assertTrue("Bild-Item unverändert", indexOf(out, image) >= 0)
+        assertRepeatIsClean(out, heicFormat)
+    }
+
+    @Test
+    fun imageItemsWithRandomBytesAndTiffHeaderAreNotTouched() {
+        // Gegenprobe: Bilddaten mit zufälligem TIFF-Kopf und unbrauchbarem IFD-Zeiger sind kein Standort und bleiben.
+        val image = randomWithTiffHeader(3, 2048)
+        val original = HeifFixtures.standard("heic", listOf(HeifFixtures.Item(1, "hvc1", image)))
 
         val (result, out) = scrub(original, heicFormat)
 
         assertUnchanged(result, original, out)
     }
 
-    // ---------- Restrisiko 3: PNG-Text mit unbekanntem Schlüsselwort ----------
+    // ---------- PNG: Text und Chunks mit unbekanntem Inhalt werden neutralisiert (Nachtrag 3.6d) ----------
 
     @Test
-    fun unknownKeywordTextWithHexTiffIsNulledAndCrcStaysValid() {
-        val original = png(textChunk("Comment", profileBody(gpsTiff())))
+    fun unknownKeywordTextWithHexTiffIsNeutralizedAndCrcStaysValid() {
+        val original = png(textChunk("Ort", profileBody(gpsTiff())))
         assertTrue("Vorher: Hex-TIFF im Text (II*\\0 als 49492a00)", text(original).contains("49492a00"))
 
         val (result, out) = scrub(original, pngFormat)
@@ -314,7 +433,8 @@ class BinaryLocationScrubTest {
         assertCleanChanged(result)
         assertEquals(original.size, out.size)
         assertFalse("Nachher: kein Hex-TIFF mehr", text(out).contains("49492a00"))
-        assertTrue("Schlüsselwort bleibt", text(out).contains("Comment"))
+        assertFalse("Nachher: Schlüsselwort ist neutralisiert", text(out).contains("Ort"))
+        assertTrue("Neutraler Typ", text(out).contains("emBl"))
         assertPngCrcsValid(out)
         assertRepeatIsClean(out, pngFormat)
     }
@@ -334,22 +454,100 @@ class BinaryLocationScrubTest {
     }
 
     @Test
-    fun compressedUnknownKeywordWithHexTiffIsNotRemovable() {
-        val compressed = ztxtDeflated("Comment", String(profileBody(gpsTiff()), Charsets.ISO_8859_1))
+    fun compressedUnknownKeywordIsNeutralizedAndCrcStaysValid() {
+        val compressed = ztxtDeflated("Ort", String(profileBody(gpsTiff()), Charsets.ISO_8859_1))
         val original = png(pngChunk("zTXt", compressed))
 
-        val (result, _) = scrub(original, pngFormat)
+        val (result, out) = scrub(original, pngFormat)
 
-        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.COMPRESSED_TEXT), result)
+        assertCleanChanged(result)
+        assertEquals(original.size, out.size)
+        assertFalse("zTXt ist neutralisiert", text(out).contains("zTXt"))
+        assertPngCrcsValid(out)
+        assertRepeatIsClean(out, pngFormat)
     }
 
     @Test
-    fun unknownKeywordTextWithoutLocationStaysUnchanged() {
+    fun unknownKeywordTextWithoutLocationIsNeutralized() {
+        val original = png(textChunk("Ort", ascii("Urlaub 2026, Fotos vom Strand")))
+
+        val (result, out) = scrub(original, pngFormat)
+
+        assertCleanChanged(result)
+        assertEquals(original.size, out.size)
+        assertFalse(text(out).contains("Urlaub"))
+        assertPngCrcsValid(out)
+        assertRepeatIsClean(out, pngFormat)
+    }
+
+    @Test
+    fun knownKeywordTextWithoutLocationStaysUnchanged() {
         val original = png(textChunk("Comment", ascii("Urlaub 2026, Fotos vom Strand")))
 
         val (result, out) = scrub(original, pngFormat)
 
         assertUnchanged(result, original, out)
+    }
+
+    @Test
+    fun knownKeywordTextWithLocationTextIsRefusedByVerification() {
+        // Bekannte Schlüsselwörter bleiben, laufen aber durch die Textsuche der Nachkontrolle.
+        val original = png(textChunk("Comment", ascii("Ort +48.8566+002.3522/")))
+
+        val (result, _) = scrub(original, pngFormat)
+
+        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.VERIFICATION_FAILED), result)
+    }
+
+    @Test
+    fun unknownAncillaryChunkIsNeutralizedAndCrcStaysValid() {
+        val original = png(pngChunk("caBX", randomWithTiffHeader(9, 256)))
+
+        val (result, out) = scrub(original, pngFormat)
+
+        assertCleanChanged(result)
+        assertEquals(original.size, out.size)
+        assertTrue("Neutraler Typ statt caBX", text(out).contains("emBl") && !text(out).contains("caBX"))
+        assertPngCrcsValid(out)
+        assertRepeatIsClean(out, pngFormat)
+    }
+
+    @Test
+    fun unknownCriticalChunkIsNotRemovable() {
+        val original = png(pngChunk("ABCD", ByteArray(4)))
+
+        val (result, _) = scrub(original, pngFormat)
+
+        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.UNSUPPORTED), result)
+    }
+
+    @Test
+    fun pngStaysDecodableAfterNeutralizingTextAndChunks() {
+        // Lesbarkeit: Ein echtes PNG bleibt nach dem Neutralisieren dekodierbar, mit denselben Pixeln.
+        val image = BufferedImage(16, 16, BufferedImage.TYPE_INT_RGB)
+        for (x in 0 until 16) for (y in 0 until 16) image.setRGB(x, y, (x * 16) shl 16 or (y * 16))
+        val encoded = ByteArrayOutputStream().also { ImageIO.write(image, "png", it) }.toByteArray()
+        // Nach IHDR (Signatur 8 Bytes, IHDR 25 Bytes) einfügen: Text mit Befund, zTXt, unbekannter Ancillary-Chunk.
+        val ihdrEnd = 8 + 25
+        val extra =
+            concat(
+                textChunk("Ort", profileBody(gpsTiff())),
+                pngChunk("zTXt", ztxtDeflated("Ort", "+48.8566+002.3522/")),
+                pngChunk("caBX", randomWithTiffHeader(4, 128)),
+            )
+        val original = encoded.copyOfRange(0, ihdrEnd) + extra + encoded.copyOfRange(ihdrEnd, encoded.size)
+
+        val (result, out) = scrub(original, pngFormat)
+
+        assertCleanChanged(result)
+        assertEquals(original.size, out.size)
+        assertPngCrcsValid(out)
+        val before = ImageIO.read(ByteArrayInputStream(encoded))
+        val after =
+            checkNotNull(ImageIO.read(ByteArrayInputStream(out))) { "PNG ist nach der Bereinigung nicht dekodierbar" }
+        assertEquals(before.width, after.width)
+        assertEquals(before.height, after.height)
+        for (x in 0 until 16) for (y in 0 until 16) assertEquals(before.getRGB(x, y), after.getRGB(x, y))
     }
 
     @Test

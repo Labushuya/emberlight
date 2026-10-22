@@ -11,8 +11,8 @@ package io.github.labushuya.emberlight.share.space.location
  * - Items ohne `infe`, doppelte Einträge, mehrfache `iinf`/`iloc`/`idat`/`hdlr` und unbekannte Versionen gelten als
  *   nicht bereinigbar (fail closed).
  * - Items, die weder Exif, XMP noch ein bekannter Bildtyp ([KNOWN_IMAGE_TYPES]) sind (etwa `uri ` oder fremde `mime`):
- *   Tragen sie einen binären oder Text-Standort, werden alle Extents geleert (`heif_item_location`, Nachtrag 3.1b-2).
- *   Bildtypen werden nicht gelesen, damit Bilddaten keinen Fehlalarm auslösen.
+ *   Ihre Extents werden immer geleert, ohne Befund (`heif_item_location`, ADR 0015, Nachtrag 3.6d). Sie werden für
+ *   die Anzeige nicht gebraucht. Bildtypen werden nie geleert und nicht nach Standort abgesucht.
  *
  * `moov` auf Top-Level (HEIF-Sequenzen, Bursts) wird wie bei MP4 geprüft. Mediendaten (`mdat`) werden nie gelesen.
  */
@@ -69,6 +69,7 @@ internal object HeifScrubber {
     /** Ganze Datei ab Offset 0. */
     fun scrubFile(pass: ScrubPass) {
         val end = BmffScrubber.logicalEnd(pass, 0, pass.store.length)
+        val fragmented = BmffScrubber.hasMoof(pass, 0, end)
         var p = 0L
         while (p < end) {
             pass.count("heif_boxes")
@@ -76,7 +77,7 @@ internal object HeifScrubber {
             when (box.type) {
                 "ftyp", "mdat", "wide" -> Unit
                 "meta" -> meta(pass, box, depth = 1)
-                "moov" -> BmffScrubber.moov(pass, box)
+                "moov" -> BmffScrubber.moov(pass, box, fragmented)
                 "free", "skip" -> BmffScrubber.freeBox(pass, box)
                 "uuid" -> BmffScrubber.uuid(pass, box)
                 else -> BmffScrubber.generic(pass, box)
@@ -133,9 +134,9 @@ internal object HeifScrubber {
     }
 
     /**
-     * Item eines unbekannten Typs oder Nicht-Bild-Items. Hat es einen Standort (binär im TIFF-Format oder als Text), werden
-     * alle seine Extents mit Nullen geleert. Das Item braucht kein Decoder, die Länge bleibt. Ist es zu groß für den
-     * Speicher oder liegt es über ein anderes Item (Methode 2), gilt der Standort als nicht entfernbar.
+     * Item eines unbekannten Typs oder Nicht-Bild-Items. Seine Extents werden immer mit Nullen geleert, ohne Befund
+     * (ADR 0015, Nachtrag 3.6d). Das Item braucht kein Decoder, die Länge bleibt. Liegt es über ein anderes Item
+     * (Methode 2) oder ist es zu groß für den Speicher, ist die Bereinigung nicht möglich (fail closed).
      */
     private fun unknownItem(
         pass: ScrubPass,
@@ -144,12 +145,7 @@ internal object HeifScrubber {
     ) {
         if (location.method == METHOD_ITEM) bail(NotRemovableReason.UNSUPPORTED)
         val item = pass.view(itemStore(pass, location, idat))
-        val size = item.store.length
-        if (!StrictLocationProbe.containsBinaryLocation(item.store) && !LocationText.containsIn(item.store, 0, size)) {
-            return
-        }
-        if (size > ScrubLimits.MAX_READ) bail(NotRemovableReason.LOCATION_NOT_REMOVABLE)
-        item.blank(0, size, 0, ITEM_FINDING)
+        item.blank(0, item.store.length, 0, ITEM_FINDING)
     }
 
     /** Das einzige Kind mit [type]. Mehrere gleichartige Kinder sind mehrdeutig und gelten als Strukturfehler. */

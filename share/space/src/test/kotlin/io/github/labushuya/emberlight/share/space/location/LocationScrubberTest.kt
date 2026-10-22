@@ -236,22 +236,25 @@ class LocationScrubberTest {
     }
 
     @Test
-    fun compressedTextWithLocationIsNotRemovable() {
+    fun compressedTextWithLocationIsNeutralized() {
+        // Nachtrag 3.6d: Komprimierter Text wird immer neutralisiert, statt die Datei abzulehnen.
         val original = png(pngChunk("zTXt", ztxtDeflated("Comment", "Ort +48.8566+002.3522/")))
 
-        val (result, out) = scrub(original, "image/png")
+        val cleaned = assertClean(original, "image/png")
 
-        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.COMPRESSED_TEXT), result)
-        assertArrayEquals(original, out)
+        assertEquals(original.size, cleaned.size)
+        assertFalse("zTXt ist nicht mehr vorhanden", String(cleaned, Charsets.ISO_8859_1).contains("zTXt"))
+        assertChunkCrcsValid(cleaned)
     }
 
     @Test
-    fun compressedHarmlessTextStaysClean() {
+    fun compressedHarmlessTextIsAlsoNeutralized() {
         val original = png(pngChunk("zTXt", ztxtDeflated("Comment", "Ein Kommentar ohne Ort")))
 
-        val (result, _) = scrub(original, "image/png")
+        val cleaned = assertClean(original, "image/png")
 
-        assertCleanResult(result, changed = false)
+        assertFalse(String(cleaned, Charsets.ISO_8859_1).contains("zTXt"))
+        assertChunkCrcsValid(cleaned)
     }
 
     @Test
@@ -349,13 +352,14 @@ class LocationScrubberTest {
     }
 
     @Test
-    fun mebxTrackWithoutLocationKeyStaysClean() {
+    fun mebxTrackWithoutSampleTablesIsRejectedEvenWithoutLocationKey() {
+        // Nachtrag 3.6d: Jede Datenspur wird geleert. Ohne lesbare Sample-Tabellen gilt sie als nicht bereinigbar.
         val original =
             box("ftyp", ascii("isom") + ByteArray(4)) + box("moov", mebxTrack("com.apple.quicktime.camera.exposure"))
 
         val (result, _) = scrub(original, "video/mp4")
 
-        assertCleanResult(result, changed = false)
+        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.METADATA_TRACK), result)
     }
 
     @Test

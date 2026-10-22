@@ -47,17 +47,18 @@ internal object BinaryLocationFixtures {
         samples: List<ByteArray>,
         withTables: Boolean = true,
         topLevel: ByteArray = ByteArray(0),
+        chunkPerSample: Boolean = false,
     ): Mp4 {
         val ftyp = box("ftyp", ascii("isom") + FULL_HEADER)
         val payload = concat(*samples.toTypedArray())
 
-        fun moov(offset: Long): ByteArray =
+        fun moov(mdatStart: Long): ByteArray =
             box(
                 "moov",
                 track(
                     handler,
                     box(entry, ByteArray(16)),
-                    if (withTables) tables(samples.map { it.size }, offset) else ByteArray(0),
+                    if (withTables) tables(samples.map { it.size }, mdatStart, chunkPerSample) else ByteArray(0),
                 ),
             )
         val probe = moov(0L)
@@ -84,10 +85,14 @@ internal object BinaryLocationFixtures {
         return box("trak", box("mdia", hdlr + box("minf", stbl)))
     }
 
-    /** `stsz`, `stsc` (ein Chunk mit allen Samples) und `stco` mit dem Offset des Chunks. */
+    /**
+     * `stsz`, `stsc` und `stco`. Standard: alle Samples in einem Chunk, dessen Offset [mdatStart] ist. Mit
+     * [chunkPerSample] liegt jedes Sample in einem eigenen Chunk, die Samples liegen dann nicht am Stück.
+     */
     private fun tables(
         sizes: List<Int>,
-        offset: Long,
+        mdatStart: Long,
+        chunkPerSample: Boolean,
     ): ByteArray {
         val stsz =
             box(
@@ -95,8 +100,23 @@ internal object BinaryLocationFixtures {
                 FULL_HEADER + be32(0) + be32(sizes.size.toLong()) +
                     concat(*sizes.map { be32(it.toLong()) }.toTypedArray()),
             )
-        val stsc = box("stsc", FULL_HEADER + be32(1) + be32(1) + be32(sizes.size.toLong()) + be32(1))
-        val stco = box("stco", FULL_HEADER + be32(1) + be32(offset))
+        val offsets = ArrayList<Long>()
+        var at = mdatStart
+        if (chunkPerSample) {
+            for (size in sizes) {
+                offsets.add(at)
+                at += size
+            }
+        } else {
+            offsets.add(mdatStart)
+        }
+        val perChunk = if (chunkPerSample) 1L else sizes.size.toLong()
+        val stsc = box("stsc", FULL_HEADER + be32(1) + be32(1) + be32(perChunk) + be32(1))
+        val stco =
+            box(
+                "stco",
+                FULL_HEADER + be32(offsets.size.toLong()) + concat(*offsets.map { be32(it) }.toTypedArray()),
+            )
         return stsz + stsc + stco
     }
 

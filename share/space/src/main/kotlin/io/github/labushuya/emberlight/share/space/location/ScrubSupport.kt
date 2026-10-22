@@ -1,11 +1,8 @@
 package io.github.labushuya.emberlight.share.space.location
 
-import java.io.ByteArrayOutputStream
 import java.io.RandomAccessFile
 import java.security.MessageDigest
 import java.util.SortedSet
-import java.util.zip.DataFormatException
-import java.util.zip.Inflater
 
 /**
  * Grund, warum eine Datei nicht sicher bereinigt werden kann (ADR 0015, Reason-Codes). Der Code erscheint als
@@ -18,7 +15,6 @@ enum class NotRemovableReason(
 
     /** Anhang, der innerhalb einer Struktur liegt und nicht abgeschnitten werden kann (ADR 0015, Anhänge). */
     TRAILING_DATA("trailing_data"),
-    COMPRESSED_TEXT("compressed_text"),
     EXTENDED_XMP("extended_xmp"),
     FREE_BOX_LOCATION("free_box_location"),
     STRUCTURE("structure"),
@@ -49,6 +45,9 @@ internal object ScrubLimits {
      * weil ein langes Video viele Samples hat. Auch Videotracks dürfen so viele haben, sie werden aber nicht gelesen.
      */
     const val MAX_TRACK_SAMPLES = 1_000_000
+
+    /** Zahl der geplanten Schreibbereiche. Darüber gilt die Struktur als zu aufwendig (fail closed). */
+    const val MAX_PLANNED = 100_000
     const val MAX_READ = 16 * 1024 * 1024
     const val MAX_TEXT = 8 * 1024 * 1024
 }
@@ -159,18 +158,24 @@ internal class MemoryStore(
 /**
  * Plan statt Sicherungskopie (ADR 0015, Plan/Apply). Die Überschreib-Bereiche liegen nur im Speicher, die Datei bleibt
  * bis [applyTo] unverändert. Lesen liefert den geplanten Stand, damit Walker und Prüfung dieselben Bytes sehen wie
- * nach dem Schreiben. Die Summe der geplanten Bytes ist durch [ScrubLimits.MAX_READ] begrenzt, so entsteht kein
- * Speicher in Abhängigkeit von der Dateigröße.
+ * nach dem Schreiben. Die Summe der geplanten Bytes ist durch [ScrubLimits.MAX_READ] begrenzt, die Zahl der Bereiche
+ * durch [ScrubLimits.MAX_PLANNED]. Das Lesen sucht über einen Index nach Anfangsoffset und nicht über alle Bereiche.
  */
 internal class PlanStore(
     private val base: ByteStore,
 ) : ByteStore {
     private class Planned(
+        val seq: Int,
         val offset: Long,
         val bytes: ByteArray,
     )
 
+    /** Alle Bereiche in Planungsreihenfolge (für [applyTo]). */
     private val planned = ArrayList<Planned>()
+
+    /** Bereiche nach Anfangsoffset. Für das Lesen genügt ein Teilbereich des Index. */
+    private val byStart = java.util.TreeMap<Long, MutableList<Planned>>()
+    private var maxPlannedLength = 0L
     private var plannedBytes = 0L
     private var truncatedTo: Long? = null
 
@@ -190,9 +195,18 @@ internal class PlanStore(
         count: Int,
     ): ByteArray {
         val out = base.read(offset, count)
-        for (entry in planned) {
+        if (planned.isEmpty()) return out
+        val end = offset + count
+        // Ein Bereich überlappt, wenn er vor [end] beginnt und nach [offset] endet. Er beginnt dann höchstens so weit
+        // vor [offset], wie der längste geplante Bereich ist.
+        val hits = ArrayList<Planned>()
+        for (list in byStart.subMap(offset - maxPlannedLength, true, end, false).values) {
+            for (entry in list) if (entry.offset + entry.bytes.size > offset) hits.add(entry)
+        }
+        hits.sortBy { it.seq }
+        for (entry in hits) {
             val from = maxOf(offset, entry.offset)
-            val to = minOf(offset + count, entry.offset + entry.bytes.size)
+            val to = minOf(end, entry.offset + entry.bytes.size)
             if (from < to) {
                 entry.bytes.copyInto(
                     out,
@@ -210,8 +224,13 @@ internal class PlanStore(
         bytes: ByteArray,
     ) {
         plannedBytes += bytes.size
-        if (plannedBytes > ScrubLimits.MAX_READ) bail(NotRemovableReason.STRUCTURE)
-        planned.add(Planned(offset, bytes.copyOf()))
+        if (plannedBytes > ScrubLimits.MAX_READ || planned.size >= ScrubLimits.MAX_PLANNED) {
+            bail(NotRemovableReason.STRUCTURE)
+        }
+        val entry = Planned(planned.size, offset, bytes.copyOf())
+        planned.add(entry)
+        byStart.getOrPut(offset) { ArrayList(1) }.add(entry)
+        maxPlannedLength = maxOf(maxPlannedLength, bytes.size.toLong())
     }
 
     /**
@@ -422,35 +441,6 @@ internal object LocationText {
             pos += count
         }
         return false
-    }
-}
-
-/** Dekomprimiert mit Größenlimit. Ein Überlauf oder defekte Daten gelten als nicht prüfbar (fail closed). */
-internal fun inflateLimited(
-    compressed: ByteArray,
-    limit: Int = ScrubLimits.MAX_TEXT,
-): ByteArray {
-    val inflater = Inflater()
-    try {
-        inflater.setInput(compressed)
-        val out = ByteArrayOutputStream()
-        val buffer = ByteArray(8192)
-        while (!inflater.finished()) {
-            val produced =
-                try {
-                    inflater.inflate(buffer)
-                } catch (defect: DataFormatException) {
-                    bail(NotRemovableReason.STRUCTURE)
-                }
-            if (produced == 0 && (inflater.needsInput() || inflater.needsDictionary())) {
-                bail(NotRemovableReason.STRUCTURE)
-            }
-            out.write(buffer, 0, produced)
-            if (out.size() > limit) bail(NotRemovableReason.STRUCTURE)
-        }
-        return out.toByteArray()
-    } finally {
-        inflater.end()
     }
 }
 

@@ -53,17 +53,18 @@ class PlanApplyTest {
 
     @Test
     fun planChangesAreNotWrittenWhenALaterChunkRefusesTheFile() {
-        // Der Standort im eXIf-Chunk wäre bereinigbar, aber ein komprimierter Text mit Standort nicht: keine Datei-Änderung.
+        // Der Standort im eXIf-Chunk wäre bereinigbar, aber ein unbekannter kritischer Chunk macht die Datei unlesbar
+        // (nicht bereinigbar, UNSUPPORTED): keine Datei-Änderung.
         val original =
             LocationFixtures.png(
                 LocationFixtures.pngChunk("eXIf", exifTiff().bytes),
-                LocationFixtures.pngChunk("zTXt", LocationFixtures.ztxtDeflated("Comment", "+48.8566+002.3522/")),
+                LocationFixtures.pngChunk("ABCD", ascii("kritisch")),
             )
         val store = RecordingStore(original)
 
         val result = LocationScrubber.scrubStore(store, png, sha256Hex(original))
 
-        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.COMPRESSED_TEXT), result)
+        assertEquals(LocationScrubResult.NotRemovable(NotRemovableReason.UNSUPPORTED), result)
         assertEquals("Kein einziger Schreibvorgang bei nicht bereinigbarer Datei", 0, store.writes)
         assertArrayEquals(original, store.bytes())
     }

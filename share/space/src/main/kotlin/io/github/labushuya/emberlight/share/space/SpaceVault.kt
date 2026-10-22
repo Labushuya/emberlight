@@ -212,7 +212,7 @@ class SpaceVault internal constructor(
      * behalten; Plan/Apply, ohne Sicherungskopie, ADR 0015), Dedupe und atomar übernehmen. Bei jeder Ablehnung und jedem
      * Abbruch bleibt keine Teildatei zurück. Ein Abbruch durch [ChunkSource] wird weitergereicht.
      *
-     * [keepLocation] ist die Einwilligung. Sie wirkt nur, wenn der Standort nicht sicher entfernt werden kann.
+     * [keepLocation] ist die Einwilligung. Mit ihr wird die Datei unverändert gespeichert (ADR 0015).
      */
     suspend fun ingest(
         uploader: Principal,
@@ -278,6 +278,8 @@ class SpaceVault internal constructor(
         keepLocation: Boolean,
         streamedSha256: String,
     ): Scrubbed {
+        // Mit Einwilligung bleibt die Datei unverändert (ADR 0015, Nachtrag 3.6d): keine Bereinigung, kein Schreiben.
+        if (keepLocation) return Scrubbed(streamedSha256, locationKept = true)
         val outcome = withContext(Dispatchers.IO) { LocationScrubber.scrub(temp.toFile(), format, streamedSha256) }
         return when (outcome) {
             is LocationScrubResult.Clean -> {
@@ -285,8 +287,7 @@ class SpaceVault internal constructor(
             }
 
             is LocationScrubResult.NotRemovable -> {
-                if (!keepLocation) throw Rejection(RejectReason.LocationNotRemovable(outcome.reason))
-                Scrubbed(streamedSha256, locationKept = true)
+                throw Rejection(RejectReason.LocationNotRemovable(outcome.reason))
             }
         }
     }
