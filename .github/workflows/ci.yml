@@ -1,8 +1,8 @@
-# CI: Prüft jeden Push auf main und jeden Pull Request auf main. Baut, lintet und testet das Projekt
-# (./gradlew check) und erzeugt die Debug-APK sowie eine unsignierte Release-APK, damit
-# R8-Probleme schon hier auffallen. Pull Requests laufen immer, auch bei reinen Doku-Änderungen,
-# weil der Check „Build, Lint und Tests“ Pflicht für main ist (Branch-Schutz). Auf dem Push-Pfad
-# sparen reine Doku-Änderungen Actions-Minuten.
+# CI: Prüft jeden Push auf main und jeden Pull Request auf main. Die Prüfungen laufen in zwei parallelen Jobs:
+# „Tests und Lint“ führt ./gradlew check aus (Lint, Tests, Screenshots, Coverage, Isolationsprüfungen),
+# „APK bauen“ erzeugt die Debug-APK sowie eine unsignierte Release-APK, damit R8-Probleme schon hier auffallen.
+# Der Job „Build, Lint und Tests“ wartet auf beide und ist der Pflicht-Check für main (Branch-Schutz).
+# Pull Requests laufen immer, auch bei reinen Doku-Änderungen. Auf dem Push-Pfad sparen reine Doku-Änderungen Actions-Minuten.
 name: CI
 
 on:
@@ -25,12 +25,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build, Lint und Tests
+  tests:
+    name: Tests und Lint
     runs-on: ubuntu-24.04
-    # 60 statt 45 min. Zusätzlich zur Ursachenbehebung: Die Werkzeuge dürfen im ungünstigen Fall bis 13 min brauchen
-    # (zwei Versuche à 6 min, Schritt-Limit 15). Der Build-Schritt lief in diesem PR 29 min (main 21 min). Mit 45 min
-    # hätte die Summe nicht sicher gereicht.
+    # 60 min, damit der Teiljob im ungünstigen Fall (kalter Gradle-Cache, große Änderung) nicht am Limit scheitert.
+    # Die Werkzeuge dürfen im ungünstigen Fall bis 13 min brauchen (zwei Versuche à 6 min, Schritt-Limit 15).
     timeout-minutes: 60
     # Ein früher sporadischer Lint-Absturz soll beim Wiederauftreten mit vollständigem Stacktrace im Log stehen
     # (Wiedervorlage in ADR 0001). Ohne diese Variable zeigt Lint nur die Kurzfassung.
@@ -86,6 +85,7 @@ jobs:
       # Gegenprobe der Standortentfernung (ADR 0015): Werkzeuge per Composite-Action, die auch release.yml (Test-Job) nutzt.
       # Eigenes Zeitlimit: Die Action wiederholt die Installation einmal (je 6 min). Ohne Limit hat ein langsamer Mirror
       # den ganzen Job-Zeitraum von 45 min verbraucht (PR #57). Scheitert der Schritt, bricht der Job ab, nie still.
+      # Nur in diesem Job: Der Job „APK bauen“ führt keine Tests aus und braucht die Werkzeuge nicht.
       - name: Werkzeuge für die Standort-Gegenprobe installieren
         timeout-minutes: 15
         uses: ./.github/actions/install-cross-check-tools
@@ -95,9 +95,10 @@ jobs:
         uses: ./.github/actions/browser-test-tools
 
       # Der frühere Schritt „Toolchains anzeigen“ war nur eine Ausgabe. Fehlt eine JDK, bricht dieser Build selbst ab.
-      # testForks=2 passt zu den 4 vCPU des Runners (ADR 0006).
-      - name: Build, Lint und Tests
-        run: ./gradlew check koverXmlReport assembleDebug assembleRelease -Pemberlight.testForks=2 -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+      # testForks=2 passt zu den 4 vCPU des Runners (ADR 0006). Die APK-Tasks laufen im Job „APK bauen“ (kein Verlust:
+      # die Aufgabenmenge beider Jobs ergibt zusammen die frühere Aufgabe ./gradlew check koverXmlReport assembleDebug assembleRelease).
+      - name: Tests, Lint und Coverage
+        run: ./gradlew check koverXmlReport -Pemberlight.testForks=2 -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
 
       # Gradle kürzt Ausnahmen im Log (nur Typ und Ort). Bei Fehlschlag die Meldungen aus den Testberichten in den Log schreiben.
       # Gegenprobe-Ausgabe (ADR 0015): ExifTool-Zeilen vorher und nachher je Format, aus dem Testbericht (Systemausgabe).
@@ -159,21 +160,6 @@ jobs:
           # Die Job-Zusammenfassung steht sonst nur in der Oberfläche. Im Log ist sie nachlesbar.
           cat "$summary"
 
-      # Die Artefakt-Uploads sind Komfort, kein Qualitätsnachweis. Build, Lint und Tests sind an dieser Stelle
-      # schon entschieden. Scheitert ein Upload (z. B. weil das Speicherkontingent des Accounts erschöpft ist),
-      # bleibt der Check grün. Der Fehler wird als Warnung und in der Job-Zusammenfassung sichtbar.
-      # Auf Pull Requests gibt es keinen Upload, damit dort kein Kontingent verbraucht wird.
-      - name: Debug-APK hochladen
-        id: upload-apk
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: emberlight-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 3
-          if-no-files-found: error
-
       - name: Reports bei Fehlschlag hochladen
         if: failure()
         continue-on-error: true
@@ -199,9 +185,75 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  apk:
+    name: APK bauen
+    runs-on: ubuntu-24.04
+    # Eigenes Limit. Der Job führt keine Tests aus und läuft parallel zu „Tests und Lint“.
+    timeout-minutes: 45
+    steps:
+      - name: Quellcode auschecken
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Gleiche Toolchains wie im Test-Job. Gradle läuft mit JDK 17, die 21 bleibt für die Toolchain-Auflösung verfügbar.
+      - name: JDK 21 und 17 einrichten
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            17
+
+      # Eigener Gradle-Cache dieses Jobs (kein Austausch mit dem Test-Job innerhalb desselben Laufs).
+      - name: Gradle einrichten
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      # Debug-APK und unsignierte Release-APK. R8 läuft hier mit, damit Probleme früh auffallen.
+      - name: APKs bauen
+        run: ./gradlew assembleDebug assembleRelease -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+
+      # Die Artefakt-Uploads sind Komfort, kein Qualitätsnachweis. Der Build ist an dieser Stelle schon entschieden.
+      # Scheitert ein Upload (z. B. weil das Speicherkontingent des Accounts erschöpft ist), bleibt der Check grün.
+      # Der Fehler wird als Warnung und in der Job-Zusammenfassung sichtbar.
+      # Auf Pull Requests gibt es keinen Upload, damit dort kein Kontingent verbraucht wird.
+      - name: Debug-APK hochladen
+        id: upload-apk
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: emberlight-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 3
+          if-no-files-found: error
+
       - name: Upload-Fehler melden
         if: always() && steps.upload-apk.outcome == 'failure'
         run: |
           set -euo pipefail
           echo "::warning title=Artefakt nicht hochgeladen::Debug-APK konnte nicht als Artefakt hochgeladen werden, vermutlich ist das Speicherkontingent des Accounts erschöpft. Der Build selbst ist erfolgreich."
           echo "Debug-APK konnte nicht als Artefakt hochgeladen werden, vermutlich ist das Speicherkontingent des Accounts erschöpft. Der Build selbst ist erfolgreich." >> "$GITHUB_STEP_SUMMARY"
+
+  # Pflicht-Check für main (Branch-Schutz, Name unverändert „Build, Lint und Tests“). Er wartet auf beide Teiljobs
+  # und ist nur grün, wenn beide erfolgreich sind. Ein abgebrochener oder fehlgeschlagener Teiljob macht ihn rot.
+  gate:
+    name: Build, Lint und Tests
+    needs: [tests, apk]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Ergebnis der Teiljobs prüfen
+        env:
+          TESTS_RESULT: ${{ needs.tests.result }}
+          APK_RESULT: ${{ needs.apk.result }}
+        run: |
+          set -uo pipefail
+          echo "Tests und Lint: ${TESTS_RESULT}, APK bauen: ${APK_RESULT}"
+          if [ "$TESTS_RESULT" != "success" ] || [ "$APK_RESULT" != "success" ]; then
+            echo "::error title=Build, Lint und Tests::Mindestens ein Teiljob ist nicht erfolgreich (Tests und Lint: ${TESTS_RESULT}, APK bauen: ${APK_RESULT})."
+            exit 1
+          fi
