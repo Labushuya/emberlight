@@ -142,6 +142,7 @@ abstract class SpaceRunScreenshotSupport {
             onRemoveRequest = {},
             onRotateRequest = {},
             onAcknowledgeInvite = {},
+            onCancelStart = {},
             onUploadCancel = {},
             onMediaFilter = {},
             onMediaOpen = {},

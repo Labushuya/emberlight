@@ -20,6 +20,14 @@ class SpaceRunController
             context.startService(SpaceServerService.stopIntent(context))
         }
 
+        /**
+         * Bricht den wartenden Start im Nachlauf ab (ADR 0017, Nachtrag 22.10.2026). Der Auftrag ist derselbe wie beim Beenden.
+         * Der Dienst unterscheidet am Zustand: Wartet ein Start, wird er abgebrochen. Sonst ist es ohne Wirkung.
+         */
+        fun cancelQueuedStart() {
+            context.startService(SpaceServerService.stopIntent(context))
+        }
+
         /** Bestätigt den Wechsel in ein neues WLAN. Der Server bindet dann an die neue Adresse. */
         fun confirmNetwork() {
             context.startService(SpaceServerService.confirmNetworkIntent(context))

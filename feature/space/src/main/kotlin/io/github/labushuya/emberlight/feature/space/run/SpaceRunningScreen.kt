@@ -120,6 +120,7 @@ internal fun SpaceRunningScreen(
         SpaceRunningContent(
             state = state,
             onEnd = { showEndDialog = true },
+            onCancelStart = viewModel::cancelQueuedStart,
             onConfirmNetwork = viewModel::confirmNetwork,
             onAcknowledgePause = viewModel::acknowledgePauses,
             onResume = viewModel::resume,
@@ -252,6 +253,7 @@ internal fun SpaceRunningContent(
     onMediaFilter: (MediaFilter) -> Unit,
     onMediaOpen: (HostMediaItem) -> Unit,
     onExtend: () -> Unit,
+    onCancelStart: () -> Unit,
     modifier: Modifier = Modifier,
     upload: HostUploadUiState = HostUploadUiState(),
     media: HostMediaUiState = HostMediaUiState(),
@@ -400,11 +402,17 @@ internal fun SpaceRunningContent(
                 Spacer(Modifier.height(8.dp))
             }
 
-            if (running) {
-                // Während der Start im Nachlauf wartet, gibt es nichts zu beenden: der Dienst hat den Lauf noch nicht.
+            if (state.startQueued && state.runState !is RunState.Running) {
+                // Der Start wartet im Nachlauf: Es gibt nichts zu beenden, der wartende Start lässt sich aber abbrechen (ADR 0017).
+                OutlinedButton(
+                    onClick = onCancelStart,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.space_running_cancel_queued))
+                }
+            } else if (running) {
                 OutlinedButton(
                     onClick = onEnd,
-                    enabled = !state.startQueued,
                     modifier = Modifier.fillMaxWidth(),
                     colors =
                         androidx.compose.material3.ButtonDefaults.outlinedButtonColors(

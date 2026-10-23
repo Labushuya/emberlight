@@ -203,6 +203,11 @@ class SpaceRunningViewModel
             controller.end()
         }
 
+        /** Bricht den wartenden Start ab. Ohne Bestätigung: Es ist dabei nichts gelaufen, und der Space wird nur Entwurf. */
+        fun cancelQueuedStart() {
+            controller.cancelQueuedStart()
+        }
+
         /**
          * Verlängert den laufenden Space (Paket 3.6a). Liefert den Grund, wenn die Regel nicht gilt (30 Tage ab Start, Ende in der
          * Zukunft, nach dem bisherigen Ende, aktiver Space). Sonst `null`: der Dienst speichert die neue Endzeit.

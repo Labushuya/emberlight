@@ -75,6 +75,11 @@ class SpaceServerService : Service() {
 
     private val networkProvider: WifiNetworkProvider by lazy { networkFactory(this) }
 
+    /** Der wartende Start im Nachlauf, über Prozess-Tod hinweg gemerkt (ADR 0017, Nachtrag 22.10.2026). */
+    private val queuedStarts: QueuedStartStore by lazy {
+        QueuedStartStore(getSharedPreferences(QUEUED_START_PREFS, MODE_PRIVATE))
+    }
+
     override fun onCreate() {
         super.onCreate()
         runnerJob = runner.run()
@@ -148,11 +153,13 @@ class SpaceServerService : Service() {
      * Start, endet der Dienst. Der Space bleibt `ACTIVE` und unterbrochen (ADR 0017).
      */
     private fun restartAfterProcessDeath(startId: Int) {
-        if (beats.load() == null) {
+        val queued = queuedStarts.queued()
+        if (queued == null && beats.load() == null) {
             stopSelf(startId)
             return
         }
-        if (!ensureForeground()) {
+        // Ein wartender Start braucht keinen Vordergrund: Der Verarbeiter setzt ihn nur auf Entwurf zurück (ADR 0017).
+        if (queued == null && !ensureForeground()) {
             Log.w(TAG, "Neustart ohne Vordergrund: der Space bleibt unterbrochen.")
             stopSelf(startId)
             return
@@ -315,14 +322,30 @@ class SpaceServerService : Service() {
 
                 RunEvent.StartQueued -> {
                     startQueuedFlow.value = true
-                    postAlert(getString(R.string.space_server_start_queued))
+                    postAlert(getString(R.string.space_server_start_queued), notificationId = QUEUED_NOTIFICATION_ID)
                 }
 
                 RunEvent.StartQueueEnded -> {
+                    // Der Start ist entschieden (gestartet, verweigert, abgebrochen oder verworfen). Die Meldung „wartet“ fällt weg.
                     startQueuedFlow.value = false
+                    NotificationManagerCompat.from(this@SpaceServerService).cancel(QUEUED_NOTIFICATION_ID)
+                }
+
+                RunEvent.StartCancelled -> {
+                    postAlert(getString(R.string.space_server_start_cancelled))
                 }
             }
         }
+
+        override fun markQueued(spaceId: SpaceId) {
+            queuedStarts.mark(spaceId)
+        }
+
+        override fun clearQueued() {
+            queuedStarts.clear()
+        }
+
+        override fun queuedStart(): SpaceId? = queuedStarts.queued()
 
         override fun onClosing() {
             // Der Server läuft noch für den Nachlauf. Die Dauermeldung sagt das, „Beenden“ entfällt.
@@ -618,6 +641,8 @@ class SpaceServerService : Service() {
         private const val END_WARNING_NOTIFICATION_ID = 4713
         private const val END_ENDED_NOTIFICATION_ID = 4714
         private const val END_NOTICE_PREFS = "emberlight.end-notices"
+        private const val QUEUED_START_PREFS = "emberlight.queued-start"
+        private const val QUEUED_NOTIFICATION_ID = 4715
         private const val REQUEST_OPEN_SPACE = 1
         private const val REQUEST_CONFIRM_END = 2
         private const val REQUEST_EXPIRY = 3
