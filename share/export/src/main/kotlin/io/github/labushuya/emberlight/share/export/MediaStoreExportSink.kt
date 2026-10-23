@@ -1,5 +1,6 @@
 package io.github.labushuya.emberlight.share.export
 
+import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
@@ -10,6 +11,7 @@ import android.os.Environment
 import android.os.StatFs
 import android.provider.MediaStore
 import android.provider.MediaStore.MediaColumns
+import androidx.core.net.toUri
 import io.github.labushuya.emberlight.share.space.export.ExportFileMeta
 import io.github.labushuya.emberlight.share.space.export.ExportHandle
 import io.github.labushuya.emberlight.share.space.export.ExportNames
@@ -35,7 +37,11 @@ import kotlin.coroutines.resume
  *
  * Verwirft die Kopie bei [discard] vollständig: Eintrag und Datei werden gelöscht. Das betrifft nur Kopien, die dieses
  * Modul angelegt hat, nie Dateien im Space.
+ *
+ * Die Q-Pfade (content-Adressen) entstehen nur ab Android 10, weil nur dort [create] eine solche Adresse liefert. Lint
+ * erkennt diese Verzweigung nicht. Ströme gehen an den Aufrufer, der sie mit use schließt.
  */
+@SuppressLint("InlinedApi", "NewApi", "Recycle")
 class MediaStoreExportSink(
     context: Context,
 ) : ExportSink {
@@ -87,20 +93,20 @@ class MediaStoreExportSink(
 
     override suspend fun openOutput(handle: ExportHandle): OutputStream =
         withContext(Dispatchers.IO) {
-            val uri = Uri.parse(handle.uri)
+            val uri = handle.uri.toUri()
             if (uri.scheme == "file") return@withContext FileOutputStream(File(requireNotNull(uri.path)))
             resolver.openOutputStream(uri, "w") ?: throw IOException("Die Kopie ist nicht beschreibbar.")
         }
 
     override suspend fun openInput(handle: ExportHandle): InputStream =
         withContext(Dispatchers.IO) {
-            val uri = Uri.parse(handle.uri)
+            val uri = handle.uri.toUri()
             if (uri.scheme == "file") return@withContext File(requireNotNull(uri.path)).inputStream()
             resolver.openInputStream(uri) ?: throw IOException("Die Kopie ist nicht lesbar.")
         }
 
     override suspend fun publish(handle: ExportHandle) {
-        val uri = Uri.parse(handle.uri)
+        val uri = handle.uri.toUri()
         if (uri.scheme == "file") {
             // Bis Android 9 zählt der Medienindex die Datei. Sichtbar wird sie nach dem Scan.
             scan(requireNotNull(uri.path))
@@ -112,7 +118,7 @@ class MediaStoreExportSink(
     }
 
     override suspend fun discard(handle: ExportHandle) {
-        val uri = Uri.parse(handle.uri)
+        val uri = handle.uri.toUri()
         withContext(Dispatchers.IO) {
             if (uri.scheme == "file") {
                 File(requireNotNull(uri.path)).delete()

@@ -131,15 +131,13 @@ class SpaceExportWorker(
         total: Int,
     ): ForegroundInfo {
         val manager = applicationContext.getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    applicationContext.getString(R.string.space_export_channel),
-                    NotificationManager.IMPORTANCE_LOW,
-                ),
-            )
-        }
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                applicationContext.getString(R.string.space_export_channel),
+                NotificationManager.IMPORTANCE_LOW,
+            ),
+        )
         val notification =
             NotificationCompat
                 .Builder(applicationContext, CHANNEL_ID)
@@ -155,7 +153,11 @@ class SpaceExportWorker(
                         .getInstance(applicationContext)
                         .createCancelPendingIntent(id),
                 ).build()
-        return ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            ForegroundInfo(NOTIFICATION_ID, notification)
+        }
     }
 
     companion object {

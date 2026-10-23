@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Liste -->
     <string name="space_empty_title">No space yet</string>
@@ -429,15 +429,15 @@
     <string name="space_export_hint">The selected media are copied to Pictures/Emberlight/&lt;space&gt;. The copies stay in the gallery after the space is deleted.</string>
     <string name="space_export_all">All</string>
     <string name="space_export_none">None</string>
-    <string name="space_export_summary">%1$d selected · %2$s</string>
+    <string name="space_export_summary" tools:ignore="PluralsCandidate">%1$d selected · %2$s</string>
     <string name="space_export_start">Save</string>
     <string name="space_export_cancel">Cancel</string>
     <string name="space_export_already">Already saved</string>
     <string name="space_export_location">Contains location</string>
-    <string name="space_export_progress">%1$d of %2$d files · %3$s</string>
-    <string name="space_export_done">%1$d saved, %2$d already there, %3$d failed</string>
-    <string name="space_export_done_purged">The space is being deleted. The save stopped after %1$d files.</string>
-    <string name="space_export_no_space">Not enough space. Needed: %1$s, free: %2$s. The 2 GiB reserve is included.</string>
+    <string name="space_export_progress" tools:ignore="PluralsCandidate">%1$d of %2$d files · %3$s</string>
+    <string name="space_export_done" tools:ignore="PluralsCandidate">%1$d saved, %2$d already there, %3$d failed</string>
+    <string name="space_export_done_purged" tools:ignore="PluralsCandidate">The space is being deleted. The save stopped after %1$d files.</string>
+    <string name="space_export_no_space" tools:ignore="PluralsCandidate">Not enough space. Needed: %1$s, free: %2$s. The 2 GiB reserve is included.</string>
     <string name="space_export_failed_hash">The check failed, the copy was discarded.</string>
     <string name="space_export_failed_write">The file could not be written.</string>
     <string name="space_export_failed_missing">The file is missing in the space.</string>
@@ -447,7 +447,7 @@
     <string name="space_export_none_selected">Nothing selected yet.</string>
     <string name="space_export_empty">This space has no media yet.</string>
     <string name="space_export_channel">Save to gallery</string>
-    <string name="space_export_notification_text">%1$d of %2$d files</string>
+    <string name="space_export_notification_text" tools:ignore="PluralsCandidate">%1$d of %2$d files</string>
     <string name="space_export_cancelled">The save was cancelled.</string>
     <string name="space_export_failed">The save could not be started.</string>
     <string name="space_export_kind_image">Image</string>

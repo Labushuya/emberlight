@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Liste -->
     <string name="space_empty_title">Noch kein Space</string>
@@ -433,15 +433,15 @@
     <string name="space_export_hint">Die gewählten Medien werden nach Pictures/Emberlight/&lt;Space&gt; kopiert. Die Kopien bleiben auch nach dem Löschen des Space in der Galerie.</string>
     <string name="space_export_all">Alle</string>
     <string name="space_export_none">Nichts</string>
-    <string name="space_export_summary">%1$d ausgewählt · %2$s</string>
+    <string name="space_export_summary" tools:ignore="PluralsCandidate">%1$d ausgewählt · %2$s</string>
     <string name="space_export_start">Übernehmen</string>
     <string name="space_export_cancel">Abbrechen</string>
     <string name="space_export_already">Bereits übernommen</string>
     <string name="space_export_location">Standort enthalten</string>
-    <string name="space_export_progress">%1$d von %2$d Dateien · %3$s</string>
-    <string name="space_export_done">%1$d übernommen, %2$d bereits vorhanden, %3$d mit Fehler</string>
-    <string name="space_export_done_purged">Der Space wird gelöscht. Die Übernahme ist nach %1$d Dateien angehalten.</string>
-    <string name="space_export_no_space">Nicht genug Platz. Benötigt: %1$s, frei: %2$s. Die 2-GiB-Reserve ist enthalten.</string>
+    <string name="space_export_progress" tools:ignore="PluralsCandidate">%1$d von %2$d Dateien · %3$s</string>
+    <string name="space_export_done" tools:ignore="PluralsCandidate">%1$d übernommen, %2$d bereits vorhanden, %3$d mit Fehler</string>
+    <string name="space_export_done_purged" tools:ignore="PluralsCandidate">Der Space wird gelöscht. Die Übernahme ist nach %1$d Dateien angehalten.</string>
+    <string name="space_export_no_space" tools:ignore="PluralsCandidate">Nicht genug Platz. Benötigt: %1$s, frei: %2$s. Die 2-GiB-Reserve ist enthalten.</string>
     <string name="space_export_failed_hash">Die Prüfung ist fehlgeschlagen, die Kopie wurde verworfen.</string>
     <string name="space_export_failed_write">Die Datei konnte nicht geschrieben werden.</string>
     <string name="space_export_failed_missing">Die Datei fehlt im Space.</string>
@@ -451,7 +451,7 @@
     <string name="space_export_none_selected">Noch nichts ausgewählt.</string>
     <string name="space_export_empty">Dieser Space hat noch keine Medien.</string>
     <string name="space_export_channel">In Galerie übernehmen</string>
-    <string name="space_export_notification_text">%1$d von %2$d Dateien</string>
+    <string name="space_export_notification_text" tools:ignore="PluralsCandidate">%1$d von %2$d Dateien</string>
     <string name="space_export_cancelled">Die Übernahme wurde abgebrochen.</string>
     <string name="space_export_failed">Die Übernahme konnte nicht gestartet werden.</string>
     <string name="space_export_kind_image">Bild</string>
