@@ -69,7 +69,15 @@ fun NavGraphBuilder.spacesScreens(
     onBack: () -> Unit = {},
 ) {
     composable<SpacesRoute> {
-        SpacesScreen(onCreate = onCreate, onOpen = onOpen, onEdit = onEdit, onTemplate = onTemplate)
+        SpacesScreen(
+            onCreate = onCreate,
+            onOpen = onOpen,
+            onEdit = onEdit,
+            onTemplate = onTemplate,
+            onStart = onStart,
+            onSetup = onSetup,
+            onOpenRunning = onOpenRunning,
+        )
     }
     composable<SpaceDetailRoute> {
         SpaceDetailScreen(

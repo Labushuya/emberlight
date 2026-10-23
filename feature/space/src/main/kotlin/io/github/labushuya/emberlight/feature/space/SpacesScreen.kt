@@ -62,6 +62,9 @@ internal const val SPACES_LIST_TAG = "spaces-list"
  */
 @Composable
 internal fun SpacesScreen(
+    onStart: (String) -> Unit,
+    onSetup: (String) -> Unit,
+    onOpenRunning: (String) -> Unit,
     modifier: Modifier = Modifier,
     onCreate: () -> Unit = {},
     onOpen: (String) -> Unit = {},
@@ -109,6 +112,9 @@ internal fun SpacesScreen(
                         notificationsAllowed = detailViewModel.notificationsAllowed,
                         purgeFailed = purgeFailed,
                         confirmPurgeOnOpen = detailViewModel.confirmPurgeRequested,
+                        onStart = onStart,
+                        onSetup = onSetup,
+                        onOpenRunning = onOpenRunning,
                     )
                 }
             }
