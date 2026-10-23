@@ -28,7 +28,10 @@ jobs:
   build:
     name: Build, Lint und Tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # 60 statt 45 min. Zusätzlich zur Ursachenbehebung: Die Werkzeuge dürfen im ungünstigen Fall bis 13 min brauchen
+    # (zwei Versuche à 6 min, Schritt-Limit 15). Der Build-Schritt lief in diesem PR 29 min (main 21 min). Mit 45 min
+    # hätte die Summe nicht sicher gereicht.
+    timeout-minutes: 60
     # Ein früher sporadischer Lint-Absturz soll beim Wiederauftreten mit vollständigem Stacktrace im Log stehen
     # (Wiedervorlage in ADR 0001). Ohne diese Variable zeigt Lint nur die Kurzfassung.
     env:
