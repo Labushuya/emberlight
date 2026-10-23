@@ -57,6 +57,29 @@ internal fun SpaceExportScreen(
     viewModel: SpaceExportViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    SpaceExportContent(
+        state = state,
+        onBack = onBack,
+        onAll = viewModel::selectAll,
+        onNone = viewModel::selectNone,
+        onToggle = viewModel::toggle,
+        onStart = viewModel::start,
+        onCancel = viewModel::cancel,
+    )
+}
+
+/** Zustandslose Oberfläche der Auswahl. Der Einstieg ist [SpaceExportScreen]; Goldens und Tests nutzen diesen Teil direkt. */
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+internal fun SpaceExportContent(
+    state: SpaceExportUiState,
+    onBack: () -> Unit,
+    onAll: () -> Unit,
+    onNone: () -> Unit,
+    onToggle: (String) -> Unit,
+    onStart: () -> Unit,
+    onCancel: () -> Unit,
+) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -89,8 +112,8 @@ internal fun SpaceExportScreen(
                 selectedCount = state.selectedCount,
                 selectedBytes = state.selectedBytes,
                 withLocation = state.withLocationCount,
-                onAll = viewModel::selectAll,
-                onNone = viewModel::selectNone,
+                onAll = onAll,
+                onNone = onNone,
             )
             HorizontalDivider()
             when {
@@ -115,7 +138,7 @@ internal fun SpaceExportScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(state.items, key = { it.mediaId }) { item ->
-                            MediaTile(item = item, onToggle = { viewModel.toggle(item.mediaId) })
+                            MediaTile(item = item, onToggle = { onToggle(item.mediaId) })
                         }
                     }
                 }
@@ -123,8 +146,8 @@ internal fun SpaceExportScreen(
             PhaseArea(
                 phase = state.phase,
                 canStart = state.canStart,
-                onStart = viewModel::start,
-                onCancel = viewModel::cancel,
+                onStart = onStart,
+                onCancel = onCancel,
             )
         }
     }
