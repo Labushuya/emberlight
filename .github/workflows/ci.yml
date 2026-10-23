@@ -16,9 +16,22 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      ohne_build_cache:
+        description: 'Kalter Lauf: Gradle-Build-Cache aus (--no-build-cache), alle Tasks laufen wirklich'
+        type: boolean
+        default: false
+  # Wöchentlicher Lauf auf main ohne Build-Cache (sonntags 02:17 UTC). Er fängt Fehler, die ein gecachtes
+  # Testergebnis verdecken würde. Geplante Läufe starten immer auf dem Default-Branch main.
+  schedule:
+    - cron: '17 2 * * 0'
 
 permissions:
   contents: read
+
+# Gradle-Flag für diesen Lauf: Bei Zeitplan oder bei gesetztem Dispatch-Input ohne Build-Cache, sonst kein Flag.
+env:
+  GRADLE_CACHE_FLAGS: ${{ (github.event_name == 'schedule' || inputs.ohne_build_cache) && '--no-build-cache' || '' }}
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -98,7 +111,7 @@ jobs:
       # testForks=2 passt zu den 4 vCPU des Runners (ADR 0006). Die APK-Tasks laufen im Job „APK bauen“ (kein Verlust:
       # die Aufgabenmenge beider Jobs ergibt zusammen die frühere Aufgabe ./gradlew check koverXmlReport assembleDebug assembleRelease).
       - name: Tests, Lint und Coverage
-        run: ./gradlew check koverXmlReport -Pemberlight.testForks=2 -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+        run: ./gradlew check koverXmlReport $GRADLE_CACHE_FLAGS -Pemberlight.testForks=2 -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
 
       # Gradle kürzt Ausnahmen im Log (nur Typ und Ort). Bei Fehlschlag die Meldungen aus den Testberichten in den Log schreiben.
       # Gegenprobe-Ausgabe (ADR 0015): ExifTool-Zeilen vorher und nachher je Format, aus dem Testbericht (Systemausgabe).
@@ -213,7 +226,7 @@ jobs:
 
       # Debug-APK und unsignierte Release-APK. R8 läuft hier mit, damit Probleme früh auffallen.
       - name: APKs bauen
-        run: ./gradlew assembleDebug assembleRelease -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
+        run: ./gradlew assembleDebug assembleRelease $GRADLE_CACHE_FLAGS -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 -Dorg.gradle.java.installations.auto-download=false
 
       # Die Artefakt-Uploads sind Komfort, kein Qualitätsnachweis. Der Build ist an dieser Stelle schon entschieden.
       # Scheitert ein Upload (z. B. weil das Speicherkontingent des Accounts erschöpft ist), bleibt der Check grün.
