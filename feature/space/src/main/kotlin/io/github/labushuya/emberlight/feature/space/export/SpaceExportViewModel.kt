@@ -45,6 +45,9 @@ data class ExportResultUi(
     val skipped: Int,
     val failed: Int,
     val failedHash: Int,
+    val failedWrite: Int = 0,
+    val failedMissing: Int = 0,
+    val failedUnknown: Int = 0,
     val stoppedByPurge: Boolean,
 )
 
@@ -239,6 +242,9 @@ class SpaceExportViewModel
                                         skipped = out.getInt(SpaceExportQueue.OUT_SKIPPED, 0),
                                         failed = out.getInt(SpaceExportQueue.OUT_FAILED, 0),
                                         failedHash = out.getInt(SpaceExportQueue.OUT_FAILED_HASH, 0),
+                                        failedWrite = out.getInt(SpaceExportQueue.OUT_FAILED_WRITE, 0),
+                                        failedMissing = out.getInt(SpaceExportQueue.OUT_FAILED_MISSING, 0),
+                                        failedUnknown = out.getInt(SpaceExportQueue.OUT_FAILED_UNKNOWN, 0),
                                         stoppedByPurge = out.getBoolean(SpaceExportQueue.OUT_STOPPED_BY_PURGE, false),
                                     ),
                                 )

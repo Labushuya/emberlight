@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.feature.space.export
 
 import android.text.format.Formatter
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -251,9 +252,21 @@ private fun PhaseArea(
     val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         when (phase) {
-            ExportPhase.Idle -> {}
+            ExportPhase.Idle -> {
+                if (!canStart) {
+                    Text(
+                        text = stringResource(R.string.space_export_none_selected),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
 
             is ExportPhase.Running -> {
+                Text(
+                    text = stringResource(R.string.space_export_running),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(4.dp))
                 val fraction =
                     if (phase.totalBytes > 0) (phase.doneBytes.toFloat() / phase.totalBytes).coerceIn(0f, 1f) else 0f
                 LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
@@ -298,11 +311,16 @@ private fun PhaseArea(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 if (result.failedHash > 0) {
-                    Text(
-                        text = stringResource(R.string.space_export_failed_hash),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    FailureReason(R.string.space_export_failed_hash)
+                }
+                if (result.failedWrite > 0) {
+                    FailureReason(R.string.space_export_failed_write)
+                }
+                if (result.failedMissing > 0) {
+                    FailureReason(R.string.space_export_failed_missing)
+                }
+                if (result.failedUnknown > 0) {
+                    FailureReason(R.string.space_export_failed_unknown)
                 }
             }
 
@@ -333,4 +351,16 @@ private fun PhaseArea(
             }
         }
     }
+}
+
+/** Ein Grund für fehlgeschlagene Dateien im Ergebnis. Die Zahl steht im Satz „… mit Fehler“. */
+@Composable
+private fun FailureReason(
+    @StringRes text: Int,
+) {
+    Text(
+        text = stringResource(text),
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
