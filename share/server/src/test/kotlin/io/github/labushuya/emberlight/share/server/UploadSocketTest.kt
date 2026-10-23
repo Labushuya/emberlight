@@ -152,7 +152,8 @@ class UploadSocketTest {
                 ),
             )
 
-        assertEquals(413, response.status)
+        // Die Meldung nennt Status und Antwortanfang, damit ein Fehlschlag im CI erklärbar bleibt.
+        assertEquals("Status ${response.status}, Antwort: ${response.body.take(300)}", 413, response.status)
         assertTrue(response.body.contains("payload_too_large"))
         assertEquals(0, storedFiles())
     }

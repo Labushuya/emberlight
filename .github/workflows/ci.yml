@@ -81,7 +81,10 @@ jobs:
           key: robolectric-${{ steps.robolectric.outputs.version }}-sdk${{ steps.robolectric.outputs.sdk }}-${{ runner.os }}
 
       # Gegenprobe der Standortentfernung (ADR 0015): Werkzeuge per Composite-Action, die auch release.yml (Test-Job) nutzt.
+      # Eigenes Zeitlimit: Die Action wiederholt die Installation einmal (je 6 min). Ohne Limit hat ein langsamer Mirror
+      # den ganzen Job-Zeitraum von 45 min verbraucht (PR #57). Scheitert der Schritt, bricht der Job ab, nie still.
       - name: Werkzeuge für die Standort-Gegenprobe installieren
+        timeout-minutes: 15
         uses: ./.github/actions/install-cross-check-tools
 
       # Node 24 und Chrome für die Browser-Tests der Gäste-Seite (ADR 0019). Fehlt Chrome, bricht der Test mit CI=true ab.
