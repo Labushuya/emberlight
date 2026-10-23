@@ -10,9 +10,16 @@ import io.github.labushuya.emberlight.feature.space.run.SpaceRunningScreen
 import io.github.labushuya.emberlight.feature.space.setup.SpaceSetupScreen
 import kotlinx.serialization.Serializable
 
-/** Typsichere Route der Spaces-Liste. Auf großen Displays steht das Detail daneben, auf dem Handy als eigenes Ziel. */
+/**
+ * Typsichere Route der Spaces-Liste. Auf großen Displays steht das Detail daneben, auf dem Handy als eigenes Ziel. [id]
+ * wählt auf großen Displays den Space im Detail daneben, [confirmPurge] öffnet dort die Bestätigung „Jetzt löschen“. Die
+ * Namen entsprechen [SpaceDetailRoute], damit das Detail dieselben Argumente aus dem Stapel liest (Härtung vor rc.1).
+ */
 @Serializable
-data object SpacesRoute
+data class SpacesRoute(
+    val id: String? = null,
+    val confirmPurge: Boolean = false,
+)
 
 /**
  * Detail eines Space. [id] ist die Kennung als Text (Base64url, 22 Zeichen). [confirmPurge] öffnet direkt die Bestätigung
@@ -59,23 +66,25 @@ data class SpaceRunningRoute(
  * Die Liste liegt als Ziel der Navigationsleiste (ADR 0002).
  */
 fun NavGraphBuilder.spacesScreens(
-    onCreate: () -> Unit = {},
-    onOpen: (String) -> Unit = {},
-    onEdit: (String) -> Unit = {},
-    onStart: (String) -> Unit = {},
-    onSetup: (String) -> Unit = {},
-    onOpenRunning: (String) -> Unit = {},
-    onRunning: (String) -> Unit = {},
-    onTemplate: (String) -> Unit = {},
-    onExport: (String) -> Unit = {},
-    onBack: () -> Unit = {},
+    onCreate: () -> Unit,
+    onOpen: (String) -> Unit,
+    onEdit: (String) -> Unit,
+    onStart: (String) -> Unit,
+    onSetup: (String) -> Unit,
+    onOpenRunning: (String) -> Unit,
+    onRunning: (String) -> Unit,
+    onTemplate: (String) -> Unit,
+    onExport: (String) -> Unit,
+    onBack: () -> Unit,
 ) {
-    composable<SpacesRoute> {
+    composable<SpacesRoute> { entry ->
         SpacesScreen(
+            initialSelectedId = entry.toRoute<SpacesRoute>().id,
             onCreate = onCreate,
             onOpen = onOpen,
             onEdit = onEdit,
             onTemplate = onTemplate,
+            onExport = onExport,
             onStart = onStart,
             onSetup = onSetup,
             onOpenRunning = onOpenRunning,
@@ -113,7 +122,30 @@ fun NavGraphBuilder.spacesScreens(
 }
 
 fun NavController.navigateToSpaces(navOptions: NavOptions? = null) {
-    navigate(route = SpacesRoute, navOptions = navOptions)
+    navigate(route = SpacesRoute(), navOptions = navOptions)
+}
+
+/**
+ * Öffnet die Liste mit dem Space [id] im Detail daneben (breite Displays, Härtung vor rc.1). Die Liste steht danach als Ziel
+ * im Stapel. Ein vorhandener Listeneintrag wird ersetzt, damit er nicht doppelt liegt.
+ */
+fun NavController.navigateToSpacesSelecting(
+    id: String,
+    confirmPurge: Boolean = false,
+) {
+    navigate(route = SpacesRoute(id = id, confirmPurge = confirmPurge)) {
+        popUpTo<SpacesRoute> { inclusive = true }
+    }
+}
+
+/**
+ * Öffnet die Liste als Ziel im Stapel, ohne Auswahl (Handy). Danach führt „Zurück“ aus dem Detail zur Liste und von dort zur
+ * Galerie oder zum Ziel, das davor lag (Härtung vor rc.1).
+ */
+fun NavController.navigateToSpacesList() {
+    navigate(route = SpacesRoute()) {
+        popUpTo<SpacesRoute> { inclusive = true }
+    }
 }
 
 fun NavController.navigateToSpaceDetail(

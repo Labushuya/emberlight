@@ -19,9 +19,9 @@ import io.github.labushuya.emberlight.feature.gallery.viewer.ViewerPlaybackViewM
 // Der Wiedergabe-Halter gehört dem Ziel und wird nur bis zum Overlay weitergereicht (ADR 0010).
 @Suppress("ktlint:compose:vm-forwarding-check")
 internal fun GalleryScreen(
+    onAlbumClick: (Long?) -> Unit,
+    onAbout: () -> Unit,
     modifier: Modifier = Modifier,
-    onAlbumClick: (Long?) -> Unit = {},
-    onAbout: () -> Unit = {},
     viewModel: GalleryViewModel = hiltViewModel(),
     playback: ViewerPlaybackViewModel = hiltViewModel(),
     details: ViewerDetailsViewModel = hiltViewModel(),

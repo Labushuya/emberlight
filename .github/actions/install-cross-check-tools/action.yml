@@ -2,22 +2,63 @@
 # dem x265-Plugin) und avifenc (AVIF). Der Test in share:space (ExternalToolCrossCheckTest) bricht ohne sie ab, weil
 # CI=true gesetzt ist. Verwendet von ci.yml und vom Test-Job in release.yml. Nur dort, nie auf dem Rechner der Entwicklung.
 # Paketnamen geprüft für ubuntu-latest (noble, 24.04): libheif-examples 1.17.6, libheif-plugin-x265 1.17.6, libavif-bin 1.0.4.
-# Diese Action braucht einen vorherigen Checkout des Repositorys (lokaler Pfad). Keine uses:-Zeilen, daher keine SHA-Pflicht.
+# Diese Action braucht einen vorherigen Checkout des Repositorys (lokaler Pfad).
+# Die einzige uses:-Zeile ist der Cache (actions/cache, SHA wie in ci.yml). Sie legt die .deb-Dateien ab, damit ein
+# langsamer Paket-Mirror nicht bei jedem Lauf 25 bis 30 Minuten kostet (PR #57, Lauf 39941836624).
+# Hinweis: Der Job-Schritt, der diese Action aufruft, hat in ci.yml ein eigenes timeout-minutes.
 name: Werkzeuge für die Standort-Gegenprobe installieren
 description: ExifTool, ffmpeg, libheif und libavif per apt für den Test ExternalToolCrossCheckTest installieren.
 
 runs:
   using: composite
   steps:
+    - name: Apt-Pakete aus dem Cache holen
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/apt-debs
+        key: apt-gegenprobe-noble-v1
+
     - name: Werkzeuge installieren
       shell: bash
       run: |
         set -euo pipefail
-        sudo apt-get update -y
-        sudo apt-get install -y --no-install-recommends \
-          libimage-exiftool-perl ffmpeg libheif-examples libheif-plugin-x265 libavif-bin
+        pkgs=(libimage-exiftool-perl ffmpeg libheif-examples libheif-plugin-x265 libavif-bin)
+
+        # Gecachte .deb-Dateien ins apt-Archiv legen. apt prüft sie gegen den Index und lädt nur die fehlenden nach.
+        if compgen -G "$HOME/apt-debs/*.deb" > /dev/null; then
+          sudo cp "$HOME"/apt-debs/*.deb /var/cache/apt/archives/
+        fi
+
+        # Jeder Versuch hat ein Zeitlimit. Fertig geladene .deb-Dateien bleiben im Archiv und zählen beim zweiten Versuch.
+        install_tools() {
+          timeout 6m sudo apt-get update -y
+          timeout 6m sudo apt-get install -y --no-install-recommends "${pkgs[@]}"
+        }
+        installed=0
+        for attempt in 1 2; do
+          if install_tools; then
+            installed=1
+            break
+          fi
+          echo "::warning title=Werkzeuge::Versuch ${attempt} der Installation ist fehlgeschlagen oder hat das Zeitlimit erreicht."
+          sudo dpkg --configure -a || true
+        done
+        if [ "$installed" -ne 1 ]; then
+          echo "::error title=Standort-Gegenprobe::Die Werkzeuge sind nach zwei Versuchen nicht installiert. Ohne sie bricht der Test mit CI=true ab."
+          exit 1
+        fi
+
+        # Die Gegenprobe ist Pflicht. Fehlt ein Werkzeug, bricht der Schritt ab und nicht erst der Test.
+        for tool in exiftool ffmpeg heif-enc avifenc; do
+          command -v "$tool" > /dev/null || { echo "::error title=Standort-Gegenprobe::${tool} fehlt nach der Installation."; exit 1; }
+        done
         exiftool -ver
         ffmpeg -version | head -1
-        # Nur zur Protokollierung. Fehlt ein Werkzeug, bricht der Test in share:space mit CI=true ab.
         heif-enc --version 2>&1 | head -1 || true
         avifenc --version 2>&1 | head -1 || true
+
+        # Für den Cache: die .deb-Dateien sichern. Gespeichert wird nur bei Erfolg des Jobs.
+        mkdir -p "$HOME/apt-debs"
+        if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
+          cp /var/cache/apt/archives/*.deb "$HOME/apt-debs/"
+        fi

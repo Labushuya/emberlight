@@ -16,8 +16,8 @@ data object GalleryRoute
  * (ADR 0010).
  */
 fun NavGraphBuilder.galleryScreen(
-    onAlbumClick: (Long?) -> Unit = {},
-    onAbout: () -> Unit = {},
+    onAlbumClick: (Long?) -> Unit,
+    onAbout: () -> Unit,
 ) {
     composable<GalleryRoute> {
         GalleryScreen(onAlbumClick = onAlbumClick, onAbout = onAbout)

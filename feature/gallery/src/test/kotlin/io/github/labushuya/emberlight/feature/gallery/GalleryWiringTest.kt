@@ -90,6 +90,8 @@ class GalleryWiringTest {
         composeRule.setContent {
             EmberlightTheme {
                 GalleryScreen(
+                    onAlbumClick = {},
+                    onAbout = {},
                     viewModel = viewModel,
                     playback = testPlayback(),
                     details = ViewerDetailsViewModel(NoPhotoExifSource, emptySet()),

@@ -74,6 +74,8 @@ internal fun HostMediaSection(
     onFilter: (MediaFilter) -> Unit,
     onOpen: (HostMediaItem) -> Unit,
     modifier: Modifier = Modifier,
+    /** Ob eine Kachel zu öffnen ist. Eine nicht zu öffnende Kachel ist weder klickbar noch Schaltfläche (TalkBack). */
+    isOpenable: (HostMediaItem) -> Boolean = { true },
 ) {
     // Vor der ersten Antwort des Index gibt es nichts zu filtern. Die Leiste erscheint erst danach.
     if (!state.loaded) return
@@ -111,7 +113,7 @@ internal fun HostMediaSection(
             }
 
             else -> {
-                MediaGrid(items = visible, onOpen = onOpen)
+                MediaGrid(items = visible, onOpen = onOpen, isOpenable = isOpenable)
             }
         }
     }
@@ -122,6 +124,7 @@ internal fun HostMediaSection(
 private fun MediaGrid(
     items: List<HostMediaItem>,
     onOpen: (HostMediaItem) -> Unit,
+    isOpenable: (HostMediaItem) -> Boolean,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val columns = if (maxWidth >= WIDE_GRID_DP.dp) WIDE_COLUMNS else NARROW_COLUMNS
@@ -129,7 +132,11 @@ private fun MediaGrid(
             items.chunked(columns).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(GAP_DP.dp), modifier = Modifier.fillMaxWidth()) {
                     row.forEach { item ->
-                        HostMediaTile(item = item, onClick = { onOpen(item) }, modifier = Modifier.weight(1f))
+                        HostMediaTile(
+                            item = item,
+                            onClick = if (isOpenable(item)) ({ onOpen(item) }) else null,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                     repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
@@ -142,40 +149,31 @@ private fun MediaGrid(
 @Composable
 private fun HostMediaTile(
     item: HostMediaItem,
-    onClick: () -> Unit,
+    /** `null`, wenn die Kachel nichts öffnet. Dann ist sie weder klickbar noch eine Schaltfläche. */
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalPlatformContext.current
     // Die Beschreibung ersetzt den Text der Kinder für TalkBack. Sie nennt daher auch Typ und Standort.
     val uploader = uploaderLabel(item)
     val video = stringResource(R.string.space_media_video)
     val location = stringResource(R.string.space_running_media_location)
     val description =
         listOfNotNull(uploader, video.takeIf { item.isVideo }, location.takeIf { item.locationKept }).joinToString(", ")
+    val clickable = if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier
     Box(
         modifier =
             modifier
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(TILE_CORNER_DP.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .clickable(role = Role.Button, onClick = onClick)
+                .then(clickable)
                 .semantics { contentDescription = description },
     ) {
-        // Vorschau, sonst bei fehlgeschlagener Vorschau das Original verkleinert (Hotfix 2). Scheitert auch das, bleibt
-        // der Platzhalter „Keine Vorschau“.
-        val source = item.previewFile ?: item.originalFile
-        if (source != null) {
-            val request = remember(context, source) { previewRequest(context, source, TILE_PIXELS) }
-            SubcomposeAsyncImage(
-                model = request,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-                error = { PreviewPlaceholder(placeholderRes(PreviewState.FAILED)) },
-            )
-        } else {
-            PreviewPlaceholder(placeholderRes(item.previewState))
-        }
+        MediaPreview(
+            source = item.previewFile ?: item.originalFile,
+            previewState = item.previewState,
+            modifier = Modifier.fillMaxSize(),
+        )
         if (item.isVideo) {
             Tag(
                 text = stringResource(R.string.space_media_video),
@@ -210,8 +208,36 @@ private fun HostMediaTile(
     }
 }
 
+/**
+ * Vorschau einer Medienkachel, gemeinsam für den laufenden Space und die Übernahme-Auswahl (ADR 0022). Vorschau, sonst bei
+ * fehlgeschlagener Vorschau das Original verkleinert (Hotfix 2). Scheitert auch das, bleibt der Platzhalter „Keine Vorschau“.
+ * Der Coil-Plattencache ist aus (siehe [previewRequest]).
+ */
 @Composable
-private fun Tag(
+internal fun MediaPreview(
+    source: File?,
+    previewState: String?,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalPlatformContext.current
+    if (source != null) {
+        val request = remember(context, source) { previewRequest(context, source, TILE_PIXELS) }
+        SubcomposeAsyncImage(
+            model = request,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = modifier,
+            error = { PreviewPlaceholder(placeholderRes(PreviewState.FAILED)) },
+        )
+    } else {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            PreviewPlaceholder(placeholderRes(previewState))
+        }
+    }
+}
+
+@Composable
+internal fun Tag(
     text: String,
     color: androidx.compose.ui.graphics.Color,
     textColor: androidx.compose.ui.graphics.Color,

@@ -49,6 +49,11 @@ data class HostMediaItem(
      * beim Laden. Scheitert auch das, zeigt sie „Keine Vorschau“.
      */
     val originalFile: File? = null,
+    /**
+     * `true`, wenn die Detailansicht ein Bild oder Video zeigen kann (Datei im Space-Speicher, sonst Original bei
+     * fehlgeschlagener Vorschau). Die Medienansicht eines beendeten Space öffnet nur solche Kacheln.
+     */
+    val detailReady: Boolean = true,
 )
 
 /** Zustand der Medienansicht. [loaded] ist `false`, bis die erste Antwort des Index da ist. */
@@ -153,6 +158,18 @@ class HostMediaViewModel
             mine: Boolean,
         ): HostMediaItem {
             val ready = row.previewState == PreviewState.READY
+            val mediaId = MediaId.parse(row.id)
+            val original = originalFor(id, row)
+            // Dieselbe Regel wie [detailOf]: Datei für die Detailansicht oder Original bei fehlgeschlagener Vorschau.
+            val detailReady =
+                original != null ||
+                    (
+                        mediaId != null && store.detailFile(
+                            id,
+                            mediaId,
+                            heic = PreviewRules.hasHeicView(row.mime),
+                        ) != null
+                    )
             return HostMediaItem(
                 id = row.id,
                 isVideo = PreviewRules.isVideo(row.mime),
@@ -162,10 +179,11 @@ class HostMediaViewModel
                 uploaderRemoved = row.uploaderRevoked,
                 locationKept = row.locationKept,
                 previewState = row.previewState,
-                previewFile = if (ready) MediaId.parse(row.id)?.let { store.previewFile(id, it) } else null,
+                previewFile = if (ready) mediaId?.let { store.previewFile(id, it) } else null,
                 sizeBytes = row.sizeBytes,
                 createdAt = row.createdAt,
-                originalFile = originalFor(id, row),
+                originalFile = original,
+                detailReady = detailReady,
             )
         }
 

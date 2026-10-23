@@ -65,6 +65,10 @@ gradlePlugin {
             id = "emberlight.gallery.isolation"
             implementationClass = "io.github.labushuya.emberlight.buildlogic.GalleryIsolationConventionPlugin"
         }
+        register("exportIsolation") {
+            id = "emberlight.export.isolation"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.ExportIsolationConventionPlugin"
+        }
         register("room") {
             id = "emberlight.room"
             implementationClass = "io.github.labushuya.emberlight.buildlogic.RoomConventionPlugin"
