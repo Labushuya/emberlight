@@ -5,6 +5,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptions
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
+import io.github.labushuya.emberlight.feature.space.export.SpaceExportScreen
 import io.github.labushuya.emberlight.feature.space.run.SpaceRunningScreen
 import io.github.labushuya.emberlight.feature.space.setup.SpaceSetupScreen
 import kotlinx.serialization.Serializable
@@ -66,6 +67,7 @@ fun NavGraphBuilder.spacesScreens(
     onOpenRunning: (String) -> Unit = {},
     onRunning: (String) -> Unit = {},
     onTemplate: (String) -> Unit = {},
+    onExport: (String) -> Unit = {},
     onBack: () -> Unit = {},
 ) {
     composable<SpacesRoute> {
@@ -87,7 +89,11 @@ fun NavGraphBuilder.spacesScreens(
             onSetup = onSetup,
             onOpenRunning = onOpenRunning,
             onTemplate = onTemplate,
+            onExport = onExport,
         )
+    }
+    composable<SpaceExportRoute> {
+        SpaceExportScreen(onBack = onBack)
     }
     composable<SpaceEditRoute> {
         SpaceEditScreen(onDone = onBack)
@@ -146,4 +152,18 @@ fun NavController.navigateToSpaceRunning(
         launchSingleTop = true
         if (afterStart) popUpTo<SpaceSetupRoute> { inclusive = true }
     }
+}
+
+/**
+ * Auswahl der Medien zur Übernahme in die Galerie (Paket 3.7, ADR 0022). [id] ist die Kennung des Space. Gelöschte Spaces
+ * und Spaces im Löschvorgang lassen die Auswahl nicht zu.
+ */
+@Serializable
+data class SpaceExportRoute(
+    val id: String,
+)
+
+/** Öffnet die Auswahl zur Übernahme in die Galerie für den Space [id] (Paket 3.7). */
+fun NavController.navigateToSpaceExport(id: String) {
+    navigate(route = SpaceExportRoute(id = id))
 }

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!--
         Sichtbarkeit der Hersteller-Einstellungen für resolveActivity (ADR 0017, Paket-Sichtbarkeit ab API 30). Die Liste ist
         fest und steht in OemFamily.PACKAGES. Die Einträge gelten im gemergten Manifest der App.
@@ -18,10 +19,22 @@
         <package android:name="com.evenwell.powersaving.g3" />
     </queries>
 
+    <!--
+        Übernahme in die Galerie (Paket 3.7, ADR 0022): läuft als Hintergrundauftrag mit Vordergrund-Benachrichtigung, damit sie
+        weiterläuft, wenn die App verlassen wird. Ab Android 14 braucht der Dienst den Typ „Datensynchronisation“.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <application>
         <!-- Wecker und Aktion „1 Tag länger aufbewahren“ der Erinnerung zur Aufbewahrung (Paket 3.6b, ADR 0021). Nicht exportiert. -->
         <receiver
             android:name="io.github.labushuya.emberlight.feature.space.retention.RetentionReceiver"
             android:exported="false" />
+        <!-- Dienst von WorkManager für Vordergrund-Aufträge. Der Typ gilt nur für die Übernahme (ADR 0022). -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
     </application>
 </manifest>

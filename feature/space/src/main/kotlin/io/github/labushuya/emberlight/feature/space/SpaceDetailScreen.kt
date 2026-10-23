@@ -56,6 +56,7 @@ internal fun SpaceDetailScreen(
     onSetup: (String) -> Unit = {},
     onOpenRunning: (String) -> Unit = {},
     onTemplate: (String) -> Unit = {},
+    onExport: (String) -> Unit = {},
     viewModel: SpaceDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -84,6 +85,7 @@ internal fun SpaceDetailScreen(
             onChangeRetention = { days -> viewModel.changeRetention(days) },
             onPurge = { viewModel.purge(onDone = onBack) },
             onTemplate = onTemplate,
+            onExport = onExport,
             onRemove = { viewModel.removeFromList(onDone = onBack) },
             notificationsAllowed = viewModel.notificationsAllowed,
             purgeFailed = purgeFailed,
@@ -116,6 +118,7 @@ internal fun SpaceDetailPane(
     purgeFailed: Boolean = false,
     confirmPurgeOnOpen: Boolean = false,
     onTemplate: (String) -> Unit = {},
+    onExport: (String) -> Unit = {},
     onRemove: () -> Unit = {},
 ) {
     val record = state.record
@@ -142,6 +145,7 @@ internal fun SpaceDetailPane(
                 onSetup = { onSetup(record.id.value) },
                 onOpenRunning = { onOpenRunning(record.id.value) },
                 onTemplate = { onTemplate(record.id.value) },
+                onExport = { onExport(record.id.value) },
                 onRemove = onRemove,
                 onChangeRetention = onChangeRetention,
                 onPurge = onPurge,
@@ -175,6 +179,7 @@ internal fun SpaceDetailContent(
     purgeFailed: Boolean = false,
     confirmPurgeOnOpen: Boolean = false,
     onTemplate: () -> Unit = {},
+    onExport: () -> Unit = {},
     onRemove: () -> Unit = {},
     media: @Composable () -> Unit = {},
 ) {
@@ -244,6 +249,10 @@ internal fun SpaceDetailContent(
                     Button(onClick = onOpenRunning, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.space_detail_open_running))
                     }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.space_export_entry))
+                    }
                 }
 
                 SpaceStatus.ENDED -> {
@@ -289,6 +298,10 @@ internal fun SpaceDetailContent(
                     }
                     if (!record.purging) {
                         Spacer(Modifier.height(12.dp))
+                        OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.space_export_entry))
+                        }
+                        Spacer(Modifier.height(8.dp))
                         OutlinedButton(onClick = { changingRetention = true }, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.space_retention_change))
                         }

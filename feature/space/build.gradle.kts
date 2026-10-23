@@ -8,6 +8,8 @@ dependencies {
     // Betrieb (Paket 3.3): Dienst, Zustand des Betriebs und WLAN-Prüfung. Der Server ruft die Oberfläche nie auf,
     // die Richtung Oberfläche → Server ist erlaubt (checkServerIsolation).
     implementation(project(":share:server"))
+    // Schreibseite der Übernahme in die Galerie (Paket 3.7, ADR 0022): MediaStore-Schreiber, ohne Galerie-Abhängigkeit.
+    implementation(project(":share:export"))
     // Der Hilt-Einstieg in di/ nennt die Datenbankklasse von Room, daher braucht das Modul die Laufzeit selbst.
     implementation(libs.androidx.room.runtime)
     // Automatisches Löschen nach Fristende (Paket 3.6c, ADR 0021): periodischer Lauf, ohne Play Services.
