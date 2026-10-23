@@ -135,6 +135,43 @@ class RetentionDetailViewModelTest {
         assertTrue(until > System.currentTimeMillis() + 2 * RetentionRules.DAY_MILLIS)
     }
 
+    @Test
+    fun aRetentionChangeThatIsRefusedIsReportedAndCanBeConsumed() {
+        insertEnded(status = "ACTIVE")
+        val vm = SpaceDetailViewModel(SavedStateHandle(mapOf("id" to ID)), repository, retention)
+        vm.select(ID)
+
+        vm.changeRetention(days = 3)
+
+        eventually { vm.problem.value == DetailProblem.RETENTION_NOT_CHANGED }
+        vm.consumeProblem()
+        assertNull(vm.problem.value)
+    }
+
+    @Test
+    fun changingTheRetentionOfAMissingSpaceIsReportedAsNotFound() {
+        val vm = SpaceDetailViewModel(SavedStateHandle(mapOf("id" to ID)), repository, retention)
+        vm.select(ID)
+
+        vm.changeRetention(days = 3)
+
+        eventually { vm.problem.value == DetailProblem.NOT_FOUND }
+    }
+
+    @Test
+    fun removingAnEndedSpaceFromTheListIsRefusedAndReported() {
+        insertEnded()
+        val vm = SpaceDetailViewModel(SavedStateHandle(mapOf("id" to ID)), repository, retention)
+        vm.select(ID)
+        var done = false
+
+        vm.removeFromList(onDone = { done = true })
+
+        eventually { vm.problem.value == DetailProblem.REMOVE_NOT_DELETED }
+        assertFalse(done)
+        assertTrue(runBlocking { repository.find(SpaceId.parse(ID)!!) } != null)
+    }
+
     /** Die Löschung und das Speichern laufen auf dem Thread von Room. Die Prüfung wartet deshalb kurz. */
     private fun eventually(check: () -> Boolean) {
         val deadline = System.currentTimeMillis() + 5_000L

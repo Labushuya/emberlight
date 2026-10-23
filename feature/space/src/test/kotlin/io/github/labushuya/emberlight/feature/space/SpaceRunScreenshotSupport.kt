@@ -142,6 +142,10 @@ abstract class SpaceRunScreenshotSupport {
             onRemoveRequest = {},
             onRotateRequest = {},
             onAcknowledgeInvite = {},
+            onUploadCancel = {},
+            onMediaFilter = {},
+            onMediaOpen = {},
+            onExtend = {},
             modifier = Modifier.fillMaxSize(),
         )
     }

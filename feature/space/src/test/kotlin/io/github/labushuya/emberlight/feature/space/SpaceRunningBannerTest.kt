@@ -55,6 +55,10 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }
@@ -79,6 +83,10 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }
@@ -104,6 +112,10 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }
@@ -125,6 +137,10 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }
@@ -148,6 +164,10 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }
@@ -183,6 +203,10 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }

@@ -259,6 +259,7 @@ class GalleryZoomUiTest {
                         onOpenSettings = {},
                         playback = testPlayback(),
                         onAlbumClick = {},
+                        onAbout = {},
                         onZoomLevelChange = { next ->
                             changes += next
                             level = next

@@ -176,6 +176,7 @@ class GalleryScreenTest {
                     onOpenSettings = onOpenSettings,
                     playback = testPlayback(),
                     onAlbumClick = {},
+                    onAbout = {},
                 )
             }
         }

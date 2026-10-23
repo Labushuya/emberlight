@@ -1,6 +1,7 @@
 package io.github.labushuya.emberlight.share.export
 
 import android.annotation.SuppressLint
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
@@ -85,9 +86,14 @@ class MediaStoreExportSink(
                     put(MediaColumns.IS_PENDING, 1)
                     meta.captureTimeMillis?.let { put(MediaColumns.DATE_TAKEN, it) }
                 }
+            // Anlegen und Merken geschehen unter derselben Sperre, damit die Bereinigung den frischen Eintrag nie sieht.
             val uri =
-                resolver.insert(collectionFor(meta.mime), values)
-                    ?: throw IOException("Der Eintrag konnte nicht angelegt werden.")
+                synchronized(LIVE_COPIES) {
+                    resolver
+                        .insert(collectionFor(meta.mime), values)
+                        ?.also { LIVE_COPIES += it.toString() }
+                        ?: throw IOException("Der Eintrag konnte nicht angelegt werden.")
+                }
             ExportHandle(uri.toString(), displayNameOf(uri) ?: meta.fileName)
         }
 
@@ -115,6 +121,7 @@ class MediaStoreExportSink(
         val values = ContentValues().apply { put(MediaColumns.IS_PENDING, 0) }
         val rows = withContext(Dispatchers.IO) { resolver.update(uri, values, null, null) }
         if (rows != 1) throw IOException("Die Kopie konnte nicht freigegeben werden.")
+        synchronized(LIVE_COPIES) { LIVE_COPIES -= handle.uri }
     }
 
     override suspend fun discard(handle: ExportHandle) {
@@ -123,9 +130,66 @@ class MediaStoreExportSink(
             if (uri.scheme == "file") {
                 File(requireNotNull(uri.path)).delete()
             } else {
-                resolver.delete(uri, null, null)
+                synchronized(LIVE_COPIES) {
+                    resolver.delete(uri, null, null)
+                    LIVE_COPIES -= handle.uri
+                }
             }
         }
+    }
+
+    /**
+     * Entfernt ausstehende Kopien, die ein früherer Lauf hinterlassen hat, etwa nach einem Absturz zwischen Anlegen und
+     * Freigabe (ADR 0022). Erfasst werden nur Einträge dieser App unter `Pictures/Emberlight/` mit `IS_PENDING = 1`.
+     * Eine Kopie, die ein Lauf in diesem Prozess noch braucht, bleibt. Der Besitzer ist erst ab Android 11 lesbar, davor
+     * unterbleibt die Bereinigung. Android räumt ausstehende Einträge später selbst auf. Liefert die Zahl der entfernten
+     * Einträge.
+     */
+    suspend fun removeAbandonedCopies(): Int =
+        withContext(Dispatchers.IO) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return@withContext 0
+            synchronized(LIVE_COPIES) {
+                // Verglichen wird die Kennung. Dieselbe Zeile hat je nach Tabelle eine andere Adresse.
+                val live = LIVE_COPIES.map { ContentUris.parseId(it.toUri()) }.toSet()
+                ownAbandonedCopies()
+                    .filter { ContentUris.parseId(it) !in live }
+                    .count { resolver.delete(it, null, null) == 1 }
+            }
+        }
+
+    /** Eigene ausstehende Einträge unter dem Ordner dieses Moduls. Ohne Lesen-Berechtigung sieht die App nur die eigenen. */
+    private fun ownAbandonedCopies(): List<Uri> {
+        val files = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val projection =
+            arrayOf(
+                MediaColumns._ID,
+                MediaColumns.RELATIVE_PATH,
+                MediaColumns.IS_PENDING,
+                MediaColumns.OWNER_PACKAGE_NAME,
+            )
+        // Keine SQL-Auswahl: Die Filter laufen unten, damit sie auch gegen Speicher ohne SQL-Auswahl gelten.
+        val cursor = resolver.query(files, projection, null, null, null) ?: return emptyList()
+        return cursor.use {
+            val idIndex = it.getColumnIndexOrThrow(MediaColumns._ID)
+            val pathIndex = it.getColumnIndexOrThrow(MediaColumns.RELATIVE_PATH)
+            val pendingIndex = it.getColumnIndexOrThrow(MediaColumns.IS_PENDING)
+            val ownerIndex = it.getColumnIndexOrThrow(MediaColumns.OWNER_PACKAGE_NAME)
+            val found = mutableListOf<Uri>()
+            while (it.moveToNext()) {
+                val pending = it.getInt(pendingIndex) == 1
+                val own = it.getString(ownerIndex) == app.packageName
+                val inFolder = it.getString(pathIndex)?.startsWith(OWN_FOLDER_PREFIX) == true
+                if (pending && own && inFolder) found += ContentUris.withAppendedId(files, it.getLong(idIndex))
+            }
+            found
+        }
+    }
+
+    /** Kopien, die ein Lauf in diesem Prozess braucht: von [create] bis [publish] oder [discard]. */
+    internal companion object {
+        /** Nur über [synchronized] benutzen. Der Test leert sie zwischen den Fällen. */
+        internal val LIVE_COPIES = mutableSetOf<String>()
+        private const val OWN_FOLDER_PREFIX = "Pictures/Emberlight/"
     }
 
     private fun legacy(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q

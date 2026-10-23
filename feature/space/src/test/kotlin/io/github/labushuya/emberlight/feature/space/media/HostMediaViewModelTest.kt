@@ -254,6 +254,21 @@ class HostMediaViewModelTest {
     }
 
     @Test
+    fun aTileIsOpenableOnlyWhenItsFileIsStoredLocally() {
+        val stored = MediaId.generate()
+        val missing = MediaId.generate()
+        insert(stored, host, hash = 'c')
+        insert(missing, host, hash = 'd')
+        File(spacesDir, "${space.value}/${"c".repeat(64)}").writeBytes(byteArrayOf(1, 2, 3))
+        model.show(space)
+
+        awaitState { state -> state.items.size == 2 }
+        val byId = latest.items.associateBy { it.id }
+        assertTrue(byId.getValue(stored.value).detailReady)
+        assertFalse(byId.getValue(missing.value).detailReady)
+    }
+
+    @Test
     fun withoutAShownSpaceTheListIsEmpty() {
         assertFalse(latest.loaded)
         assertTrue(latest.items.isEmpty())

@@ -24,8 +24,10 @@ internal class FakeMediaStoreProvider(
 ) : ContentProvider() {
     val rows = linkedMapOf<Long, MutableMap<String, Any?>>()
     private var counter = 0L
+    private var owner: String? = null
 
     fun register(context: Context) {
+        owner = context.packageName
         // Ohne Anbieter-Information meldet Android „authority does not match“. Die Autorität kommt aus dem Manifest.
         attachInfo(
             context,
@@ -50,6 +52,8 @@ internal class FakeMediaStoreProvider(
         counter++
         val row = mutableMapOf<String, Any?>(MediaColumns._ID to counter)
         values?.keySet()?.forEach { key -> row[key] = values.get(key) }
+        // Wie der echte Medienspeicher: Der Besitzer ist die einfügende App, sofern der Aufrufer keinen anderen nennt.
+        row.putIfAbsent(MediaColumns.OWNER_PACKAGE_NAME, owner)
         rows[counter] = row
         root.mkdirs()
         File(root, counter.toString()).createNewFile()

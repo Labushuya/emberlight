@@ -2,6 +2,7 @@ package io.github.labushuya.emberlight.feature.space.export
 
 import android.text.format.Formatter
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.labushuya.emberlight.feature.space.R
+import io.github.labushuya.emberlight.feature.space.run.MediaPreview
+import io.github.labushuya.emberlight.feature.space.run.Tag
 
 /**
  * Auswahl der Medien zur Übernahme in die Galerie (Paket 3.7, ADR 0022). Raster mit Häkchen, „Alle“ und „Nichts“, Zähler und
@@ -54,7 +58,7 @@ import io.github.labushuya.emberlight.feature.space.R
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 internal fun SpaceExportScreen(
-    onBack: () -> Unit = {},
+    onBack: () -> Unit,
     viewModel: SpaceExportViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -209,34 +213,57 @@ private fun MediaTile(
                 .fillMaxWidth()
                 .clickable(enabled = !item.exported, role = Role.Checkbox, onClick = onToggle),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = item.selected,
-                    onCheckedChange = null,
-                    enabled = !item.exported,
+        Column {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                MediaPreview(
+                    source = item.previewFile ?: item.originalFile,
+                    previewState = item.previewState,
+                    modifier = Modifier.fillMaxSize(),
                 )
-                Spacer(Modifier.width(4.dp))
-                Text(text = kind, style = MaterialTheme.typography.labelLarge)
+                if (item.isVideo) {
+                    Tag(
+                        text = kind,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        textColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                    )
+                }
             }
-            Text(
-                text = Formatter.formatShortFileSize(context, item.sizeBytes),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (item.locationKept) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = item.selected,
+                        onCheckedChange = null,
+                        enabled = !item.exported,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(text = kind, style = MaterialTheme.typography.labelLarge)
+                }
                 Text(
-                    text = stringResource(R.string.space_export_location),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
+                    text = Formatter.formatShortFileSize(context, item.sizeBytes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-            if (item.exported) {
-                Text(
-                    text = stringResource(R.string.space_export_already),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                if (item.locationKept) {
+                    Text(
+                        text = stringResource(R.string.space_export_location),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (item.exported) {
+                    Text(
+                        text = stringResource(R.string.space_export_already),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         }
     }

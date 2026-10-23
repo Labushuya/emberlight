@@ -5,14 +5,21 @@ import android.os.Looper
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.testing.WorkManagerTestInitHelper
+import io.github.labushuya.emberlight.feature.space.media.HostMediaStore
+import io.github.labushuya.emberlight.feature.space.run.FakeInviteSecretCipher
 import io.github.labushuya.emberlight.share.space.MediaEntity
+import io.github.labushuya.emberlight.share.space.MediaId
+import io.github.labushuya.emberlight.share.space.ParticipantId
 import io.github.labushuya.emberlight.share.space.SpaceEntity
+import io.github.labushuya.emberlight.share.space.SpaceVaults
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.export.ExportedMediaEntity
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -22,6 +29,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * Auswahl der Übernahme (Paket 3.7, ADR 0022): Vorauswahl nichts, „Alle“ und „Nichts“, bereits übernommene Medien
@@ -34,17 +42,64 @@ class SpaceExportViewModelTest {
 
     private lateinit var database: SpacesDatabase
     private lateinit var context: Context
+    private lateinit var spacesDir: File
+    private lateinit var vaults: SpaceVaults
 
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
-        database = SpacesDatabase.open(context, folder.newFolder("spaces"))
+        spacesDir = folder.newFolder("spaces")
+        database = SpacesDatabase.open(context, spacesDir)
+        vaults = SpaceVaults.create(database, spacesDir)
     }
 
     @After
     fun tearDown() {
+        vaults.close()
         database.close()
+    }
+
+    @Test
+    fun aFailedPreviewOfAnImageFallsBackToTheOriginalAndAPendingOneHasNoFile() {
+        insertSpace(ID, "ENDED")
+        val failed = MediaId.generate().value
+        val pending = MediaId.generate().value
+        insertMedium(failed, createdAt = 1_000L, previewState = "FAILED", writeOriginal = true)
+        insertMedium(pending, createdAt = 2_000L, previewState = "PENDING", writeOriginal = true)
+
+        val viewModel = viewModel()
+        waitUntilLoaded(viewModel)
+
+        val items =
+            viewModel.state.value.items
+                .associateBy { it.mediaId }
+        assertEquals("FAILED", items.getValue(failed).previewState)
+        assertNull(items.getValue(failed).previewFile)
+        assertNotNull(items.getValue(failed).originalFile)
+        assertEquals("PENDING", items.getValue(pending).previewState)
+        assertNull(items.getValue(pending).originalFile)
+    }
+
+    @Test
+    fun aFailedVideoPreviewHasNoOriginalFallback() {
+        insertSpace(ID, "ENDED")
+        insertMedium(
+            MediaId.generate().value,
+            createdAt = 1_000L,
+            video = true,
+            previewState = "FAILED",
+            writeOriginal = true,
+        )
+
+        val viewModel = viewModel()
+        waitUntilLoaded(viewModel)
+
+        val item =
+            viewModel.state.value.items
+                .single()
+        assertTrue(item.isVideo)
+        assertNull(item.originalFile)
     }
 
     @Test
@@ -143,6 +198,7 @@ class SpaceExportViewModelTest {
             savedStateHandle = SavedStateHandle(mapOf("id" to ID)),
             database = database,
             context = context,
+            store = HostMediaStore(vaults, FakeInviteSecretCipher()),
         )
 
     /** Das Laden läuft auf dem Hauptthread und liest die Datenbank im Hintergrund. Bis dahin Schleife mit Leerlauf. */
@@ -185,21 +241,31 @@ class SpaceExportViewModelTest {
         createdAt: Long,
         size: Long = 10L,
         video: Boolean = false,
+        previewState: String? = null,
+        writeOriginal: Boolean = false,
     ) {
+        val sha = MessageDigest.getInstance("SHA-256").digest(id.toByteArray()).joinToString("") { "%02x".format(it) }
         runBlocking {
             database.media().insert(
                 MediaEntity(
                     id = id,
                     spaceId = ID,
-                    sha256 = id.padEnd(64, '0'),
+                    sha256 = sha,
                     mime = if (video) "video/mp4" else "image/jpeg",
                     sizeBytes = size,
                     originalName = "$id.bin",
-                    uploaderId = "gast",
+                    uploaderId = ParticipantId.generate().value,
                     createdAt = createdAt,
                     state = "READY",
+                    previewState = previewState,
                 ),
             )
+        }
+        if (writeOriginal) {
+            // Der Ordner des Space entsteht beim Öffnen der Vault. Der Test legt ihn selbst an, bevor er die Datei schreibt.
+            val file = File(spacesDir, "$ID/$sha")
+            file.parentFile?.mkdirs()
+            file.writeBytes(byteArrayOf(1, 2, 3, 4))
         }
     }
 

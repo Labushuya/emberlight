@@ -225,6 +225,7 @@ class GalleryScreenshotTest {
                     onOpenSettings = {},
                     playback = testPlayback(),
                     onAlbumClick = {},
+                    onAbout = {},
                     onZoomLevelChange = {},
                 )
             }
@@ -250,6 +251,7 @@ class GalleryScreenshotTest {
                     onOpenSettings = {},
                     playback = testPlayback(),
                     onAlbumClick = {},
+                    onAbout = {},
                 )
             }
         }

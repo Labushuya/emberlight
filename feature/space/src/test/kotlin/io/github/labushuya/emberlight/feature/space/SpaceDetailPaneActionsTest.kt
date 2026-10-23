@@ -43,6 +43,11 @@ class SpaceDetailPaneActionsTest {
                     onStart = { started += it },
                     onSetup = { setUp += it },
                     onOpenRunning = { opened += it },
+                    onChangeRetention = {},
+                    onPurge = {},
+                    onTemplate = {},
+                    onExport = {},
+                    onRemove = {},
                 )
             }
         }

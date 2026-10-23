@@ -19,6 +19,7 @@ import io.github.labushuya.emberlight.share.space.export.ExportFailureReason
 import io.github.labushuya.emberlight.share.space.export.ExportOutcome
 import io.github.labushuya.emberlight.share.space.export.SpaceExportGate
 import io.github.labushuya.emberlight.share.space.export.SpaceExporter
+import kotlinx.coroutines.CancellationException
 import java.io.File
 
 /**
@@ -45,11 +46,13 @@ class SpaceExportWorker(
                     .failure()
             }
             setForeground(foregroundInfo(0, selection.size))
+            val sink = MediaStoreExportSink(applicationContext)
+            removeLeftovers(sink)
             val exporter =
                 SpaceExporter(
                     database = SpacesDatabase.shared(applicationContext),
                     spacesDir = SpacesDatabase.spacesDirectory(applicationContext),
-                    sink = MediaStoreExportSink(applicationContext),
+                    sink = sink,
                     gate = SpaceExportGate.shared,
                 )
             // Fortschritt je Puffer wäre zu oft. Gespeichert und gemeldet wird je fertiger Datei und je 1 MiB.
@@ -110,6 +113,20 @@ class SpaceExportWorker(
                 workDataOf(SpaceExportQueue.OUT_OUTCOME to SpaceExportQueue.OUTCOME_NOT_EXPORTABLE)
             }
         }
+
+    /**
+     * Entfernt ausstehende Kopien eines abgestürzten Laufs vor der neuen Übernahme (ADR 0022). Die Bereinigung ist Hilfe, keine
+     * Bedingung: Scheitert sie, geht die Übernahme trotzdem weiter. Android räumt ausstehende Einträge später selbst auf.
+     */
+    private suspend fun removeLeftovers(sink: MediaStoreExportSink) {
+        try {
+            sink.removeAbandonedCopies()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failed: Exception) {
+            // Bewusst nicht abgebrochen: Die Übernahme ist wichtiger als die Aufräumarbeit.
+        }
+    }
 
     /** Liest nur Auswahldateien aus dem eigenen Verzeichnis. Ein fremder Pfad liefert `null`. */
     private fun readOwnSelection(path: String): Set<String>? {

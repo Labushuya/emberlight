@@ -1,5 +1,6 @@
 plugins {
     id("emberlight.android.library")
+    id("emberlight.export.isolation")
 }
 
 dependencies {

@@ -24,6 +24,21 @@ import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
 
+/**
+ * Ein Vorgang im Detail ist nicht gelungen. Die Oberfläche meldet ihn kurz (Snackbar), statt ihn zu verschweigen
+ * (Härtung vor v0.3.0-rc.1).
+ */
+enum class DetailProblem {
+    /** Die Frist ließ sich nicht ändern: kein beendeter Space, Space wird gerade gelöscht, oder ungültige Dauer. */
+    RETENTION_NOT_CHANGED,
+
+    /** Der Space gibt es nicht mehr. */
+    NOT_FOUND,
+
+    /** Aus der Liste entfernen geht nur bei einem gelöschten Space. */
+    REMOVE_NOT_DELETED,
+}
+
 /** Zustand des Detail: der gewählte Space, sobald geladen. [record] ist `null`, wenn es ihn nicht (mehr) gibt. */
 data class SpaceDetailUiState(
     val selected: SpaceId?,
@@ -96,14 +111,30 @@ class SpaceDetailViewModel
             }
         }
 
-        /** Setzt die Frist des gewählten beendeten Space in Tagen (0 für „sofort“). Liefert das Ergebnis an [onResult]. */
-        fun changeRetention(
-            days: Int,
-            onResult: (RetentionChange) -> Unit = {},
-        ) {
+        /** Meldung zu einem gescheiterten Vorgang, bis die Oberfläche sie mit [consumeProblem] quittiert. */
+        private val problemState = MutableStateFlow<DetailProblem?>(null)
+        val problem: StateFlow<DetailProblem?> = problemState
+
+        /** Die Oberfläche hat die Meldung gezeigt. */
+        fun consumeProblem() {
+            problemState.value = null
+        }
+
+        /** Setzt die Frist des gewählten beendeten Space in Tagen (0 für „sofort“). Ein Fehlschlag steht in [problem]. */
+        fun changeRetention(days: Int) {
             val id = selected.value ?: return
             viewModelScope.launch {
-                onResult(retention.changeRetention(id, days, System.currentTimeMillis()))
+                when (retention.changeRetention(id, days, System.currentTimeMillis())) {
+                    is RetentionChange.Changed -> {}
+
+                    RetentionChange.NotChangeable, RetentionChange.InvalidDays -> {
+                        problemState.value = DetailProblem.RETENTION_NOT_CHANGED
+                    }
+
+                    RetentionChange.NotFound -> {
+                        problemState.value = DetailProblem.NOT_FOUND
+                    }
+                }
             }
         }
 
@@ -111,9 +142,15 @@ class SpaceDetailViewModel
         fun removeFromList(onDone: () -> Unit) {
             val id = selected.value ?: return
             viewModelScope.launch {
-                if (retention.removeFromList(id) == RemoveResult.Removed) {
-                    selected.value = null
-                    onDone()
+                when (retention.removeFromList(id)) {
+                    RemoveResult.Removed -> {
+                        selected.value = null
+                        onDone()
+                    }
+
+                    RemoveResult.NotDeleted -> {
+                        problemState.value = DetailProblem.REMOVE_NOT_DELETED
+                    }
                 }
             }
         }

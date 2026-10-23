@@ -1,7 +1,10 @@
 package io.github.labushuya.emberlight.share.export
 
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.provider.MediaStore
 import android.provider.MediaStore.MediaColumns
 import androidx.test.core.app.ApplicationProvider
 import io.github.labushuya.emberlight.share.space.export.ExportFileMeta
@@ -10,6 +13,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -42,6 +46,8 @@ class MediaStoreExportSinkTest {
         provider = FakeMediaStoreProvider(folder.newFolder("store"))
         provider.register(context)
         sink = MediaStoreExportSink(context)
+        // Die Liste der Kopien eines Laufs ist prozessweit. Jeder Fall beginnt mit einer leeren Liste.
+        synchronized(MediaStoreExportSink.LIVE_COPIES) { MediaStoreExportSink.LIVE_COPIES.clear() }
     }
 
     @Test
@@ -116,6 +122,53 @@ class MediaStoreExportSinkTest {
             }.exceptionOrNull()
 
         assertTrue(thrown is java.io.IOException)
+    }
+
+    @Test
+    fun aCopyLeftPendingByAnEarlierRunIsRemovedAndNothingElse() {
+        val live = runBlocking { sink.create(meta("lebt.jpg", "image/jpeg", capture = null)) }
+        val leftover = insertPending(owner = null, path = "Pictures/Emberlight/Urlaub/")
+        val foreign = insertPending(owner = "de.andere.app", path = "Pictures/Emberlight/Urlaub/")
+        val outside = insertPending(owner = null, path = "DCIM/")
+
+        val removed = runBlocking { sink.removeAbandonedCopies() }
+
+        assertEquals(1, removed)
+        assertNull(provider.row(leftover))
+        assertNotNull(provider.row(foreign))
+        assertNotNull(provider.row(outside))
+        assertNotNull(provider.row(idOf(live)))
+    }
+
+    @Test
+    fun aPublishedCopyIsNotAbandoned() {
+        val handle = runBlocking { sink.create(meta("fertig.jpg", "image/jpeg", capture = null)) }
+        runBlocking { sink.publish(handle) }
+
+        assertEquals(0, runBlocking { sink.removeAbandonedCopies() })
+        assertNotNull(provider.row(idOf(handle)))
+    }
+
+    /** Ein ausstehender Eintrag, wie ihn ein abgestürzter Lauf hinterlässt: nicht in diesem Prozess angelegt. */
+    private fun insertPending(
+        owner: String?,
+        path: String,
+    ): Long {
+        val values =
+            ContentValues().apply {
+                put(MediaColumns.DISPLAY_NAME, "alt.jpg")
+                put(MediaColumns.MIME_TYPE, "image/jpeg")
+                put(MediaColumns.RELATIVE_PATH, path)
+                put(MediaColumns.IS_PENDING, 1)
+                owner?.let { put(MediaColumns.OWNER_PACKAGE_NAME, it) }
+            }
+        val uri =
+            context.contentResolver.insert(
+                MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
+                values,
+            )
+                ?: error("Der Testeintrag konnte nicht angelegt werden.")
+        return ContentUris.parseId(uri)
     }
 
     private fun meta(

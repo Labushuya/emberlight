@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -66,6 +67,8 @@ import io.github.labushuya.emberlight.feature.space.navigateToSpaceRunning
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceSetup
 import io.github.labushuya.emberlight.feature.space.navigateToSpaceTemplate
 import io.github.labushuya.emberlight.feature.space.navigateToSpaces
+import io.github.labushuya.emberlight.feature.space.navigateToSpacesList
+import io.github.labushuya.emberlight.feature.space.navigateToSpacesSelecting
 import io.github.labushuya.emberlight.feature.space.retention.RetentionRoutes
 import io.github.labushuya.emberlight.feature.space.spacesScreens
 import io.github.labushuya.emberlight.share.server.SpaceServerService
@@ -88,9 +91,15 @@ fun EmberlightApp(
 ) {
     // Ziel aus einer Benachrichtigung des Dienstes (Paket 3.3). Es wird einmal geöffnet, danach ist es verbraucht.
     val routeHandled = rememberUpdatedState(onLaunchRouteConsume)
+    val windowWidth =
+        with(LocalDensity.current) {
+            LocalWindowInfo.current.containerSize.width
+                .toDp()
+        }
+    val detailBeside = rememberUpdatedState(spacesShowDetailBeside(windowWidth))
     LaunchedEffect(launchRoute) {
         val route = launchRoute ?: return@LaunchedEffect
-        navController.openLaunchRoute(route)
+        navController.openLaunchRoute(route, detailBeside = detailBeside.value)
         routeHandled.value()
     }
     Box(modifier = modifier.fillMaxSize()) {
@@ -222,7 +231,10 @@ private fun AppNavHost(navController: NavHostController) {
 }
 
 /** Übersetzt das Ziel aus einer Benachrichtigung (ADR 0017). Unbekannte Ziele werden ignoriert. */
-private fun NavHostController.openLaunchRoute(route: String) {
+private fun NavHostController.openLaunchRoute(
+    route: String,
+    detailBeside: Boolean,
+) {
     when (route) {
         SpaceServerService.ROUTE_CONFIRM_END -> {
             navigateToSpaceRunning(confirmEnd = true)
@@ -233,12 +245,33 @@ private fun NavHostController.openLaunchRoute(route: String) {
         }
 
         else -> {
-            RetentionRoutes.parse(route)?.let { target ->
-                if (target.openExport) {
-                    navigateToSpaceExport(target.spaceId)
+            RetentionRoutes.parse(route)?.let { target -> openRetentionTarget(target, detailBeside) }
+        }
+    }
+}
+
+/** Führt die Schritte aus [retentionLaunchSteps] aus, in dieser Reihenfolge, damit die Liste im Stapel unter dem Ziel liegt. */
+private fun NavHostController.openRetentionTarget(
+    target: RetentionRoutes.Target,
+    detailBeside: Boolean,
+) {
+    retentionLaunchSteps(target, detailBeside).forEach { step ->
+        when (step) {
+            is LaunchStep.Spaces -> {
+                val selected = step.selectedId
+                if (selected != null) {
+                    navigateToSpacesSelecting(selected, confirmPurge = step.confirmPurge)
                 } else {
-                    navigateToSpaceDetail(target.spaceId, confirmPurge = target.confirmPurge)
+                    navigateToSpacesList()
                 }
+            }
+
+            is LaunchStep.Detail -> {
+                navigateToSpaceDetail(step.spaceId, confirmPurge = step.confirmPurge)
+            }
+
+            is LaunchStep.Export -> {
+                navigateToSpaceExport(step.spaceId)
             }
         }
     }
@@ -266,6 +299,3 @@ private fun NavHostController.navigateToTopLevel(destination: TopLevelDestinatio
         TopLevelDestination.SPACES -> navigateToSpaces(topLevelOptions)
     }
 }
-
-/** Breite, unterhalb derer die Navigation unten liegt (Medium-Grenze der Fenstergrößen). */
-private val COMPACT_WIDTH = 600.dp

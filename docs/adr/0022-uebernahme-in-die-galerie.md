@@ -103,13 +103,22 @@ haben (`checkSpaceSources`). Die Übernahme braucht deshalb eine eigene Schreibs
 
 ## Abweichungen und offene Punkte
 
-- **Keine Vorschaubilder im Raster.** Die Auswahl zeigt Art, Größe und Kennzeichen, aber noch keine Bilder. Die Vorschauen
-  aus 3.5a-2 könnten genutzt werden. Das ist offen, weil es die Oberfläche vergrößert.
-- **Kein eigener Isolationsfilter für `share:export`.** Die Abhängigkeitsregel ist mit dem Modul nur durch Konvention
-  festgelegt (nur `share:space` darunter). Eine Build-Prüfung wie `checkSpaceIsolation` ist noch nicht gebaut.
-- **Verwaiste ausstehende Einträge nach einem Absturz.** Bricht der Prozess zwischen Anlegen und Freigabe ab, bleibt ein
-  Eintrag mit `IS_PENDING = 1` zurück. Android räumt solche Einträge nach einer Frist auf. Eine Bereinigung beim Start
-  fehlt in diesem Stand.
+- **Vorschaubilder in der Auswahl (Härtung vor v0.3.0-rc.1, erledigt).** Die Kacheln zeigen die 320-px-Vorschau aus dem
+  Space-Speicher, dieselbe Quelle und Regel wie die Medienansicht (`MediaPreview`, `HostMediaStore`). Fehlt die Vorschau,
+  zeigt ein Bild das Original verkleinert (Hotfix 2), sonst den Platzhalter „Vorschau folgt“. Das Video-Kennzeichen bleibt.
+  Die Vorschauen werden beim Öffnen der Auswahl gelesen. Eine Vorschau, die danach fertig wird, erscheint erst beim nächsten
+  Öffnen. Die Goldens zeigen die Platzhalter, weil die Testfixtures keine Bilddateien tragen (wie die Goldens der Medienansicht).
+- **Isolationsprüfung für `share:export` (Härtung vor rc.1, erledigt).** `checkExportIsolation` (Plugin
+  `emberlight.export.isolation`, hängt in `check`) lässt über den aufgelösten Graphen nur `:share:space` zu. Alle anderen
+  Projekte des Builds sind verboten, auch künftige: `:app`, `:core:media`, `:feature:*`, `:share:server` und neue Module.
+  Begründung: Die Schreibseite kennt nur die Domäne. Die Galerie darf nicht von `share:*` abhängen
+  (`checkGalleryNoSpaceDependency`). Kein Quelltextfilter, weil `share:export` den Medienspeicher nutzen muss.
+- **Verwaiste ausstehende Einträge nach einem Absturz (Härtung vor rc.1, erledigt).** `MediaStoreExportSink.removeAbandonedCopies`
+  entfernt vor jeder neuen Übernahme nur Einträge, die diese App besitzt (`OWNER_PACKAGE_NAME`, ab Android 11), mit
+  `IS_PENDING = 1` unter `Pictures/Emberlight/`. Eine Kopie, die ein Lauf in diesem Prozess noch braucht (von `create` bis
+  `publish` oder `discard`), bleibt. Fremde Einträge bleiben. Unter Android 10 entfällt die Bereinigung, weil der Besitzer
+  dort nicht lesbar ist. Android räumt ausstehende Einträge nach einer Frist selbst auf. Die Bereinigung ist Hilfe: Scheitert
+  sie, läuft die Übernahme weiter. Ein Start-Aufruf beim App-Start fehlt noch; die Bereinigung läuft vor jedem Lauf.
 - **Vermerk ohne Kopie.** Löscht die Nutzerin bzw. der Nutzer die Kopie in der Galerie, bleibt der Vermerk. Eine erneute
   Übernahme derselben Datei ist dann nicht möglich. Eine Prüfung gegen den Medienspeicher wäre möglich, ist aber nicht
   gebaut.
