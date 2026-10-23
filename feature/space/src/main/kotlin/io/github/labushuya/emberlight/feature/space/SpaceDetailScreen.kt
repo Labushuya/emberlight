@@ -1,5 +1,6 @@
 package io.github.labushuya.emberlight.feature.space
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,13 +22,18 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,20 +55,24 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SpaceDetailScreen(
+    onEdit: (String) -> Unit,
+    onBack: () -> Unit,
+    onStart: (String) -> Unit,
+    onSetup: (String) -> Unit,
+    onOpenRunning: (String) -> Unit,
+    onTemplate: (String) -> Unit,
+    onExport: (String) -> Unit,
     modifier: Modifier = Modifier,
-    onEdit: (String) -> Unit = {},
-    onBack: () -> Unit = {},
-    onStart: (String) -> Unit = {},
-    onSetup: (String) -> Unit = {},
-    onOpenRunning: (String) -> Unit = {},
-    onTemplate: (String) -> Unit = {},
-    onExport: (String) -> Unit = {},
     viewModel: SpaceDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val purgeFailed by viewModel.failure.collectAsStateWithLifecycle()
+    val problem by viewModel.problem.collectAsStateWithLifecycle()
+    val snackbarHost = remember { SnackbarHostState() }
+    DetailProblemEffect(problem = problem, onConsume = viewModel::consumeProblem, hostState = snackbarHost)
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(hostState = snackbarHost) },
         topBar = {
             TopAppBar(
                 title = {},
@@ -111,15 +121,15 @@ internal fun SpaceDetailPane(
     onStart: (String) -> Unit,
     onSetup: (String) -> Unit,
     onOpenRunning: (String) -> Unit,
+    onChangeRetention: (Int) -> Unit,
+    onPurge: () -> Unit,
+    onTemplate: (String) -> Unit,
+    onExport: (String) -> Unit,
+    onRemove: () -> Unit,
     modifier: Modifier = Modifier,
-    onChangeRetention: (Int) -> Unit = {},
-    onPurge: () -> Unit = {},
     notificationsAllowed: Boolean = true,
     purgeFailed: Boolean = false,
     confirmPurgeOnOpen: Boolean = false,
-    onTemplate: (String) -> Unit = {},
-    onExport: (String) -> Unit = {},
-    onRemove: () -> Unit = {},
 ) {
     val record = state.record
     when {
@@ -482,6 +492,36 @@ private fun DetailRow(
         )
     }
 }
+
+/**
+ * Zeigt eine Meldung zu einem gescheiterten Vorgang kurz als Snackbar und quittiert sie danach (Härtung vor
+ * v0.3.0-rc.1). Stille Fehler gibt es damit nicht mehr.
+ */
+@Composable
+internal fun DetailProblemEffect(
+    problem: DetailProblem?,
+    onConsume: () -> Unit,
+    hostState: SnackbarHostState,
+) {
+    // Der Text entsteht in der Komposition, damit er sich mit der Sprache ändert. Im Effekt liest die Oberfläche keine Ressourcen.
+    val message = problem?.messageRes()?.let { stringResource(it) }
+    val currentOnConsume by rememberUpdatedState(onConsume)
+    // Quittiert wird erst nach dem Zeigen. Das Quittieren ändert den Schlüssel und würde die Meldung sonst abbrechen.
+    LaunchedEffect(problem) {
+        if (message != null) {
+            hostState.showSnackbar(message)
+            currentOnConsume()
+        }
+    }
+}
+
+@StringRes
+internal fun DetailProblem.messageRes(): Int =
+    when (this) {
+        DetailProblem.RETENTION_NOT_CHANGED -> R.string.space_problem_retention_not_changed
+        DetailProblem.NOT_FOUND -> R.string.space_detail_missing
+        DetailProblem.REMOVE_NOT_DELETED -> R.string.space_problem_remove_not_deleted
+    }
 
 @Composable
 private fun CenteredMessage(

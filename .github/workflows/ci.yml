@@ -28,7 +28,10 @@ jobs:
   build:
     name: Build, Lint und Tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # 60 statt 45 min. Zusätzlich zur Ursachenbehebung: Die Werkzeuge dürfen im ungünstigen Fall bis 13 min brauchen
+    # (zwei Versuche à 6 min, Schritt-Limit 15). Der Build-Schritt lief in diesem PR 29 min (main 21 min). Mit 45 min
+    # hätte die Summe nicht sicher gereicht.
+    timeout-minutes: 60
     # Ein früher sporadischer Lint-Absturz soll beim Wiederauftreten mit vollständigem Stacktrace im Log stehen
     # (Wiedervorlage in ADR 0001). Ohne diese Variable zeigt Lint nur die Kurzfassung.
     env:
@@ -81,7 +84,10 @@ jobs:
           key: robolectric-${{ steps.robolectric.outputs.version }}-sdk${{ steps.robolectric.outputs.sdk }}-${{ runner.os }}
 
       # Gegenprobe der Standortentfernung (ADR 0015): Werkzeuge per Composite-Action, die auch release.yml (Test-Job) nutzt.
+      # Eigenes Zeitlimit: Die Action wiederholt die Installation einmal (je 6 min). Ohne Limit hat ein langsamer Mirror
+      # den ganzen Job-Zeitraum von 45 min verbraucht (PR #57). Scheitert der Schritt, bricht der Job ab, nie still.
       - name: Werkzeuge für die Standort-Gegenprobe installieren
+        timeout-minutes: 15
         uses: ./.github/actions/install-cross-check-tools
 
       # Node 24 und Chrome für die Browser-Tests der Gäste-Seite (ADR 0019). Fehlt Chrome, bricht der Test mit CI=true ab.

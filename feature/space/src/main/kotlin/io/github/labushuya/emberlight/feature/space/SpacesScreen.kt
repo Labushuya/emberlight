@@ -21,12 +21,15 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,8 +53,11 @@ import io.github.labushuya.emberlight.share.space.retention.RetentionRules
 import java.io.File
 import io.github.labushuya.emberlight.core.design.R as DesignR
 
-/** Ab dieser Breite stehen Liste und Detail nebeneinander (wie die Navigationsleiste der App, ADR 0002). */
-private val WIDE_LAYOUT_MIN_WIDTH = 600.dp
+/**
+ * Ab dieser Breite des Inhalts stehen Liste und Detail nebeneinander (wie die Navigationsleiste der App, ADR 0002). Die App
+ * braucht dieselbe Grenze, um Benachrichtigungen richtig zu öffnen.
+ */
+val SPACES_WIDE_LAYOUT_MIN_WIDTH = 600.dp
 
 /** Testmarke für die Liste. Die Oberflächentests suchen darüber die Karten. */
 internal const val SPACES_LIST_TAG = "spaces-list"
@@ -65,20 +71,29 @@ internal fun SpacesScreen(
     onStart: (String) -> Unit,
     onSetup: (String) -> Unit,
     onOpenRunning: (String) -> Unit,
+    onCreate: () -> Unit,
+    onOpen: (String) -> Unit,
+    onEdit: (String) -> Unit,
+    onTemplate: (String) -> Unit,
+    onExport: (String) -> Unit,
     modifier: Modifier = Modifier,
-    onCreate: () -> Unit = {},
-    onOpen: (String) -> Unit = {},
-    onEdit: (String) -> Unit = {},
-    onTemplate: (String) -> Unit = {},
+    /** Space, der auf großen Displays im Detail daneben stehen soll (Benachrichtigung). `null` heißt: der erste. */
+    initialSelectedId: String? = null,
     viewModel: SpacesListViewModel = hiltViewModel(),
     detailViewModel: SpaceDetailViewModel = hiltViewModel(),
 ) {
     val spaces by viewModel.spaces.collectAsStateWithLifecycle()
     val detail by detailViewModel.state.collectAsStateWithLifecycle()
     val purgeFailed by detailViewModel.failure.collectAsStateWithLifecycle()
+    val problem by detailViewModel.problem.collectAsStateWithLifecycle()
+    val snackbarHost = remember { SnackbarHostState() }
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val wide = maxWidth >= WIDE_LAYOUT_MIN_WIDTH
-        var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+        DetailProblemEffect(problem = problem, onConsume = detailViewModel::consumeProblem, hostState = snackbarHost)
+        val wide = maxWidth >= SPACES_WIDE_LAYOUT_MIN_WIDTH
+        var selectedId by rememberSaveable { mutableStateOf(initialSelectedId) }
+        LaunchedEffect(initialSelectedId) {
+            if (initialSelectedId != null) selectedId = initialSelectedId
+        }
 
         LaunchedEffect(wide, spaces) {
             // Auf großen Displays ist immer ein Space gewählt, solange es einen gibt.
@@ -108,6 +123,7 @@ internal fun SpacesScreen(
                         onChangeRetention = { days -> detailViewModel.changeRetention(days) },
                         onPurge = { detailViewModel.purge(onDone = {}) },
                         onTemplate = onTemplate,
+                        onExport = onExport,
                         onRemove = { detailViewModel.removeFromList(onDone = {}) },
                         notificationsAllowed = detailViewModel.notificationsAllowed,
                         purgeFailed = purgeFailed,
@@ -128,6 +144,7 @@ internal fun SpacesScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        SnackbarHost(hostState = snackbarHost, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 

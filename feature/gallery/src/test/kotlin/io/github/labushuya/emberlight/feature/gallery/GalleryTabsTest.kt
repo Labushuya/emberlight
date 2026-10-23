@@ -178,6 +178,7 @@ class GalleryTabsTest {
                     onOpenSettings = {},
                     playback = testPlayback(),
                     onAlbumClick = onAlbumClick,
+                    onAbout = {},
                     onZoomLevelChange = {},
                 )
             }

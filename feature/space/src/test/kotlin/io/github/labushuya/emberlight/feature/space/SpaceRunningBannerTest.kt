@@ -55,6 +55,11 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onCancelStart = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }
@@ -79,6 +84,11 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onCancelStart = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }
@@ -104,6 +114,11 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onCancelStart = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }
@@ -125,6 +140,11 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onCancelStart = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }
@@ -148,6 +168,11 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onCancelStart = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }
@@ -184,6 +209,10 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                     onCancelStart = { cancelled++ },
                 )
             }
@@ -212,6 +241,11 @@ class SpaceRunningBannerTest {
                     onRemoveRequest = {},
                     onRotateRequest = {},
                     onAcknowledgeInvite = {},
+                    onCancelStart = {},
+                    onUploadCancel = {},
+                    onMediaFilter = {},
+                    onMediaOpen = {},
+                    onExtend = {},
                 )
             }
         }

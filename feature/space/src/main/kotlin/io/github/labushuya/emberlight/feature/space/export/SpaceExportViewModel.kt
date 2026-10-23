@@ -9,14 +9,19 @@ import androidx.work.WorkInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.labushuya.emberlight.feature.space.SpaceExportRoute
+import io.github.labushuya.emberlight.feature.space.media.HostMediaStore
 import io.github.labushuya.emberlight.share.export.MediaStoreExportSink
 import io.github.labushuya.emberlight.share.space.MediaEntity
+import io.github.labushuya.emberlight.share.space.MediaId
+import io.github.labushuya.emberlight.share.space.SpaceId
 import io.github.labushuya.emberlight.share.space.SpaceLimits
 import io.github.labushuya.emberlight.share.space.SpacesDatabase
 import io.github.labushuya.emberlight.share.space.export.ExportCandidate
 import io.github.labushuya.emberlight.share.space.export.ExportSelection
 import io.github.labushuya.emberlight.share.space.export.ExportSpacePolicy
 import io.github.labushuya.emberlight.share.space.management.SpaceStatus
+import io.github.labushuya.emberlight.share.space.preview.PreviewRules
+import io.github.labushuya.emberlight.share.space.preview.PreviewState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,9 +32,13 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 
-/** Eine Kachel der Auswahl. [kind] ist „Bild“ oder „Video“. */
+/**
+ * Eine Kachel der Auswahl. [isVideo] wählt das Kennzeichen „Video“. [previewFile] ist die 320-px-Vorschau aus dem
+ * Space-Speicher, [originalFile] der Rückfall bei fehlgeschlagener Vorschau (Bild). Beides `null` heißt: Platzhalter.
+ */
 data class ExportItemUi(
     val mediaId: String,
     val isVideo: Boolean,
@@ -37,6 +46,9 @@ data class ExportItemUi(
     val locationKept: Boolean,
     val exported: Boolean,
     val selected: Boolean,
+    val previewState: String? = null,
+    val previewFile: File? = null,
+    val originalFile: File? = null,
 )
 
 /** Ergebnis einer Übernahme in Zahlen. */
@@ -102,6 +114,7 @@ class SpaceExportViewModel
         savedStateHandle: SavedStateHandle,
         private val database: SpacesDatabase,
         @ApplicationContext private val context: Context,
+        private val store: HostMediaStore,
     ) : ViewModel() {
         private val spaceId: String = savedStateHandle.toRoute<SpaceExportRoute>().id
         private val selectionState = MutableStateFlow(ExportSelection(emptyList()))
@@ -109,6 +122,9 @@ class SpaceExportViewModel
         val state: StateFlow<SpaceExportUiState> = _state.asStateFlow()
 
         private var exportable = true
+
+        /** Vorschau-Dateien je Medium, beim Laden aus dem Space-Speicher gelesen (ADR 0022, Vorschaubilder). */
+        private var previews: Map<String, PreviewFiles> = emptyMap()
 
         init {
             viewModelScope.launch { load() }
@@ -163,12 +179,15 @@ class SpaceExportViewModel
             exportable = row != null && !row.purging &&
                 (row.status == SpaceStatus.ACTIVE.name || row.status == SpaceStatus.ENDED.name)
             val exported = database.exports().exportedIds(spaceId).toSet()
-            val candidates =
+            val media =
                 database
                     .media()
                     .allOf(spaceId)
                     .filter { it.state == READY }
                     .sortedWith(compareByDescending<MediaEntity> { it.createdAt }.thenBy { it.id })
+            previews = media.associate { it.id to previewFilesOf(it) }
+            val candidates =
+                media
                     .map { medium ->
                         ExportCandidate(
                             mediaId = medium.id,
@@ -189,12 +208,28 @@ class SpaceExportViewModel
             publish()
         }
 
+        /**
+         * Vorschau und Rückfall für ein Medium aus dem Space-Speicher, wie in der Medienansicht (ADR 0019, Hotfix 2): Die
+         * Vorschau nur, wenn sie bereit ist. Das Original nur für ein Bild mit fehlgeschlagener Vorschau.
+         */
+        private suspend fun previewFilesOf(medium: MediaEntity): PreviewFiles {
+            val space = runCatching { SpaceId(spaceId) }.getOrNull()
+            val id = MediaId.parse(medium.id)
+            if (space == null || id == null) return PreviewFiles(medium.previewState, null, null)
+            val isVideo = PreviewRules.isVideo(medium.mime)
+            val preview = if (medium.previewState == PreviewState.READY) store.previewFile(space, id) else null
+            val original =
+                if (medium.previewState == PreviewState.FAILED && !isVideo) store.originalFile(space, id) else null
+            return PreviewFiles(medium.previewState, preview, original)
+        }
+
         private fun publish() {
             val selection = selectionState.value
             _state.update { current ->
                 current.copy(
                     items =
                         selection.candidates.map { candidate ->
+                            val files = previews[candidate.mediaId]
                             ExportItemUi(
                                 mediaId = candidate.mediaId,
                                 isVideo = candidate.isVideo,
@@ -202,6 +237,9 @@ class SpaceExportViewModel
                                 locationKept = candidate.locationKept,
                                 exported = candidate.alreadyExported,
                                 selected = candidate.mediaId in selection.selected,
+                                previewState = files?.previewState,
+                                previewFile = files?.preview,
+                                originalFile = files?.original,
                             )
                         },
                     selectedCount = selection.count,
@@ -289,3 +327,10 @@ class SpaceExportViewModel
             const val READY = "READY"
         }
     }
+
+/** Dateien für die Kachel eines Mediums. Nur im ViewModel, die Oberfläche bekommt sie über [ExportItemUi]. */
+private data class PreviewFiles(
+    val previewState: String?,
+    val preview: File?,
+    val original: File?,
+)

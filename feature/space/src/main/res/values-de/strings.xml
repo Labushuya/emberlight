@@ -20,6 +20,8 @@
     <string name="space_detail_delete">Löschen</string>
     <string name="space_detail_not_editable">Nur Entwürfe lassen sich bearbeiten. Ist ein Space aktiv, bleiben seine Einstellungen fest.</string>
     <string name="space_detail_missing">Dieser Space gibt es nicht mehr.</string>
+    <string name="space_problem_retention_not_changed">Die Frist wurde nicht geändert.</string>
+    <string name="space_problem_remove_not_deleted">Aus der Liste entfernen geht nur bei einem gelöschten Space.</string>
     <string name="space_detail_select">Wähle einen Space aus, um die Details zu sehen.</string>
 
     <!-- Löschen -->

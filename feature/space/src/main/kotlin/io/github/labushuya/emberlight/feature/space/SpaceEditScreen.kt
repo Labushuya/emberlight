@@ -78,8 +78,8 @@ internal const val SPACE_EDIT_TAG = "space-edit"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SpaceEditScreen(
+    onDone: () -> Unit,
     modifier: Modifier = Modifier,
-    onDone: () -> Unit = {},
     viewModel: SpaceEditViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()

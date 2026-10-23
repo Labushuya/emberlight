@@ -75,6 +75,7 @@ internal class GalleryHarness(
                 onRequestPermission = {},
                 onOpenSettings = {},
                 onAlbumClick = {},
+                onAbout = {},
                 onZoomLevelChange = { zoomLevel = it },
                 playback = testPlayback(),
             )

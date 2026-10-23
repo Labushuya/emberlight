@@ -20,6 +20,8 @@
     <string name="space_detail_delete">Delete</string>
     <string name="space_detail_not_editable">Only drafts can be edited. Once a space is active, its settings stay fixed.</string>
     <string name="space_detail_missing">This space no longer exists.</string>
+    <string name="space_problem_retention_not_changed">The retention period was not changed.</string>
+    <string name="space_problem_remove_not_deleted">Only a deleted space can be removed from the list.</string>
     <string name="space_detail_select">Select a space to see its details.</string>
 
     <!-- Löschen -->

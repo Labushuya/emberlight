@@ -249,15 +249,15 @@ internal fun SpaceRunningContent(
     onRemoveRequest: (ParticipantInfo) -> Unit,
     onRotateRequest: () -> Unit,
     onAcknowledgeInvite: () -> Unit,
+    onUploadCancel: () -> Unit,
+    onMediaFilter: (MediaFilter) -> Unit,
+    onMediaOpen: (HostMediaItem) -> Unit,
+    onExtend: () -> Unit,
+    onCancelStart: () -> Unit,
     modifier: Modifier = Modifier,
     upload: HostUploadUiState = HostUploadUiState(),
     media: HostMediaUiState = HostMediaUiState(),
     onPickMedia: (() -> Unit)? = null,
-    onUploadCancel: () -> Unit = {},
-    onMediaFilter: (MediaFilter) -> Unit = {},
-    onMediaOpen: (HostMediaItem) -> Unit = {},
-    onExtend: () -> Unit = {},
-    onCancelStart: () -> Unit = {},
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         val record = state.record
