@@ -116,8 +116,11 @@ haben (`checkSpaceSources`). Die Übernahme braucht deshalb eine eigene Schreibs
 - **Videos ohne Aufnahmedatum.** Das Datum eines Videos ist nicht gespeichert und nicht ausgelesen.
 - **Robolectric.** Der Medienspeicher ist ein Fake (`FakeMediaStoreProvider`). Der freie Platz wird dort nicht gemessen. Der
   Weg vor Android 10 hat keinen Test. Das prüft der Gerätetest (Testkatalog 11.12).
-- **Goldens der Auswahl** (Telefon de und en, breites Display) fehlen in diesem Stand. Die Oberflächen-Tests für den
-  Faltdisplay-Fall (Touch-Injection) fehlen ebenfalls.
+- **Goldens der Auswahl** (`SpaceExport_phone_de`, `SpaceExport_phone_en`, `SpaceExport_tablet_de`) sind aufgenommen und
+  visuell geprüft. Die Auswahl ist dafür als zustandslose Oberfläche `SpaceExportContent` getrennt.
+- **Touch-Tests** auf dem aufgeklappten Faltdisplay (`w673dp-h728dp`) und dem breiten Display (`w840dp-h900dp`):
+  „Alle“, „Nichts“, „Übernehmen“ werden per `performTouchInput { click() }` ausgelöst. Der Fehler „Space starten“ auf dem
+  Faltdisplay wird nicht hier behoben, nur das eigene UI ist abgesichert.
 
 ## Tests
 

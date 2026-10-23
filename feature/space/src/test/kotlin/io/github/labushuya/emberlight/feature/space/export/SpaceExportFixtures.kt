@@ -8,10 +8,38 @@ internal object SpaceExportFixtures {
     fun selected(): SpaceExportUiState {
         val items =
             listOf(
-                ExportItemUi("m1", isVideo = false, sizeBytes = 3 * MIB, locationKept = false, exported = false, selected = true),
-                ExportItemUi("m2", isVideo = false, sizeBytes = 4 * MIB, locationKept = true, exported = false, selected = true),
-                ExportItemUi("m3", isVideo = true, sizeBytes = 48 * MIB, locationKept = false, exported = false, selected = false),
-                ExportItemUi("m4", isVideo = false, sizeBytes = 2 * MIB, locationKept = false, exported = true, selected = false),
+                ExportItemUi(
+                    "m1",
+                    isVideo = false,
+                    sizeBytes = 3 * MIB,
+                    locationKept = false,
+                    exported = false,
+                    selected = true,
+                ),
+                ExportItemUi(
+                    "m2",
+                    isVideo = false,
+                    sizeBytes = 4 * MIB,
+                    locationKept = true,
+                    exported = false,
+                    selected = true,
+                ),
+                ExportItemUi(
+                    "m3",
+                    isVideo = true,
+                    sizeBytes = 48 * MIB,
+                    locationKept = false,
+                    exported = false,
+                    selected = false,
+                ),
+                ExportItemUi(
+                    "m4",
+                    isVideo = false,
+                    sizeBytes = 2 * MIB,
+                    locationKept = false,
+                    exported = true,
+                    selected = false,
+                ),
             )
         return SpaceExportUiState(
             loading = false,
@@ -36,6 +64,12 @@ internal object SpaceExportFixtures {
                     selected = index == 1,
                 )
             }
-        return SpaceExportUiState(loading = false, spaceName = "Sommerfest", items = items, selectedCount = 1, selectedBytes = MIB)
+        return SpaceExportUiState(
+            loading = false,
+            spaceName = "Sommerfest",
+            items = items,
+            selectedCount = 1,
+            selectedBytes = MIB,
+        )
     }
 }

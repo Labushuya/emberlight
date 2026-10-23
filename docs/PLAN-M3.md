@@ -137,11 +137,11 @@ Branch `feature/m3-3.7-galerie-uebernahme`, Draft-PR #54. Umfang nach [ADR 0022]
 - Medienspeicher-Schreiber (`share:export`): ab Android 10 mit `IS_PENDING`, Android 8 und 9 über den Legacy-Weg.
 - Auswahl, Hintergrundauftrag, Fortschritt, Abbrechen, Einstieg im Detail, Aktion „Ansehen“ der Erinnerung.
 - Goldens der Detailansichten neu aufgenommen, visuell geprüft.
+- Goldens der Auswahl (Telefon de und en, breites Display de) und Touch-Tests auf dem Faltdisplay und dem breiten Display.
 
 Offen (Stand dieses Eintrags):
 
 - Gerätetests (Testkatalog Abschnitt 11).
-- Goldens und Oberflächentests für die Auswahl selbst (Telefon de und en, breites Display, Touch-Injection auf dem Faltdisplay).
 - Vorschaubilder im Raster der Auswahl.
 - Bereinigung verwaister ausstehender Einträge nach einem Absturz.
 - Eigener Isolationsfilter für `share:export`.
