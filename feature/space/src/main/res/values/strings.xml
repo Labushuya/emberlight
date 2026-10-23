@@ -303,6 +303,7 @@
     <string name="space_running_end_title">End the space?</string>
     <string name="space_running_end_text">Guests can no longer upload or download afterwards.</string>
     <string name="space_running_end_confirm">End</string>
+    <string name="space_running_cancel_queued">Cancel start</string>
     <string name="space_running_ended_text">The space has ended. The media stay in the app until the retention ends.</string>
     <string name="space_interrupted_title">Space was interrupted</string>
     <string name="space_interrupted_text">emberlight was stopped in the background. Guests can reach the space again once you resume it.</string>

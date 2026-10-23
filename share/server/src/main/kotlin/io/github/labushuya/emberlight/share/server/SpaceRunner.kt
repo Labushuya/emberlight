@@ -121,6 +121,12 @@ internal sealed interface RunEvent {
 
     /** Die Warteschlange ist abgearbeitet oder verworfen. Der wartende Start hat gestartet, gescheitert oder ist mit dem Dienst beendet. */
     data object StartQueueEnded : RunEvent
+
+    /**
+     * Der wartende Start ist abgebrochen: durch den Gastgeber oder weil der Dienst während des Wartens beendet wurde. Der Space
+     * ist wieder Entwurf (ADR 0017, Nachtrag 22.10.2026).
+     */
+    data object StartCancelled : RunEvent
 }
 
 /** Schnittstelle zur Umgebung des Betriebs: Speicher, Netz, Sperren, Wecker und Hinweise. Der Dienst setzt sie um. */
@@ -195,6 +201,18 @@ internal interface RunHost {
         spaceId: SpaceId,
         endsAtMillis: Long,
     ) {}
+
+    /**
+     * Merkt einen Start, der im Nachlauf wartet. Stirbt der Dienst während des Wartens, findet der Neustart die Merkung und
+     * setzt den Space zurück auf Entwurf (ADR 0017, Nachtrag 22.10.2026). Die Merkung ist in der Datei der App abgelegt.
+     */
+    fun markQueued(spaceId: SpaceId) {}
+
+    /** Löscht die Merkung des wartenden Start: übernommen, abgebrochen oder verworfen. */
+    fun clearQueued() {}
+
+    /** Der gemerkte wartende Start aus einem früheren Lauf, `null` wenn keiner wartet. */
+    fun queuedStart(): SpaceId? = null
 
     fun onEvent(event: RunEvent)
 
@@ -314,11 +332,7 @@ internal class SpaceRunner(
     private suspend fun start(command: RunCommand.Start) {
         val current = phase
         if (current is Phase.Closing) {
-            // Der vorherige Space ist noch im Nachlauf. Der Start wartet, statt den Nachlauf abzubrechen. Der Space ist in der
-            // Datenbank schon aktiv, deshalb darf er nicht verworfen werden (ADR 0017, Nachtrag 21.10.2026).
-            pendingStart = command
-            host.onClosing()
-            host.onEvent(RunEvent.StartQueued)
+            queue(command)
             return
         }
         if (current !is Phase.Idle) return
@@ -404,6 +418,38 @@ internal class SpaceRunner(
     }
 
     /**
+     * Reiht einen Start im Nachlauf ein. Der Space ist in der Datenbank schon aktiv (SpaceStarter), der Server läuft noch für
+     * den Nachlauf. Die Merkung sorgt dafür, dass ein Prozess-Tod den Start nicht als aktiven, verwaisten Space zurücklässt.
+     * Gleicher Space: der wartende Start gilt. Ein anderer Space ersetzt den wartenden. Der ersetzte geht auf Entwurf zurück.
+     */
+    private suspend fun queue(command: RunCommand.Start) {
+        val held = pendingStart
+        if (held != null) {
+            if (held.spaceId == command.spaceId) return
+            host.abortStart(held.spaceId)
+        }
+        pendingStart = command
+        host.markQueued(command.spaceId)
+        host.onClosing()
+        host.onEvent(RunEvent.StartQueued)
+    }
+
+    /**
+     * Bricht den wartenden Start ab (Stopp des Gastgebers, ADR 0017, Nachtrag 22.10.2026). Der Space geht zurück auf den Stand
+     * vor dem Start, also Entwurf. Der Nachlauf des vorigen Space läuft unbeeinflusst weiter. Nichts anderes ist entstanden: der
+     * Server und die Einladung entstehen erst mit dem Start, und die Merkung fällt weg.
+     */
+    private suspend fun cancelQueued(): Boolean {
+        val held = pendingStart ?: return false
+        pendingStart = null
+        host.clearQueued()
+        host.abortStart(held.spaceId)
+        host.onEvent(RunEvent.StartCancelled)
+        host.onEvent(RunEvent.StartQueueEnded)
+        return true
+    }
+
+    /**
      * Wecker oder Anfrage an einen abgelaufenen Space. Läuft der Server, endet er nur, wenn die Frist wirklich um ist (ein
      * früher Wecker bleibt folgenlos). Ohne Server entscheidet der Stand nach dem Neustart, ob der Space endet.
      */
@@ -436,6 +482,16 @@ internal class SpaceRunner(
      */
     private suspend fun restart() {
         if (phase !is Phase.Idle) return
+        val queued = host.queuedStart()
+        if (queued != null) {
+            // Der Dienst ist während des Wartens beendet worden. Der Start lief nie: der Space geht zurück auf Entwurf und
+            // nicht in den Zustand „aktiv, unterbrochen“ (ADR 0017, Nachtrag 22.10.2026).
+            host.clearQueued()
+            host.abortStart(queued)
+            host.onEvent(RunEvent.StartCancelled)
+            host.onIdle()
+            return
+        }
         when (val decision = decideIdle()) {
             RestartDecision.NothingToDo, is RestartDecision.Interrupted -> {
                 host.onIdle()
@@ -513,12 +569,25 @@ internal class SpaceRunner(
     private suspend fun stop(reason: StopReason) {
         val current = phase
         if (current is Phase.Closing) {
-            // Der Nachlauf läuft schon. Nur das Ende des Dienstes bricht ihn ab, jedes andere Ende ist bereits geschehen.
-            if (reason == StopReason.DESTROYED) {
-                val dropped = pendingStart != null
-                pendingStart = null
-                finishClosing(current)
-                if (dropped) host.onEvent(RunEvent.StartQueueEnded)
+            // Der Nachlauf läuft schon. Ein Stopp gilt dem wartenden Start (er wird abgebrochen). Nur das Ende des Dienstes
+            // bricht den Nachlauf ab. Jedes andere Ende ist bereits geschehen.
+            when (reason) {
+                StopReason.USER -> {
+                    cancelQueued()
+                }
+
+                StopReason.DESTROYED -> {
+                    val dropped = pendingStart
+                    if (dropped != null) {
+                        pendingStart = null
+                        host.clearQueued()
+                        host.abortStart(dropped.spaceId)
+                    }
+                    finishClosing(current)
+                    if (dropped != null) host.onEvent(RunEvent.StartQueueEnded)
+                }
+
+                StopReason.EXPIRED -> {}
             }
             return
         }
@@ -590,6 +659,8 @@ internal class SpaceRunner(
         val next = pendingStart
         pendingStart = null
         if (next != null) {
+            // Die Merkung fällt mit der Übernahme. Scheitert der Start, geht der Space über `fail` auf Entwurf.
+            host.clearQueued()
             // Die Meldung „wartet“ bleibt, bis der Start entschieden ist: gestartet, verweigert oder abgelehnt.
             start(next)
             host.onEvent(RunEvent.StartQueueEnded)

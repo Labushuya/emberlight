@@ -1,7 +1,7 @@
 package io.github.labushuya.emberlight.feature.space
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -161,8 +161,37 @@ class SpaceRunningBannerTest {
         composeRule.onNodeWithText(queuedText).assertIsDisplayed()
         assertAbsent(context.getString(R.string.space_interrupted_title))
         assertAbsent(context.getString(R.string.space_interrupted_resume))
-        // Beenden geht im Nachlauf nicht: der Lauf wartet noch, der Knopf ist deaktiviert.
-        composeRule.onNodeWithText(context.getString(R.string.space_running_end)).assertIsNotEnabled()
+        // Beenden gibt es im Wartezustand nicht. Stattdessen lässt sich der wartende Start abbrechen (ADR 0017, 22.10.2026).
+        assertAbsent(context.getString(R.string.space_running_end))
+        composeRule
+            .onNodeWithText(context.getString(R.string.space_running_cancel_queued))
+            .assertIsDisplayed()
+            .assertIsEnabled()
+    }
+
+    @Test
+    fun theWaitingStartCanBeCancelledFromTheButton() {
+        var cancelled = 0
+        composeRule.setContent {
+            EmberlightTheme {
+                SpaceRunningContent(
+                    state = state(runState = RunState.Idle, startQueued = true),
+                    onEnd = {},
+                    onConfirmNetwork = {},
+                    onAcknowledgePause = {},
+                    onSetup = {},
+                    onResume = {},
+                    onRemoveRequest = {},
+                    onRotateRequest = {},
+                    onAcknowledgeInvite = {},
+                    onCancelStart = { cancelled++ },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.space_running_cancel_queued)).performClick()
+
+        assertEquals(1, cancelled)
     }
 
     @Test

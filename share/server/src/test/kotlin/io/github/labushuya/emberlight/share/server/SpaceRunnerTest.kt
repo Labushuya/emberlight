@@ -578,6 +578,196 @@ class SpaceRunnerTest {
         }
 
     @Test
+    fun aStopOfTheWaitingStartCancelsItAndTheSpaceGoesBackToDraftWithNothingCreated() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            assertEquals(spaceId, env.host.queued)
+
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            // Der wartende Start ist zurückgerollt: Entwurf, keine Merkung, kein zweiter Server, keine Einladung.
+            assertEquals(listOf(spaceId), env.host.aborted)
+            assertNull(env.host.queued)
+            assertTrue(RunEvent.StartCancelled in env.host.events)
+            assertEquals(RunEvent.StartQueueEnded, env.host.events.last())
+            assertEquals(1, env.servers.size)
+            assertEquals(RunState.Idle, env.state.value)
+
+            // Der Nachlauf des vorigen Space läuft unbeeinflusst zu Ende, die Sperren fallen danach.
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS + 1)
+            runCurrent()
+            assertEquals(1, env.servers.single().stops)
+            assertEquals(1, env.host.locksReleased)
+            assertEquals(0, env.host.locksHeldNow)
+            assertEquals(1, env.host.idles)
+            assertEquals(1, env.host.ended.size)
+            assertEquals(listOf(spaceId), env.host.aborted)
+        }
+
+    @Test
+    fun aStopRightBeforeTheTakeoverCancelsTheStartAndNothingIsStarted() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            // Der Stopp kommt vor der Übernahme in den Verarbeiter: Der Start ist abgebrochen, bevor der Nachlauf endet.
+            env.submit(RunCommand.Stop(StopReason.USER))
+            env.submit(RunCommand.GraceOver)
+            runCurrent()
+
+            assertEquals(listOf(spaceId), env.host.aborted)
+            assertEquals(1, env.servers.size)
+            assertEquals(RunState.Idle, env.state.value)
+            assertEquals(1, env.host.idles)
+        }
+
+    @Test
+    fun aStopRightAfterTheTakeoverEndsTheNewSpaceNormallyAndRollsBackNothing() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            // Die Übernahme kommt zuerst. Der Stopp gilt dann dem laufenden Space und beendet ihn mit eigenem Nachlauf.
+            env.submit(RunCommand.GraceOver)
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+
+            assertTrue(env.host.aborted.isEmpty())
+            assertEquals(2, env.servers.size)
+            assertEquals(2, env.host.ended.size)
+            assertNull(env.host.queued)
+            assertEquals(RunState.Idle, env.state.value)
+        }
+
+    @Test
+    fun aProcessDeathWhileTheStartWaitsIsRolledBackOnTheRestart() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+            assertEquals(spaceId, env.host.queued)
+
+            // Der Dienst stirbt im Nachlauf. Der neue Verarbeiter findet die Merkung und setzt den Space zurück.
+            env.restartRunner(this)
+            env.submit(RunCommand.Restart)
+            runCurrent()
+
+            assertEquals(listOf(spaceId), env.host.aborted)
+            assertNull(env.host.queued)
+            assertTrue(RunEvent.StartCancelled in env.host.events)
+            assertEquals(1, env.servers.size)
+            assertEquals(RunState.Idle, env.state.value)
+        }
+
+    @Test
+    fun aServiceEndWhileTheStartWaitsRollsItBackToDraft() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            env.submit(RunCommand.Stop(StopReason.DESTROYED))
+            runCurrent()
+
+            assertEquals(listOf(spaceId), env.host.aborted)
+            assertNull(env.host.queued)
+            assertTrue(RunEvent.StartQueueEnded in env.host.events)
+            assertEquals(1, env.servers.size)
+        }
+
+    @Test
+    fun aSecondStartForTheSameSpaceDuringTheGraceQueuesItOnlyOnce() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertTrue(env.host.aborted.isEmpty())
+            assertEquals(listOf(spaceId), env.host.marks)
+
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS + 1)
+            runCurrent()
+
+            assertEquals(2, env.servers.size)
+            assertEquals(1, env.servers.last().starts)
+            assertTrue(env.state.value is RunState.Running)
+        }
+
+    @Test
+    fun aNewerStartReplacesTheWaitingOneAndTheReplacedSpaceGoesBackToDraft() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            val newer = SpaceId.generate()
+            env.setup =
+                ServerSetup(
+                    spaceId = newer,
+                    spaceName = "Neu",
+                    startedAtMillis = START,
+                    expiresAtMillis = expires,
+                    persisted = true,
+                )
+            env.submit(RunCommand.Start(newer, port = 0))
+            runCurrent()
+
+            // Nur der neueste Start wartet. Der ersetzte Space geht zurück auf Entwurf, nicht in den Lauf.
+            assertEquals(listOf(spaceId), env.host.aborted)
+            assertEquals(newer, env.host.queued)
+
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS + 1)
+            runCurrent()
+
+            assertTrue(env.state.value is RunState.Running)
+            assertEquals(listOf(spaceId), env.host.aborted)
+            assertEquals(2, env.servers.size)
+            assertNull(env.host.queued)
+        }
+
+    @Test
+    fun aStartAfterACancelDuringTheGraceQueuesAgainAndRuns() =
+        runTest {
+            val env = runningEnv()
+            env.submit(RunCommand.Stop(StopReason.USER))
+            runCurrent()
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            env.submit(RunCommand.Stop(StopReason.USER))
+            env.submit(RunCommand.Start(spaceId, port = 0))
+            runCurrent()
+
+            assertEquals(listOf(spaceId), env.host.aborted)
+            assertEquals(spaceId, env.host.queued)
+
+            advanceTimeBy(SpaceRunner.CLOSE_GRACE_MILLIS + 1)
+            runCurrent()
+
+            assertTrue(env.state.value is RunState.Running)
+            assertEquals(2, env.servers.size)
+            assertNull(env.host.queued)
+        }
+
+    @Test
     fun aStartAfterTheGraceStartsAtOnce() =
         runTest {
             val env = Env(this)
@@ -1126,6 +1316,21 @@ class SpaceRunnerTest {
         override suspend fun abortStart(spaceId: SpaceId) {
             aborted += spaceId
         }
+
+        /** Die Merkung des wartenden Start, wie sie die Einstellungsdatei des Dienstes hält. */
+        var queued: SpaceId? = null
+        val marks = mutableListOf<SpaceId>()
+
+        override fun markQueued(spaceId: SpaceId) {
+            queued = spaceId
+            marks += spaceId
+        }
+
+        override fun clearQueued() {
+            queued = null
+        }
+
+        override fun queuedStart(): SpaceId? = queued
 
         override suspend fun recordPause(
             spaceId: SpaceId,
