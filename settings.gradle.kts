@@ -44,3 +44,5 @@ include(":share:space")
 include(":share:server")
 include(":share:network")
 include(":share:export")
+// Messwerkzeug für Meilenstein 4 (Netlab). Eigene App-ID, keine Abhängigkeit zur Haupt-App. Siehe docs/KONZEPT-M4.md Abschnitt 13.
+include(":tools:netlab")

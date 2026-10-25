@@ -81,6 +81,10 @@ gradlePlugin {
             id = "emberlight.release.manifest"
             implementationClass = "io.github.labushuya.emberlight.buildlogic.ReleaseManifestConventionPlugin"
         }
+        register("netlabIsolation") {
+            id = "emberlight.netlab.isolation"
+            implementationClass = "io.github.labushuya.emberlight.buildlogic.NetlabIsolationConventionPlugin"
+        }
         register("aboutLibraries") {
             id = "emberlight.about.libraries"
             implementationClass = "io.github.labushuya.emberlight.buildlogic.AboutLibrariesConventionPlugin"

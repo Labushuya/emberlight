@@ -359,3 +359,29 @@ Die Übernahme kopiert die gespeicherte Space-Datei nach `Pictures/Emberlight/<S
 - [ ] **12.8 GPL-Text.** Handlung: „GPL-Text anzeigen“ antippen, danach „GPL-3.0 online öffnen“. Erwartet: Der Volltext der GPL-3.0 steht im Dialog. Der Link öffnet gnu.org im Browser. *(umgesetzt)*
 - [ ] **12.9 Sprache.** Handlung: Die Seite auf Deutsch und auf Englisch öffnen. Erwartet: Alle Texte sind übersetzt. Lizenznamen, Versionen und Schriftnamen bleiben unverändert. *(umgesetzt)*
 - [ ] **12.10 Großes Display.** Handlung: Die Seite im Querformat auf einem Tablet öffnen. Erwartet: Keine abgeschnittenen Texte, die Navigation bleibt erreichbar. *(umgesetzt, Gerät offen)*
+
+## 13 Netlab-Prototyp (Paket 4.0, Meilenstein 4, umgesetzt, Gerätetests offen)
+
+Eigenständiges Messwerkzeug unter `tools/netlab`, getrennt von der Haupt-App. Die Messanleitung steht in `tools/netlab/README.md`.
+
+### 13a Automatisierte Tests (`./gradlew :tools:netlab:check`)
+
+- [x] **13.1 Payload.** `JoinPayloadTest`, `WifiQrTest`: Kodierung, Dekodierung, Fehlergründe, Sonderzeichen, Token.
+- [x] **13.2 Fähigkeiten.** `CapabilitiesTest`, `NetworkChangesTest`: „nicht verfügbar“ statt Annahme, Standardnetz, Mobilfunk-Validierung, VPN, Zustandswechsel.
+- [x] **13.3 Gäste.** `GuestTrackerTest`: verschiedene Adressen zählen einmal, eigene Adresse ausgenommen, Fenster „aktiv“.
+- [x] **13.4 Testserver.** `HttpWireTest`, `NetlabServerTest`: `/ping`, `/upload`, `/browser`, Token, Größengrenzen, Fehlercodes, echte Sockets auf Loopback.
+- [x] **13.5 Netzwahl.** `HotspotAddressPickerTest`, `SubnetCheckTest`, `ErrorClassifierTest`: Hotspot-Schnittstelle, Subnetz, Fehlerarten.
+- [x] **13.6 Bericht.** `ReportBuilderTest`: Abschnitte M1–M9, Maskierung von SSID und Passwort, Durchsatz, Gästezählung.
+- [x] **13.7 Bedienung.** `NetlabScreensTest`: Touch-Injection auf Telefon- und Faltdisplay-Größe (`w673dp-h728dp`).
+- [x] **13.8 Isolation.** `checkNetlabIsolation`: Das Modul erreicht keine Module der Haupt-App. `checkNoPlayServices` ist grün.
+
+### 13b Gerätetests (Nutzer, mit zwei Geräten)
+
+- [ ] **13.9 Hotspot starten (M1, M6).** Handlung: Gastgeber, „Hotspot starten“. Erwartet: SSID, Passwort und QR-Codes erscheinen, der Bericht nennt die Schnittstelle.
+- [ ] **13.10 Gast verbindet (M2).** Handlung: Gast scannt den App-QR-Code, „Mit Hotspot verbinden“, „Messungen starten“. Erwartet: Verbindung höchstens 30 s, gebundener Ping und Upload ok.
+- [ ] **13.11 Ungebundener Ping (M2, M3).** Handlung: Gast-Lauf bei aktiven mobilen Daten. Erwartet: Befund wird im Bericht ehrlich ausgewiesen (ok oder fehlgeschlagen mit Grund).
+- [ ] **13.12 Browser-Gast (M3, M7).** Handlung: Gerät ohne App scannt WLAN-QR und Browser-QR. Erwartet: Seite zeigt „Verbunden“.
+- [ ] **13.13 Gästezahl (M4).** Handlung: Gäste schrittweise zuschalten. Erwartet: Zähler stimmt mit den Geräten überein.
+- [ ] **13.14 Ende und Verlust (M9).** Handlung: Gastgeber beendet den Hotspot. Erwartet: Gast sieht „Hotspot-Verbindung verloren“, der Bericht erklärt es.
+- [ ] **13.15 Langlauf (M8).** Handlung: Zwei Stunden mit offener App. Erwartet: Keine Pause über 2 Minuten. Hintergrundbetrieb ist nicht umgesetzt.
+- [ ] **13.16 Berechtigungen.** Handlung: Frische Installation, Gastgeber und Gast. Erwartet: Abfrage für Standort oder „Geräte in der Nähe“ und für „Lokales Netzwerk“ (Android 17). Ablehnung führt zu einer klaren Meldung, kein Absturz.

@@ -51,6 +51,7 @@ dependencies {
     kover(project(":share:space"))
     kover(project(":share:server"))
     kover(project(":share:network"))
+    kover(project(":tools:netlab"))
 }
 
 kover {
