@@ -1,6 +1,6 @@
 # Paketplan Meilenstein 3: Space im vorhandenen WLAN
 
-Stand: 18.10.2026, Nachtrag 20.10.2026 (Entscheidungen zu Paket 3.2 und Designentscheidungen (a) bis (f)), Paket 3.3 umgesetzt am 20.10.2026 (ADR 0017), Paket 3.4 umgesetzt am 20.10.2026 (PR #35, ADR 0018), Nachtrag 21.10.2026 (Aufteilung 3.5a in 3.5a-1 bis 3.5a-3, Stand 21.10.2026: 3.5a-1 umgesetzt in PR #36, 3.5a-2 umgesetzt in PR #37, 3.5a-3 umgesetzt in PR #38; Aufteilung 3.5 in 3.5a bis 3.5c, Paket 3.6 mit Verlängern und Vorlage, Vorab-Release `v0.3.0-alpha.1`, kumulierter Testkatalog). Der Plan ist von der Nutzerin bzw. dem Nutzer bestätigt. Die Pakete folgen aufeinander. Jedes Paket endet mit einem Gerätetest bzw. einem Testkatalog.
+Stand: 18.10.2026, Nachtrag 20.10.2026 (Entscheidungen zu Paket 3.2 und Designentscheidungen (a) bis (f)), Paket 3.3 umgesetzt am 20.10.2026 (ADR 0017), Paket 3.4 umgesetzt am 20.10.2026 (PR #35, ADR 0018), Nachtrag 21.10.2026 (Aufteilung 3.5a in 3.5a-1 bis 3.5a-3, Stand 21.10.2026: 3.5a-1 umgesetzt in PR #36, 3.5a-2 umgesetzt in PR #37, 3.5a-3 umgesetzt in PR #38; Aufteilung 3.5 in 3.5a bis 3.5c, Paket 3.6 mit Verlängern und Vorlage, Vorab-Release `v0.3.0-alpha.1`, kumulierter Testkatalog), Nachtrag 25.10.2026 (Abschluss Meilenstein 3, Korrektur Paket 3.7: kein finales `v0.3.0`, siehe Abschnitt „Abschluss Meilenstein 3“). Der Plan ist von der Nutzerin bzw. dem Nutzer bestätigt. Die Pakete folgen aufeinander. Jedes Paket endet mit einem Gerätetest bzw. einem Testkatalog.
 
 Entwürfe der Oberflächen (Mockups, nicht bindend) liegen in [docs/mockups/](mockups/README.md). Dort steht die Zuordnung der Bildschirme zu den Paketen.
 
@@ -24,8 +24,8 @@ Grundlage ist [CLAUDE.md](../CLAUDE.md), Meilenstein 3, und [KONZEPT.md](KONZEPT
 | 3.5c (umgesetzt 21.10.2026, PR #40, ADR 0019 Nachtrag 3.5c; Gerätetest offen) | Gastgeber-Upload und Medienansicht in der App: eine gemeinsame SpaceVault je Space im Prozess (Befund 3.5a-2), System-Fotoauswahl, Kopie mit Standort-Entfernung und Rückfrage je Datei, Fortschritt und Abbrechen, Uploader ist der Gastgeber, Medienraster mit Vorschau und Filter „Meine“, Detail mit Entfernen im laufenden Space. |
 | 3.6b (umgesetzt 21.10.2026, PR #46, ADR 0021; Gerätetest offen) | Aufbewahrung nach dem Ende: Löschdatum und Frist ändern (ab jetzt), Jetzt löschen mit Bestätigung, Erinnerung zur Frist (24 h, bei kurzen Fristen nach der Hälfte, „sofort“ mit der Vorwarnung), Aktionen „Ansehen“, „1 Tag länger aufbewahren“, „Jetzt löschen“ (ohne direktes Löschen), Nachholen nach Neustart, eine gemeinsame Lösch-Funktion mit Fortsetzen. Schema 7 → 8 mit Migrationstest. Umfang und Auslegungen: ADR 0021. Nicht enthalten: automatische Löschung und Status `DELETED` (3.6c), Verlängern während der Laufzeit (3.6a), Vorlage (3.6a). |
 | 3.6 (3.6a umgesetzt 21.10.2026, PR #45; 3.6b umgesetzt 21.10.2026, PR #46; 3.6c umgesetzt 21.10.2026, PR #49, Gerätetest offen) | Ende und Nachhalten: Ablauf erzwingen, Aufbewahrung nach dem Ende (Feld heißt in der Oberfläche „Aufbewahrung nach dem Ende“, Begriff Nachhaltefrist im Konzept), Erinnerung mit Aktionen (Vorauswahl „nichts behalten“, Alles/Nichts auswählen), automatische Löschung (3.6c: Start, Liste, Wecker, WorkManager, Wiederaufnahme), Status `DELETED` mit Eintrag „Gelöscht am“, „Aus Liste entfernen“, Vorlage für neuen Space. Designentscheidungen: (a) „Jetzt löschen“ in der Erinnerung nur mit Bestätigung. (f) Bei „Sofort löschen“ kommt die Erinnerung kurz **vor** dem Ende. Nutzerentscheidung „a“ vom 21.10.2026, Verlängern und Vorlage: **Verlängern** während der Laufzeit, mit Banner bei Gästen. **„Als Vorlage für neuen Space“** nach dem Ende, ohne Medien. Ein beendeter Space bleibt geschlossen. Gastgeber-Benachrichtigung 10 Min. vor dem Ende und beim Ende, Hinweis im Beenden-Dialog (Zuordnung zu 3.6 ist ein Vorschlag). |
-| 3.7 (umgesetzt 22.10.2026, ADR 0022; Gerätetest offen, Testkatalog Abschnitt 11) | Gezielte Übernahme in `Pictures/Emberlight/<Space>`, danach Release `v0.3.0`. Pflicht (vorgezogen und umgesetzt, ADR 0020): „Über/Lizenzen“-Seite in der App mit Lizenzhinweisen aller mitgelieferten Bibliotheken (Apache-2.0 verlangt Lizenz bzw. NOTICE bei Weitergabe; ohne Play-Services-Plugin, z. B. AboutLibraries, prüfen), Hinweis auf GPL-3.0 und Link auf den Quellcode. Ausdrücklich nennen: die OFL-Schriften Fraunces und Inter (SIL OFL 1.1) mit Copyright-Zeile und Lizenztext aus `core/design/src/main/assets/licenses`. |
-| nach 3.5c (nur geplant, nicht umgesetzt) | Vorab-Release `v0.3.0-alpha.1` nach den Paketen 3.5a bis 3.5c, damit die Gäste-Webseite früh auf Geräten erprobt werden kann. Mit einem Endtest durch die Nutzerin bzw. den Nutzer anhand von [TESTKATALOG-M3.md](TESTKATALOG-M3.md). Die Versionslogik für Vorab-Tags ist umgesetzt (CLAUDE.md, ADR 0004, Nachtrag): `versionName` führt das Suffix (`0.3.0-alpha.1`), `versionCode` bleibt monoton. Der Release-Workflow (`release.yml`) setzt Vorab-Tags als GitHub-Prerelease, ohne „latest“. Der Probelauf per Dispatch bleibt. |
+| 3.7 (umgesetzt 22.10.2026, PR #54 gemergt 23.10.2026, ADR 0022; Gerätetest offen, Testkatalog Abschnitt 11) | Gezielte Übernahme in `Pictures/Emberlight/<Space>`. Kein finales `v0.3.0` in M3: `v0.3.0-rc.1` ist die Testversion der Gastgeber-Seite, das nächste reguläre Release kommt nach Meilenstein 4 (Entscheidung vom 25.10.2026, [KONZEPT-M4.md](KONZEPT-M4.md), Abschnitt 12). Pflicht (vorgezogen und umgesetzt, ADR 0020): „Über/Lizenzen“-Seite in der App mit Lizenzhinweisen aller mitgelieferten Bibliotheken (Apache-2.0 verlangt Lizenz bzw. NOTICE bei Weitergabe; ohne Play-Services-Plugin, z. B. AboutLibraries, prüfen), Hinweis auf GPL-3.0 und Link auf den Quellcode. Ausdrücklich nennen: die OFL-Schriften Fraunces und Inter (SIL OFL 1.1) mit Copyright-Zeile und Lizenztext aus `core/design/src/main/assets/licenses`. |
+| Vorab-Releases (umgesetzt) | Vorab-Release `v0.3.0-alpha.1` nach den Paketen 3.5a bis 3.5c, damit die Gäste-Webseite früh auf Geräten erprobt werden kann. Umgesetzt: `v0.3.0-alpha.1` (21.10.2026, Tag auf PR #43), `v0.3.0-alpha.2` (21.10.2026, Tag auf PR #50) und `v0.3.0-rc.1` (25.10.2026, Tag auf PR #60). `v0.3.0-alpha.1` nicht mehr verwenden (Standort bleibt bei manchen Kamera-Fotos erhalten, siehe [TESTKATALOG-M3.md](TESTKATALOG-M3.md)). `v0.3.0-rc.1` ist die Testversion der Gastgeber-Seite; kein finales `v0.3.0`. Mit einem Endtest durch die Nutzerin bzw. den Nutzer anhand von [TESTKATALOG-M3.md](TESTKATALOG-M3.md). Die Versionslogik für Vorab-Tags ist umgesetzt (CLAUDE.md, ADR 0004, Nachtrag): `versionName` führt das Suffix (`0.3.0-alpha.1`), `versionCode` bleibt monoton. Der Release-Workflow (`release.yml`) setzt Vorab-Tags als GitHub-Prerelease, ohne „latest“. Der Probelauf per Dispatch bleibt. |
 
 ## Stand Paket 3.6 (21.10.2026)
 
@@ -45,7 +45,7 @@ Die Übernehmen-Schaltfläche bleibt bis 3.7 ausgeblendet.
 - **Stopp in der App** ist Voraussetzung von 3.3 (Start aus der Oberfläche), nicht von 3.1 (ADR 0012, Nachtrag).
 - **Netzverlust** (18.10.2026): 3.1a stoppt den Server bei Verlust oder Wechsel der WLAN-Schnittstelle bzw. ihrer Adresse. 3.3 setzt automatisch fort, wenn dasselbe WLAN mit derselben IP zurückkommt (ADR 0013, Netz).
 - **`/health`** bleibt hinter der Zugriffsprüfung. Die Gäste-Webseite schickt den Token als Header mit (ADR 0014).
-- **`SERVER_API_VERSION` bleibt 1.** Erhöhung erst bei inkompatiblen Änderungen nach dem ersten Release mit Routen (`v0.3.0`) (ADR 0014, Version).
+- **`SERVER_API_VERSION` bleibt 1.** Erhöhung erst bei inkompatiblen Änderungen nach dem ersten Release mit Routen (erstes Vorab-Release: `v0.3.0-alpha.1`) (ADR 0014, Version).
 - **Grenzwerte** (Dateigrößen, Speicherlimit, Restspeicher, Parallelität, Timeouts) wurden am 18.10.2026 von der Nutzerin bzw. dem Nutzer bestätigt (ADR 0013).
 - **Engine**: CIO. Die Entscheidung steht in ADR 0013 („Umsetzung 3.1a“), gestützt auf die Messung. Der Gerätetest fehlt noch.
 - **Verlängern und Vorlage** (Nutzerentscheidung „a“, 21.10.2026): Umsetzung in Paket 3.6. Ein beendeter Space bleibt geschlossen. Eine Vorlage übernimmt Einstellungen, aber keine Medien.
@@ -83,7 +83,7 @@ Entscheidungen 1 bis 4 vom 20.10.2026 (Namensvorschläge, harte Speichergrenze, 
 - Gerätetest 3.3 mit dem Testkatalog aus der PR-Beschreibung (Honor-Einstellung, Start, Beenden, Ablauf, WLAN aus und an, Pausen-Banner).
 - Schwelle für Pausen (2 min) auf dem Gerät messen (ADR 0017).
 - Lizenzen der Quellen für die Herstellerliste am Quelltext prüfen (ADR 0017, Quellen). Die Angaben im Auftrag konnten nicht belegt werden.
-- Vorab-Version `v0.3.0-alpha`: Planung oben, Umsetzung nach 3.5.
+- Vorab-Version `v0.3.0-alpha`: umgesetzt (`alpha.1` und `alpha.2`, siehe Abschnitt „Abschluss Meilenstein 3“).
 - Lingering close bleibt Pflicht vor 3.5 (oben, unverändert).
 
 ## Offene Punkte nach 3.5c
@@ -131,7 +131,7 @@ Entscheidungen 1 bis 4 vom 20.10.2026 (Namensvorschläge, harte Speichergrenze, 
 
 ## Stand Paket 3.7 (22.10.2026)
 
-Branch `feature/m3-3.7-galerie-uebernahme`, Draft-PR #54. Umfang nach [ADR 0022](adr/0022-uebernahme-in-die-galerie.md):
+Branch `feature/m3-3.7-galerie-uebernahme`, PR #54, gemergt am 23.10.2026. Umfang nach [ADR 0022](adr/0022-uebernahme-in-die-galerie.md):
 
 - Domäne und Speicher (`share:space`, Paket `export`), Migration 10 → 11, Gate gegen die Löschung.
 - Medienspeicher-Schreiber (`share:export`): ab Android 10 mit `IS_PENDING`, Android 8 und 9 über den Legacy-Weg.
@@ -145,4 +145,75 @@ Offen (Stand dieses Eintrags):
 - Vorschaubilder im Raster der Auswahl.
 - Bereinigung verwaister ausstehender Einträge nach einem Absturz.
 - Eigener Isolationsfilter für `share:export`.
-- Release `v0.3.0` erst nach dem Gerätetest und dem Endtest durch die Nutzerin bzw. den Nutzer.
+- Kein finales `v0.3.0` in M3 (Entscheidung vom 25.10.2026). Das nächste reguläre Release kommt nach Meilenstein 4.
+
+## Abschluss Meilenstein 3 (25.10.2026)
+
+Stand: `origin/main` @ `513e4f8` (PR #61). Die PR-Nummern stammen aus `git log` und `gh pr list --state merged`.
+
+Die Pakete 3.0 bis 3.7 sind gemergt. Der Abschluss umfasst die Pakete, die Vorab-Releases, die Fixes und Härtungen sowie die Dokumentations-PRs. Offen sind die Gerätetests je Paket und der Endtest der Nutzerin bzw. des Nutzers zu `v0.3.0-rc.1` anhand von [TESTKATALOG-M3.md](TESTKATALOG-M3.md).
+
+### Pakete
+
+| Paket | PR | Gemergt | Dokument |
+|---|---|---|---|
+| 3.0 Server-Basis | #25 | 18.10.2026 | ADR 0012 |
+| 3.1a Server-Härtung, Space-Speicher, API v1 | #26 | 19.10.2026 | ADR 0013, 0014 |
+| 3.1b Standortdaten entfernen | #28 | 19.10.2026 | ADR 0015 |
+| 3.2 Spaces anlegen und verwalten | #30 | 19.10.2026 | ADR 0016 |
+| 3.3 Einrichtung und Betrieb | #32 | 20.10.2026 | ADR 0017 |
+| 3.4 Einladung und Beitritt | #35 | 21.10.2026 | ADR 0018 |
+| 3.5a-1 Server-Grundlage der Medienansicht | #36 | 21.10.2026 | ADR 0019 |
+| 3.5a-2 Vorschauen | #37 | 21.10.2026 | ADR 0019 |
+| 3.5a-3 Gäste-Seite, Ende-Hinweise, Browser-Tests | #38 | 21.10.2026 | ADR 0019 |
+| 3.5b Upload im Browser | #39 | 21.10.2026 | ADR 0019 |
+| 3.5c Gastgeber-Upload und Medienansicht | #40 | 21.10.2026 | ADR 0019 |
+| 3.6a Verlängern | #45 | 21.10.2026 | ADR 0017 |
+| 3.6b Aufbewahrung und Erinnerung | #46 | 21.10.2026 | ADR 0021 |
+| 3.6c Automatisches Löschen, Vorlage | #49 | 21.10.2026 | ADR 0021 |
+| 3.7 Übernahme in die Galerie | #54 | 23.10.2026 | ADR 0022 |
+
+### Zusätzlich zu den Paketen
+
+| PR | Gemergt | Art | Inhalt |
+|---|---|---|---|
+| #24 | 17.10.2026 | Doku | ADR 0012 als Entwurf |
+| #29 | 19.10.2026 | Veröffentlichung | GPL-3.0, SECURITY, README |
+| #34 | 20.10.2026 | Release | Vorab-Versionen (alpha, beta, rc) |
+| #42 | 21.10.2026 | Pflicht (ADR 0020) | Über und Lizenzen in der App |
+| #44 | 21.10.2026 | Doku | Testkatalog für den Alpha-Test bereinigen |
+| #53 | 22.10.2026 | Doku | README neu (Deutsch und Englisch) |
+| #60 | 25.10.2026 | Doku | Endtest in Kürze für `v0.3.0-rc.1` |
+| #61 | 25.10.2026 | Doku | Konzept Meilenstein 4 |
+
+### Fixes, Härtung und CI
+
+| PR | Gemergt | Inhalt |
+|---|---|---|
+| #27 | 19.10.2026 | Fix: flakiger Upload-Socket-Test |
+| #31 | 19.10.2026 | Fix: flakige UI-Tests |
+| #33 | 20.10.2026 | Fix: flakige Space-Tests |
+| #41 | 21.10.2026 | Fix: Nachlauf auch beim manuellen Beenden |
+| #43 | 21.10.2026 | Vor Alpha: Hinweis im Nachlauf, stabiler QR-Test |
+| #47 | 21.10.2026 | Fix: Teilnehmer- und Uploader-Namen in der Gastgeber-App |
+| #48 | 21.10.2026 | Fix: Standort in weiteren JPEG-Blöcken, Vorschau-Rückfall, Video in der Gastgeber-App |
+| #50 | 21.10.2026 | Fix: Gäste-Seite flüssig (Raster, Polling, Vorschau-Revision) |
+| #51 | 21.10.2026 | Nachzug: Vorschau-Revision, Löschen im Nachlauf, Abdeckung (Nachtrag 3.6d) |
+| #52 | 22.10.2026 | Fix: Standort-Restrisiken (HEIF, MP4, PNG) und Reste nach Absturz (Nachtrag 3.6d) |
+| #55 | 23.10.2026 | Fix: Space starten im breiten Layout (Innendisplay) |
+| #57 | 23.10.2026 | Härtung vor rc.1: Vorschauen in der Auswahl, stille Fehler, Navigation, Pflichtparameter |
+| #58 | 23.10.2026 | Fix: Stopp eines wartenden Space im Nachlauf |
+| #59 | 23.10.2026 | CI: Pflicht-Check auf parallele Jobs verteilen (Tests und APK) |
+
+### Vorab-Releases
+
+- `v0.3.0-alpha.1`, 21.10.2026 (Tag auf PR #43). Nicht mehr verwenden.
+- `v0.3.0-alpha.2`, 21.10.2026 (Tag auf PR #50).
+- `v0.3.0-rc.1`, 25.10.2026 (Tag auf PR #60). Testversion der Gastgeber-Seite. Kein finales `v0.3.0`.
+
+### Offen bei Abschluss
+
+- Endtest der Nutzerin bzw. des Nutzers zu `v0.3.0-rc.1` anhand von [TESTKATALOG-M3.md](TESTKATALOG-M3.md).
+- Gerätetests je Paket (in der Tabelle als „Gerätetest offen“ vermerkt).
+- Die Abschnitte „Offene Punkte nach …“ gelten weiter, soweit sie nicht als erledigt markiert sind.
+- Nächstes reguläres Release: `v0.4.0` nach Meilenstein 4 (Plan: [PLAN-M4.md](PLAN-M4.md), Paket 4.10).
