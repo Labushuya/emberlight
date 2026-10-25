@@ -15,25 +15,34 @@ Eine Android-App aus zwei Teilen:
 
 - Austausch findet ausschließlich im lokalen Netz statt. Wer teilen will, muss vor Ort sein.
 - **Kein Server, kein Relais, keine Cloud, keine Konten.** Es gibt keinen Dienst, den Labushuya betreibt.
+  > **Präzisiert (25.10.2026):** „Keine Konten“ meint kein Online-Konto. Ein lokales Profil mit festem Identitätsschlüssel ist vorgesehen (KONZEPT-M4.md, Nr. 8 und Abschnitt 11). CLAUDE.md ist dazu noch **offen**.
 - Jeder Nutzer kann selbst Host sein und einen Space öffnen.
 
 ### Zwei Netzwerk-Wege, für den Nutzer gleich
 
+> **Netz und Gast-Modus: siehe KONZEPT-M4.md (Nutzervorgaben vom 25.10.2026).** Die Reihenfolge, der Standardweg und die mit „überholt“, „präzisiert“ oder „offen“ markierten Aussagen in diesem Abschnitt und darunter gelten nach KONZEPT-M4.md nicht mehr bzw. nur eingeschränkt. Der Text bleibt zur Nachvollziehbarkeit stehen.
+
 1. **Vorhandenes WLAN**: Sind alle im selben WLAN (zu Hause, Location), läuft der Space darin. Auffindbar per mDNS/NSD und über die URL im QR-Code.
+   > **Überholt (25.10.2026):** Vorhandenes WLAN ist die Alternative für große Gruppen, der Hotspot ist der Standard (KONZEPT-M4.md, Nr. 1). Die Auffindbarkeit per mDNS/NSD ist **offen** (KONZEPT-M4.md, Nr. 4). Im Code ist NSD nicht umgesetzt.
 2. **Eigenes WLAN der App**: Gibt es kein gemeinsames WLAN, spannt die App per `WifiManager.startLocalOnlyHotspot()` ein eigenes auf.
    - Hat nichts mit dem Tethering-Hotspot aus den Einstellungen zu tun, mobile Daten werden nicht geteilt.
    - SSID und Passwort vergibt Android zufällig, sie sind nicht anpassbar. Der QR-Code enthält sie im Format `WIFI:T:WPA;S:…;P:…;;`.
    - Gäste haben, solange sie verbunden sind, kein Internet. Manche Geräte melden „Kein Internet“ und wechseln zurück. Die Gäste-Seite muss erklären, dass man verbunden bleiben soll.
    - Viele Host-Geräte verlieren währenddessen ihr eigenes WLAN. Abhängig vom Chip.
    - Berechtigung `NEARBY_WIFI_DEVICES` ab Android 13, darunter Standort.
+   > **Präzisiert (25.10.2026):** Zusätzlich `ACCESS_LOCAL_NETWORK` ab API 37 bei targetSdk 37 (belegt, ADR 0012). Standort gilt bis API 32 (KONZEPT-M4.md, Nr. 10).
 
 Für den Nutzer: Space öffnen → QR-Code zeigen → fertig. Die App wählt den Weg, der Nutzer kann ihn überschreiben.
+> **Überholt (25.10.2026):** Der Hotspot ist der Standard, das vorhandene WLAN die Alternative. Der Nutzer wählt den Netzweg nach dem Geräte-Check (KONZEPT-M4.md, Nr. 1 und Abschnitt 6).
 
 ### Verschlüsselung
 
 - Standard: In fremden, geteilten WLANs nutzt die App ihr eigenes WLAN (LocalOnlyHotspot, WPA2). Dort ist der Verkehr verschlüsselt.
+  > **Überholt und präzisiert (25.10.2026):** Standard ist der Hotspot. Verschlüsselt ist nur die Funkstrecke (WPA2-PSK). Das Passwort kennen alle Gäste, und Browser-Gäste laufen per HTTP (KONZEPT-M4.md, Nr. 2 und Abschnitt 10).
 - App-zu-App-Verbindungen sind immer verschlüsselt, mit Zertifikats-Pinning über den QR-Code.
+  > **Präzisiert (25.10.2026):** Der Anspruch gilt. Das Verfahren (TLS mit Pinning oder gleichwertig) ist im Prototyp festzulegen. Im Code gibt es noch kein TLS (KONZEPT-M4.md, Nr. 3).
 - Im eigenen bzw. vertrauten WLAN ist für Browser-Gäste HTTP mit Zugangsschlüssel möglich. Ohne Cloud gibt es für Browser-Gäste keine Verschlüsselung ohne Browser-Warnung, da nur selbstsignierte Zertifikate möglich sind.
+  > **Präzisiert (25.10.2026):** „Vertraut“ ist kein Kriterium, das die App prüfen kann. Gast-Zugänge und öffentliche WLANs isolieren Geräte meist (KONZEPT-M4.md, Nr. 13).
 - Der Nutzer kann den Weg überschreiben. Die App weist dann auf das Risiko hin.
 
 ### Gäste ohne App
@@ -60,6 +69,7 @@ Eigenschaften eines Space: Name, Titelbild, Akzentfarbe, Laufzeit/Ablaufzeitpunk
 - **Einladung erneuern**: Der Gastgeber erneuert die Einladung. Alte QR-Codes und Links sind danach ungültig. Beigetretene Gäste bleiben.
 - **Entfernte Gäste**: Der Zugang endet sofort, laufende Uploads brechen ab. Die Uploads bleiben und zeigen „von <Name> (entfernt)“. Beim Entfernen kann der Gastgeber auch alle Uploads des Gastes löschen. Der Gastgeber kann sich nicht selbst entfernen.
 - **Grenzen**: Höchstens 50 aktive Teilnehmer, der Gastgeber mitgezählt. Namen haben 1 bis 24 Zeichen (Buchstaben, Ziffern, Marks, Leerzeichen und `- _ . '`). Namen sind pro Space eindeutig, ohne Beachtung von Groß- und Kleinschreibung. Ist ein Name vergeben, schlägt der Server einen freien Namen vor.
+  > **Offen (25.10.2026):** Die Grenze hängt vom Netzweg ab. Im Hotspot liegt die Gästezahl vermutlich deutlich darunter, zu messen (KONZEPT-M4.md, Nr. 5 und M4).
 
 #### Rechte
 
@@ -114,6 +124,7 @@ Grundsätze; Details folgen als ADR in Meilenstein 3.
 #### Betrieb
 
 - Der Host-Dienst darf bei langen Events (Hochzeit, ganzer Abend) nicht nach einigen Stunden sterben. Foreground-Service-Typ so wählen, dass kein Zeitlimit greift (`dataSync` hat ab Android 15 ein 6-Stunden-Limit pro Tag, daher vermeiden).
+  > **Hinweis (25.10.2026):** Der Server nutzt `connectedDevice`. Der Export-Worker nutzt `dataSync` (`feature/space/src/main/AndroidManifest.xml:37`). Seine Wirkung ist zu prüfen (KONZEPT-M4.md, Nr. 12).
 - Hintergrundbetrieb könnte auf manchen Herstellern zusätzliche Freigaben verlangen. Beobachtung auf einem Gerät (Honor Magic V2, Android 16): Mit Akku-Ausnahme allein blieben die Anfragen im Akkubetrieb aus, mit zusätzlicher Hintergrund-Freigabe („App-Start“) kamen sie durch. Das ist eine Beobachtung und keine gesicherte Ursache. Sie beruht auf einem Gerät mit je einem Lauf, Einzelheiten und Einschränkungen stehen in [ADR 0012](adr/0012-lokaler-server.md). Der Dienst erkennt Pausen durch das System und zeigt dann einen Hinweis mit Weg zur Einstellung. Die Einrichtung folgt in Paket 3.3. Siehe [ADR 0012](adr/0012-lokaler-server.md).
 
 ### Verteilung
@@ -190,3 +201,5 @@ Details und Messwerte stehen in den ADRs 0006 bis 0011.
 21.10.2026: Paket 3.6c (ADR 0021, Nachtrag). Die Aufbewahrung endet automatisch, auch ohne Reaktion: beim Start, beim Öffnen der Liste, über den Wecker und stündlich über WorkManager. Gelöschte Spaces bleiben als „Gelöscht am <Datum>“ in der Liste (Name, Farbe, Titelbild, Einstellungen), bis der Gastgeber sie aus der Liste entfernt. „Als Vorlage für neuen Space“ übernimmt Einstellungen und Titelbild, keine Medien. Uploads in einen gelöschten oder gerade gelöschten Space werden abgelehnt.
 
 22.10.2026: Paket 3.7 (ADR 0022). Gezielte Übernahme in die Galerie: Die Auswahl startet leer, „Alle“ und „Nichts“ wählen aus. Kopiert wird die gespeicherte Space-Datei nach `Pictures/Emberlight/<Space-Name>`, jede Kopie wird per SHA-256 geprüft. Videos gehen in denselben Ordner (`Pictures/` ist für Videos zulässig). Die Übernahme läuft im Hintergrund mit Benachrichtigung und wartet bei einer Löschung auf die laufende Datei. Kopien in der Galerie bleiben bei der Löschung des Space unberührt.
+
+25.10.2026: Konzept für Meilenstein 4 (Netz, Hotspot, Gast-Modus, Stufenmodell, Browser-Grenze, Profil) in [KONZEPT-M4.md](KONZEPT-M4.md). Nutzervorgaben vom selben Tag. Die mit „überholt“, „präzisiert“ oder „offen“ markierten Stellen oben verweisen dorthin. Der Text bleibt zur Nachvollziehbarkeit stehen.
