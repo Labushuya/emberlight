@@ -1,6 +1,6 @@
 # emberlight: Konzept Meilenstein 4 (Netz, Hotspot, Gast-Modus)
 
-Stand: 25.10.2026. Dieses Dokument ist ein Konzept, kein Code. Grundlage sind die Nutzervorgaben und Entscheidungen vom 25.10.2026. Sie gelten als verbindlich und sind im Text mit **Vorgabe** gekennzeichnet.
+Stand: 25.10.2026, mit den Entscheidungen zu Profilumzug (Abschnitt 11) und Stufe 4 (Abschnitt 4). Dieses Dokument ist ein Konzept, kein Code. Grundlage sind die Nutzervorgaben und Entscheidungen vom 25.10.2026. Sie gelten als verbindlich und sind im Text mit **Vorgabe** gekennzeichnet.
 
 Code-Stand für alle **belegt**-Angaben: `origin/main` @ `72fa9be`.
 
@@ -32,7 +32,7 @@ Markierungen: **überholt** (die Aussage gilt nicht mehr), **präzisieren** (die
 | 8 | KONZEPT.md Z. 17, 57; CLAUDE.md „Harte Grenzen“ | „Keine Konten“ | Vorgabe: lokales Profil mit Identitätsschlüssel, kein Online-Konto. Die Regel „keine Konten“ in CLAUDE.md ist damit zu präzisieren. Die Änderung von CLAUDE.md gehört nicht zu diesem Dokument. | präzisieren, offen (CLAUDE.md) |
 | 9 | CLAUDE.md, Einleitung („soll auf jedem Android 8+ laufen“) | Lauffähig auf Android 8 und neuer | Vorgabe: Zielgruppe sind moderne Smartphones, ältere Geräte bekommen einen Fallback. `minSdk` bleibt 26. Der Fallback ist Stufe 2 (Android 8 und 9). | präzisieren |
 | 10 | KONZEPT.md Z. 28 | Berechtigung `NEARBY_WIFI_DEVICES` ab Android 13, darunter Standort | Zusätzlich `ACCESS_LOCAL_NETWORK` ab API 37 bei targetSdk 37 (belegt: `share/server/src/main/AndroidManifest.xml:6`, ADR 0017, Abschnitt „Lokales Netzwerk“). Im Manifest fehlen derzeit `ACCESS_FINE_LOCATION`, `NEARBY_WIFI_DEVICES` und `CHANGE_WIFI_STATE` (belegt: nicht vorhanden). | präzisieren |
-| 11 | PLAN-M3.md, Zeile 3.7 | „… danach Release `v0.3.0`“ | Vorgabe: `v0.3.0-rc.1` dient dem Test der Gastgeber-Seite. Kein finales `v0.3.0`. Das nächste reguläre Release kommt nach M4. | überholt (in PLAN-M3, dort nicht geändert) |
+| 11 | PLAN-M3.md, Zeile 3.7 | „… danach Release `v0.3.0`“ | Vorgabe: `v0.3.0-rc.1` dient dem Test der Gastgeber-Seite. Kein finales `v0.3.0`. Das nächste reguläre Release kommt nach M4. | überholt (in PLAN-M3 korrigiert, 25.10.2026) |
 | 12 | KONZEPT.md Z. 116 | Der Host-Dienst soll nicht `dataSync` nutzen (6-Stunden-Limit ab Android 15) | Der Server nutzt `connectedDevice` (`share/server/src/main/AndroidManifest.xml:23`). Der Export-Worker nutzt aber `dataSync` (`feature/space/src/main/AndroidManifest.xml:37`, `SpaceExportWorker.kt:174`). Der Worker läuft nur kurz. Ob das relevant ist, ist zu prüfen. | Hinweis |
 | 13 | KONZEPT.md Z. 36 | Im „eigenen bzw. vertrauten WLAN“ ist HTTP möglich | Vertraut ist kein Kriterium, das die App prüfen kann. Gast-Zugänge, öffentliche, Hotel- und Firmen-WLANs isolieren Geräte meist (Vorgabe). Der Hotspot ist der Standard. | präzisieren |
 
@@ -93,7 +93,7 @@ Siehe Stufe 3 in Abschnitt 4. Die heutige Gäste-Seite aus Meilenstein 3 wird we
 | 1, App voll | Android 10 und neuer (erwartet: `WifiNetworkSpecifier` ab API 29) | Ein QR-Code. Die App verbindet sich mit `WifiNetworkSpecifier` und bindet nur ihren eigenen Verkehr an den Hotspot. | Andere Apps nutzen weiter mobile Daten (erwartet). Ab Android 12 (API 31) bleibt das bisherige WLAN verbunden, geräteabhängig (erwartet, zu prüfen: `isStaConcurrencyForLocalOnlyConnectionsSupported()`, Quelle: AOSP-Dokumentation zur STA/STA-Concurrency). Verschlüsselt, Hintergrund-Upload, Benachrichtigungen (Vorgabe). |
 | 2, App eingeschränkt | Android 8 und 9 | Hotspot-Verbindung einmal von Hand (Vorgabe). | Bisheriges WLAN ist getrennt. Mobile Daten parallel nur mit Netz-Bindung zu prüfen (Vorgabe, zu prüfen). |
 | 3, Browser modern | Geräte ohne App, z. B. iPhone, Laptop, Android ohne Installation | Zwei QR-Codes: WLAN, dann Space. | Unverschlüsselt (HTTP), mit Hinweis. Internet parallel eher nicht (zu prüfen). Kein Hintergrund-Upload. Grenze: Abschnitt 5. |
-| 4, Browser basic | Browser unterhalb der Grenze aus Abschnitt 5 | **Vorerst nicht unterstützt** (Entscheidung). Hinweis „Browser zu alt“. | Vorgabe. |
+| 4, Browser basic | Browser unterhalb der Grenze aus Abschnitt 5 | **Vorerst nicht unterstützt** (Entscheidung vom 25.10.2026). Hinweis „Browser zu alt“. | Vorgabe. |
 
 - **iPhones** nutzen Stufe 3 (Vorgabe). Eine iOS-App ist später möglich. Vorgabe: iOS erlaubt Apps keinen eigenen Hotspot. Das ist erwartet und anhand der Apple-Dokumentation noch zu prüfen. iPhones können deshalb nur im Modus „vorhandenes WLAN“ Gastgeber sein.
 - Die Stufe ergibt sich aus dem Gerät, aus `Build.VERSION.SDK_INT` und dem Geräte-Check (Abschnitt 6). Der Nutzer wählt den Netzweg, nicht die Stufe. Das ist eine Ableitung aus der Vorgabe, dass der Nutzer den Weg überschreiben kann (vgl. KONZEPT.md Z. 30, Abschnitt 1, Nr. 1).
@@ -122,6 +122,7 @@ Vorgabe: „Modern“ ist vorläufig Chrome 88+ bzw. Safari 15+. Die Grenze muss
 - Die Grenze mit Folgen für die Barrierefreiheit ist `:focus-visible` (Safari 15.4). Ohne eine Rückfallregel mit `:focus` hätten Safari 14 und 15.0 bis 15.3 keinen sichtbaren Fokus. Das widerspricht dem Grundsatz, dass Barrierefreiheit nicht eingespart wird (CLAUDE.md). Die Rückfallregel ist eine Code-Änderung und nicht Teil dieses Konzepts.
 - Vorschlag für die Grenze „modern“: **Chrome 88+, Edge (Chromium) 88+, Firefox 89+, Safari 15.4+ bzw. iOS 15.4+.** Ob Samsung Internet oder andere Chromium-Ableger gleich zu behandeln sind, ist zu prüfen.
 - Die Erkennung sollte per Feature-Check erfolgen, nicht per User-Agent: `window.fetch`, `Blob.prototype.arrayBuffer`, `CSS.supports("aspect-ratio", "1 / 1")`, `CSS.supports("selector(:focus-visible)")`. Fehlt eines, zeigt die Seite Stufe 4 („Browser zu alt“). Das ist eine Code-Änderung und nicht Teil dieses Konzepts.
+- **Hinweis (25.10.2026), Aufgabe für Paket 4.7:** Mit einer Rückfallregel `:focus` für Browser ohne `:focus-visible` lässt sich die Grenze von Safari 15.4 auf Safari 15.0 senken, ohne die Barrierefreiheit zu verletzen (erwartet, in M7 zu prüfen). Dann muss der Feature-Check den Test `selector(:focus-visible)` als Pflicht entfernen, sonst scheitern Safari 15.0 bis 15.3 zu Unrecht. Die Rückfallregel zeigt den Fokus bei `:focus` auch bei Mausklicks; ob das so gewollt ist, ist in 4.7 zu entscheiden. Die Grenze „Safari 15.4“ in der Tabelle bleibt bis zur Messung M7 stehen.
 - **Testlücke:** Die Browser-Tests laufen in CI nur mit Chrome headless (CLAUDE.md, „Browser-Tests“; ADR 0019, Nachtrag 3.5a-3). Safari und Firefox sind nicht getestet. Das ist mit M7 (Abschnitt 13) zu schließen.
 
 ## 6. Geräte-Check und Auswege
@@ -214,10 +215,12 @@ Vorgabe: lokales Profil, kein Online-Konto. Enthält Name, Bild und einen festen
 Hinweise:
 
 - **Identitätsschlüssel:** Der Einladungsschlüssel liegt im AndroidKeyStore, nicht exportierbar und an die Installation gebunden (belegt, ADR 0018, Nachtrag 3.4b, Punkt 18). Für den Identitätsschlüssel gilt das gleiche Prinzip, sofern er so abgelegt wird (Vorschlag). Ein Umzug auf ein anderes Gerät bringt den Schlüssel dann nicht mit.
-- **Profilumzug (Vorgabe):** über einen **Transfer-Space**, der ausschließlich der Übertragung von Profil und Daten zwischen eigenen Geräten dient. Der Geräte-Schlüssel muss dabei angepasst werden.
-  - Vorschlag, Entscheidung offen: Das neue Gerät erzeugt einen neuen Schlüssel. Das alte signiert eine Nachfolge-Erklärung (alt zu neu). Kontakte übernehmen sie beim nächsten Treffen. Das alte Gerät sperrt sein Profil nach dem erfolgreichen Umzug und löscht die Daten optional auf Wunsch.
-  - **Tragweite:** Ohne Server gibt es keine zentrale Deaktivierung. Ein verlorenes oder gestohlenes Altgerät kann nicht aus der Ferne gesperrt werden (Vorgabe, Feststellung).
-  - Abhilfe (Vorschlag): Beim Anlegen des Profils ein **Notfall-Widerruf** in der Profilsicherung (Datei).
+- **Profilumzug (Vorgabe, entschieden am 25.10.2026, Antwort „Alle Drei: ja“):** über einen **Transfer-Space**, der ausschließlich der Übertragung von Profil und Daten zwischen eigenen Geräten dient. Der Geräte-Schlüssel wird dabei nicht übertragen.
+  - Vorgabe: Das neue Gerät erzeugt einen neuen Schlüssel. Das alte signiert eine Nachfolge-Erklärung (alt zu neu).
+  - Vorgabe: Das alte Gerät **sperrt sein Profil automatisch** nach dem erfolgreichen Umzug. Die Daten löscht es **nur auf Wunsch**.
+  - Offen (Ausgestaltung): Wie Kontakte die Nachfolge-Erklärung erhalten. Vorschlag: beim nächsten Treffen.
+  - **Tragweite** (Vorgabe, bleibt dokumentiert): Ohne Server gibt es keine zentrale Deaktivierung. Ein verlorenes oder gestohlenes Altgerät kann nicht aus der Ferne gesperrt werden.
+  - Vorgabe: Beim Anlegen des Profils wird ein **Notfall-Widerruf** erzeugt und in der Profilsicherung (Datei) abgelegt.
 - **Transfer-Space und Trennung (zu prüfen):** Der Transfer-Space darf nicht über den Space-Speicher laufen, sonst gelten die Regeln für Space-Medien (KONZEPT.md, Abschnitt Trennung). Ob der Transfer über dieselbe Hotspot-Technik läuft, ist für große Datenmengen vorgesehen (Vorgabe) und zu prüfen.
 - **Profilbild:** Ortsdaten entfernen, wie bei Titelbildern (Hinweis; belegt für Titelbilder in KONZEPT.md Z. 154, für Uploads in ADR 0015).
 - **Ein lokales Profil ist kein Konto im Sinne einer Online-Anmeldung.** Die Regel „keine Konten“ in CLAUDE.md muss präzisiert werden (Abschnitt 1, Nr. 8).
@@ -248,11 +251,19 @@ Gerätetests laufen durch Agenten, wenn das Gerät angeschlossen ist (CLAUDE.md)
 
 ## 14. Offene Punkte
 
-- Profilumzug und Nachfolge-Erklärung (Abschnitt 11)
+Entschieden am 25.10.2026, damit nicht mehr offen:
+
+- Profilumzug per Transfer-Space mit automatischer Sperre des alten Profils und Notfall-Widerruf (Abschnitt 11)
+- Stufe 4 (Browser basic) vorerst nicht unterstützt (Abschnitt 4)
+- Release: `v0.3.0-rc.1` ist die Testversion der Gastgeber-Seite, kein finales `v0.3.0`. Das nächste reguläre Release kommt nach M4 (Abschnitt 12, in PLAN-M3 korrigiert)
+
+Offen:
+
+- Ausgestaltung der Nachfolge-Erklärung bei Kontakten (Abschnitt 11)
 - Gästezahl-Grenze je Netzweg (M4)
 - Browser-Grenze final, nach Messung M7 (Abschnitt 5)
 - Verschlüsselungsverfahren (Abschnitt 10)
-- Feature-Check und Rückfallregel für `:focus-visible` (Abschnitt 5)
+- Feature-Check und Rückfallregel für `:focus-visible` (Abschnitt 5, Aufgabe 4.7)
 - NSD ja oder nein (Abschnitt 1, Nr. 4)
 - QR-Format für Stufe 1 und die Versionierung zu `#i=` (Abschnitt 1, Nr. 6 und 7)
 - Adresse des QR-Links bei fehlender App (Abschnitt 9)
@@ -260,7 +271,6 @@ Gerätetests laufen durch Agenten, wenn das Gerät angeschlossen ist (CLAUDE.md)
 - Transfer-Space und Trennung von Space-Speicher (Abschnitt 11)
 - `dataSync` des Export-Workers (Abschnitt 1, Nr. 12)
 - CLAUDE.md, „keine Konten“ und „jedes Android 8+“ (Abschnitt 1, Nr. 8 und 9)
-- PLAN-M3, Paket 3.7, Release `v0.3.0` (Abschnitt 1, Nr. 11)
 - iOS-App (Vorgabe, später)
 - App-Verteilung ohne Play Store: APK, F-Droid prüfen (Vorgabe)
 - README an das neue Zielbild anpassen (Vorgabe, später)
