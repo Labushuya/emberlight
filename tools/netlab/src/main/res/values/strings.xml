@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">emberlight Netlab</string>
+
+    <string name="home_intro">Misst, was mit Hotspot, Gast-Verbindung und mobilen Daten auf diesem Gerät tatsächlich geht. Die Messung bleibt auf dem Gerät.</string>
+    <string name="home_role_host">Gastgeber: Hotspot starten</string>
+    <string name="home_role_guest">Gast: Mit Hotspot verbinden</string>
+    <string name="home_refresh">Fähigkeiten neu lesen</string>
+    <string name="home_loading">Fähigkeiten werden gelesen …</string>
+
+    <string name="caps_title">Fähigkeiten dieses Geräts</string>
+    <string name="caps_device">Gerät: %1$s %2$s, Android API %3$d</string>
+    <string name="caps_sta_ap">STA+AP-Betrieb (WLAN bleibt bei Hotspot): %1$s</string>
+    <string name="caps_sta_local">Gleichzeitige lokale Verbindung (Gast): %1$s</string>
+    <string name="caps_band5">5-GHz-Band für Hotspot: %1$s</string>
+    <string name="caps_location">Standortdienst eingeschaltet: %1$s</string>
+    <string name="caps_unavailable">nicht verfügbar</string>
+    <string name="caps_networks_title">Aktive Netze</string>
+    <string name="caps_networks_none">Keine aktiven Netze</string>
+    <string name="caps_permissions_title">Berechtigungen</string>
+    <string name="caps_permission_granted">%1$s: erteilt</string>
+    <string name="caps_permission_missing">%1$s: fehlt</string>
+
+    <string name="yes">ja</string>
+    <string name="no">nein</string>
+    <string name="unknown">unbekannt</string>
+    <string name="transport_wifi">WLAN</string>
+    <string name="transport_cellular">Mobilfunk</string>
+    <string name="transport_vpn">VPN</string>
+    <string name="transport_ethernet">Ethernet</string>
+    <string name="transport_other">Sonstige</string>
+    <string name="validated_yes">validiert</string>
+    <string name="validated_no">nicht validiert</string>
+    <string name="network_line">%1$s, %2$s</string>
+    <string name="network_line_default">%1$s, %2$s, Standardnetz</string>
+
+    <string name="host_title">Gastgeber</string>
+    <string name="host_permissions_missing">Vor dem Start fehlen Berechtigungen: %1$s. Android fragt sie jetzt an.</string>
+    <string name="host_location_off">Der Standortdienst ist aus. Auf diesem Android-Stand braucht der Hotspot ihn.</string>
+    <string name="host_start">Hotspot starten</string>
+    <string name="host_starting">Hotspot startet …</string>
+    <string name="host_stop">Hotspot beenden</string>
+    <string name="host_failed">Hotspot konnte nicht starten: %1$s</string>
+    <string name="host_running">Hotspot läuft</string>
+    <string name="host_ssid">Netzname (SSID): %1$s</string>
+    <string name="host_password">Passwort: %1$s</string>
+    <string name="host_security">Sicherheit: %1$s</string>
+    <string name="host_band">Band: %1$s</string>
+    <string name="host_address">Adresse des Gastgebers: %1$s</string>
+    <string name="host_qr_app">QR-Code für Netlab-Gäste</string>
+    <string name="host_qr_app_description">QR-Code mit den Verbindungsdaten für die Netlab-App</string>
+    <string name="host_qr_wifi">QR-Code für WLAN-Gäste ohne App</string>
+    <string name="host_qr_wifi_description">QR-Code mit dem WLAN-Zugang des Hotspots</string>
+    <string name="host_qr_browser">QR-Code für den Browser-Test</string>
+    <string name="host_qr_browser_description">QR-Code mit der Adresse der Browser-Testseite</string>
+    <string name="host_guests">Gäste seit Start: %1$d, davon aktiv: %2$d</string>
+    <string name="timeline_title">Verlauf</string>
+    <string name="timeline_empty">Noch keine Ereignisse.</string>
+    <string name="timeline_entry">%1$s  %2$s</string>
+
+    <string name="back">Zurück</string>
+    <string name="report_build">Messbericht erstellen</string>
+    <string name="report_title">Messbericht</string>
+    <string name="report_share">Bericht teilen</string>
+
+    <string name="failure_generic">allgemeiner Fehler</string>
+    <string name="failure_no_channel">kein Kanal frei</string>
+    <string name="failure_incompatible_mode">inkompatibler Modus, Tethering ist aktiv</string>
+    <string name="failure_tethering">Tethering ist vom Gerät gesperrt</string>
+    <string name="failure_unknown">unbekannter Fehler</string>
+
+    <string name="guest_title">Gast</string>
+    <string name="guest_scan">QR-Code scannen</string>
+    <string name="guest_scan_hint">Den QR-Code des Gastgebers in den Rahmen halten.</string>
+    <string name="guest_scan_cancel">Abbrechen</string>
+    <string name="guest_paste_label">Verbindungsdaten (Text)</string>
+    <string name="guest_use_text">Text übernehmen</string>
+    <string name="guest_paste">Aus Zwischenablage</string>
+    <string name="guest_payload_ok">Verbindungsdaten gelesen: Netz %1$s, Gastgeber %2$s, Port %3$d</string>
+    <string name="guest_manual_hint">Auf diesem Android-Stand verbindest du dich von Hand. WLAN-Einstellungen öffnen, Netz %1$s wählen, Passwort %2$s eingeben. Danach auf Warten tippen.</string>
+    <string name="guest_connect">Mit Hotspot verbinden</string>
+    <string name="guest_connecting">Verbindung wird aufgebaut …</string>
+    <string name="guest_wait_manual">Auf manuell verbundenes Netz warten</string>
+    <string name="guest_connect_failed">Verbindung fehlgeschlagen: %1$s</string>
+    <string name="guest_connected">Verbunden. Die Messungen können jetzt laufen.</string>
+    <string name="guest_tests">Messungen starten</string>
+    <string name="guest_tests_running">Messungen laufen …</string>
+    <string name="guest_result_bound">Gebundener Ping (über den Hotspot)</string>
+    <string name="guest_result_unbound">Ungebundener Ping (Standardnetz, wie ein Browser)</string>
+    <string name="guest_result_vpn">VPN aktiv: %1$s</string>
+    <string name="guest_disconnect">Trennen</string>
+
+    <string name="result_ok_ms">%1$s: OK, %2$d ms</string>
+    <string name="result_failed">%1$s: fehlgeschlagen (%2$s)</string>
+    <string name="result_upload_ok">Upload %1$d MB: OK, %2$d ms, %3$s Mbit/s</string>
+    <string name="result_upload_failed">Upload fehlgeschlagen (%1$s)</string>
+
+    <string name="payload_error_format">Das ist kein Netlab-Code.</string>
+    <string name="payload_error_version">Diese Version des Codes wird nicht unterstützt.</string>
+    <string name="payload_error_missing">Im Code fehlen Angaben.</string>
+    <string name="payload_error_ssid">Der Netzname im Code ist ungültig.</string>
+    <string name="payload_error_passphrase">Das Passwort im Code ist ungültig.</string>
+    <string name="payload_error_host">Die Adresse im Code ist ungültig.</string>
+    <string name="payload_error_port">Der Port im Code ist ungültig.</string>
+    <string name="payload_error_token">Der Schlüssel im Code ist ungültig.</string>
+
+    <string name="err_timeout">Zeitüberschreitung</string>
+    <string name="err_refused">Verbindung abgelehnt</string>
+    <string name="err_unknown_host">Adresse nicht auflösbar</string>
+    <string name="err_no_route">keine Route ins Netz</string>
+    <string name="err_unavailable">Netz nicht verfügbar</string>
+    <string name="err_http">HTTP-Fehler</string>
+    <string name="err_io">Netzfehler</string>
+    <string name="err_other">anderer Fehler</string>
+    <string name="err_none">kein Fehler</string>
+</resources>

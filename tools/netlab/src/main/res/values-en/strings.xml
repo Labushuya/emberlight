@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">emberlight Netlab</string>
+
+    <string name="home_intro">Measures what actually works with hotspot, guest connection and mobile data on this device. The measurement stays on the device.</string>
+    <string name="home_role_host">Host: start hotspot</string>
+    <string name="home_role_guest">Guest: join hotspot</string>
+    <string name="home_refresh">Read capabilities again</string>
+    <string name="home_loading">Reading capabilities …</string>
+
+    <string name="caps_title">Capabilities of this device</string>
+    <string name="caps_device">Device: %1$s %2$s, Android API %3$d</string>
+    <string name="caps_sta_ap">STA+AP mode (Wi-Fi stays with hotspot): %1$s</string>
+    <string name="caps_sta_local">Concurrent local connection (guest): %1$s</string>
+    <string name="caps_band5">5 GHz band for hotspot: %1$s</string>
+    <string name="caps_location">Location services on: %1$s</string>
+    <string name="caps_unavailable">not available</string>
+    <string name="caps_networks_title">Active networks</string>
+    <string name="caps_networks_none">No active networks</string>
+    <string name="caps_permissions_title">Permissions</string>
+    <string name="caps_permission_granted">%1$s: granted</string>
+    <string name="caps_permission_missing">%1$s: missing</string>
+
+    <string name="yes">yes</string>
+    <string name="no">no</string>
+    <string name="unknown">unknown</string>
+    <string name="transport_wifi">Wi-Fi</string>
+    <string name="transport_cellular">Mobile data</string>
+    <string name="transport_vpn">VPN</string>
+    <string name="transport_ethernet">Ethernet</string>
+    <string name="transport_other">Other</string>
+    <string name="validated_yes">validated</string>
+    <string name="validated_no">not validated</string>
+    <string name="network_line">%1$s, %2$s</string>
+    <string name="network_line_default">%1$s, %2$s, default network</string>
+
+    <string name="host_title">Host</string>
+    <string name="host_permissions_missing">Permissions missing before start: %1$s. Android asks for them now.</string>
+    <string name="host_location_off">Location services are off. On this Android version the hotspot needs them.</string>
+    <string name="host_start">Start hotspot</string>
+    <string name="host_starting">Hotspot is starting …</string>
+    <string name="host_stop">Stop hotspot</string>
+    <string name="host_failed">Hotspot could not start: %1$s</string>
+    <string name="host_running">Hotspot is running</string>
+    <string name="host_ssid">Network name (SSID): %1$s</string>
+    <string name="host_password">Password: %1$s</string>
+    <string name="host_security">Security: %1$s</string>
+    <string name="host_band">Band: %1$s</string>
+    <string name="host_address">Host address: %1$s</string>
+    <string name="host_qr_app">QR code for Netlab guests</string>
+    <string name="host_qr_app_description">QR code with the connection data for the Netlab app</string>
+    <string name="host_qr_wifi">QR code for Wi-Fi guests without the app</string>
+    <string name="host_qr_wifi_description">QR code with the Wi-Fi access of the hotspot</string>
+    <string name="host_qr_browser">QR code for the browser test</string>
+    <string name="host_qr_browser_description">QR code with the address of the browser test page</string>
+    <string name="host_guests">Guests since start: %1$d, active: %2$d</string>
+    <string name="timeline_title">Timeline</string>
+    <string name="timeline_empty">No events yet.</string>
+    <string name="timeline_entry">%1$s  %2$s</string>
+
+    <string name="back">Back</string>
+    <string name="report_build">Create measurement report</string>
+    <string name="report_title">Measurement report</string>
+    <string name="report_share">Share report</string>
+
+    <string name="failure_generic">general error</string>
+    <string name="failure_no_channel">no channel free</string>
+    <string name="failure_incompatible_mode">incompatible mode, tethering is active</string>
+    <string name="failure_tethering">tethering is blocked by the device</string>
+    <string name="failure_unknown">unknown error</string>
+
+    <string name="guest_title">Guest</string>
+    <string name="guest_scan">Scan QR code</string>
+    <string name="guest_scan_hint">Hold the host QR code inside the frame.</string>
+    <string name="guest_scan_cancel">Cancel</string>
+    <string name="guest_paste_label">Connection data (text)</string>
+    <string name="guest_use_text">Use text</string>
+    <string name="guest_paste">From clipboard</string>
+    <string name="guest_payload_ok">Connection data read: network %1$s, host %2$s, port %3$d</string>
+    <string name="guest_manual_hint">On this Android version you connect by hand. Open Wi-Fi settings, choose network %1$s, enter password %2$s. Then tap wait.</string>
+    <string name="guest_connect">Join hotspot</string>
+    <string name="guest_connecting">Connecting …</string>
+    <string name="guest_wait_manual">Wait for the manually joined network</string>
+    <string name="guest_connect_failed">Connection failed: %1$s</string>
+    <string name="guest_connected">Connected. The measurements can run now.</string>
+    <string name="guest_tests">Run measurements</string>
+    <string name="guest_tests_running">Measurements are running …</string>
+    <string name="guest_result_bound">Bound ping (through the hotspot)</string>
+    <string name="guest_result_unbound">Unbound ping (default network, like a browser)</string>
+    <string name="guest_result_vpn">VPN active: %1$s</string>
+    <string name="guest_disconnect">Disconnect</string>
+
+    <string name="result_ok_ms">%1$s: OK, %2$d ms</string>
+    <string name="result_failed">%1$s: failed (%2$s)</string>
+    <string name="result_upload_ok">Upload %1$d MB: OK, %2$d ms, %3$s Mbit/s</string>
+    <string name="result_upload_failed">Upload failed (%1$s)</string>
+
+    <string name="payload_error_format">This is not a Netlab code.</string>
+    <string name="payload_error_version">This version of the code is not supported.</string>
+    <string name="payload_error_missing">Required data is missing in the code.</string>
+    <string name="payload_error_ssid">The network name in the code is invalid.</string>
+    <string name="payload_error_passphrase">The password in the code is invalid.</string>
+    <string name="payload_error_host">The address in the code is invalid.</string>
+    <string name="payload_error_port">The port in the code is invalid.</string>
+    <string name="payload_error_token">The key in the code is invalid.</string>
+
+    <string name="err_timeout">timeout</string>
+    <string name="err_refused">connection refused</string>
+    <string name="err_unknown_host">address not resolvable</string>
+    <string name="err_no_route">no route to the network</string>
+    <string name="err_unavailable">network not available</string>
+    <string name="err_http">HTTP error</string>
+    <string name="err_io">network error</string>
+    <string name="err_other">other error</string>
+    <string name="err_none">no error</string>
+</resources>

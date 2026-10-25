@@ -42,6 +42,8 @@ zxing = "3.5.4"
 aboutlibraries = "15.3.0"
 # Automatisches Löschen nach Fristende (Paket 3.6c, ADR 0021): WorkManager (AndroidX), ohne Play Services. Testbibliothek nur für Tests.
 work = "2.12.0"
+# Netlab (Meilenstein 4, Paket 4.0): Kamera für den QR-Scan. AndroidX, ohne Play Services. Nur tools:netlab nutzt sie.
+camerax = "1.6.2"
 
 [libraries]
 # Build-Logic (Classpath der Convention-Plugins)
@@ -92,6 +94,11 @@ androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", ve
 androidx-work-testing = { group = "androidx.work", name = "work-testing", version.ref = "work" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 aboutlibraries-core = { group = "com.mikepenz", name = "aboutlibraries-core", version.ref = "aboutlibraries" }
+# Netlab (Paket 4.0): QR-Scan. Nur AndroidX, keine Play-Services-Abhängigkeit.
+androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 
 # Debug-only (Tooling und Test-Manifest, über die BOM versioniert)
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
