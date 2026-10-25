@@ -1,25 +1,32 @@
 # Testkatalog Meilenstein 3 (kumulativ)
 
-Stand: 21.10.2026 (Vorab-Release `v0.3.0-alpha.2`, Nachzug PR #50 und #51 eingearbeitet). Dieser Katalog gehört zum Endtest der Nutzerin bzw. des Nutzers beim Vorab-Release `v0.3.0-alpha.2` (Vorgänger `v0.3.0-alpha.1`, siehe [PLAN-M3.md](PLAN-M3.md)). Er wird von jedem Paket fortgeschrieben und ist nach Funktionen gegliedert, nicht nach Paketen.
+Stand: 25.10.2026 (Vorab-Release `v0.3.0-rc.1`, Vorgänger `v0.3.0-alpha.2`). Dieser Katalog gehört zum Endtest der Nutzerin bzw. des Nutzers beim Vorab-Release `v0.3.0-rc.1` (siehe [PLAN-M3.md](PLAN-M3.md)). Er wird von jedem Paket fortgeschrieben und ist nach Funktionen gegliedert, nicht nach Paketen.
 
 ## Endtest in Kürze
 
-Vorab-Version `v0.3.0-alpha.2`. **`v0.3.0-alpha.1` nicht mehr verwenden**: Dort blieb bei manchen Kamera-Fotos (z. B. Honor, zweiter Exif-Block APP10) der Standort erhalten. Die Reihenfolge ist nach Priorität geordnet.
+Vorab-Version `v0.3.0-rc.1`, Testversion für die Gastgeber-Seite. **`v0.3.0-alpha.1` nicht mehr verwenden**: Dort blieb bei manchen Kamera-Fotos (z. B. Honor, zweiter Exif-Block APP10) der Standort erhalten. Die Reihenfolge ist nach Priorität geordnet. „**neu seit alpha.2**“ kennzeichnet, was in `v0.3.0-rc.1` gegenüber `v0.3.0-alpha.2` neu oder geändert ist. Ohne Kennzeichen: unverändert gegenüber alpha.2.
 
-1. **Standort, zuerst:** Ein eigenes Foto der Honor-Kamera mit Standort über den Browser hochladen (9.7). Die Kopie in einer Foto-App auf Standort prüfen: kein Standort.
-2. **Standort in der Gastgeber-App:** Die Kopie in der Gastgeber-App ansehen, ohne Markierung „Standort enthalten“ (8.12, 9.6).
-3. **Teilnehmerzahl:** Der Gast erscheint live in der Teilnehmerliste und in der Zahl (5.16).
-4. **Namen in Kacheln:** Im Raster steht „von <Name>“, in der Gastgeber-App ebenso (6.1, 8.2).
-5. **Video in der Gastgeber-App:** Abspielen, pausieren, vorspulen (8.11).
-6. **Vorschau bei Kamerafotos:** Vorschau in der Gastgeber-App ohne Neustart (8.9) und im Browser ohne neuen Upload (6.21).
-7. **Gäste-Seite mit vielen Fotos:** Scrollen, während Uploads laufen: flüssig, kein Neuladen, kein Abschneiden (6.22). Wiederaufnahme, „Verbindung wird hergestellt…“ bzw. „Neu beitreten“ (5.23, 5.24).
-8. **Ende, Verlängern, Aufbewahrung, Löschen, Vorlage:** Abschnitt 10, inkl. 10.30 bis 10.39. Zuerst 10.11 (Verlängern), 10.14 (Gäste sehen die Verlängerung), 10.19 (Erinnerung), 10.20 (ein Tag länger), 10.30 bis 10.33 (Gelöscht und Vorlage), 10.36 bis 10.37 (Uploads und automatische Löschung), 10.39 (Sofort löschen während eines Uploads).
+1. **Standort, zuerst** (unverändert): Ein eigenes Foto der Honor-Kamera mit Standort über den Browser hochladen (9.7). Die Kopie in einer Foto-App auf Standort prüfen: kein Standort.
+2. **Standort in MP4, HEIC und PNG** (neu seit alpha.2): Eigene Dateien über den Browser hochladen: Video mit GoPro-Spur (9.9), Video mit DJI- oder camm-Spur (9.10), HEIC mit Zusatzbild (9.11), PNG mit komprimiertem Textfeld (9.12). Erwartet: Die Dateien öffnen sich, der Standort ist entfernt.
+3. **Standort in der Gastgeber-App** (unverändert): Die Kopie im Detail ansehen, ohne Markierung „Standort enthalten“ (8.12, 9.6).
+4. **Faltdisplay: „Space starten“** (neu seit alpha.2): Aufgeklapptes Gerät, Detail eines Entwurfs, „Space starten“ reagiert sofort (4.28).
+5. **Start innerhalb des Nachlaufs und Abbrechen** (neu seit alpha.2): Neuer Start innerhalb von 60 Sekunden zeigt „Start abbrechen“ statt „Space beenden“ (4.27). Wartenden Start abbrechen, auf dem Telefon und auf dem Faltdisplay: „Start abgebrochen.“, der Space ist wieder Entwurf (4.29).
+6. **Übernahme in die Galerie** (neu seit alpha.2): Zwei Fotos und ein Video auswählen, übernehmen. Der Ordner `Pictures/Emberlight/<Space>` ist in der Galerie sichtbar (11.1, 11.2).
+7. **Vorschauen und Standort-Kennzeichen in der Übernahme** (neu seit alpha.2): Jede Kachel zeigt eine Vorschau, das Video trägt „Video“. Ein Foto mit „Standort enthalten“ ist deutlich markiert (11.14, 11.9).
+8. **Übernahme auf dem Faltdisplay** (neu seit alpha.2): Aufgeklappt, alle Knöpfe reagieren, „Alle“, „Nichts“, „Übernehmen“, „Abbrechen“ (11.11).
+9. **Übernahme nach Absturz** (neu seit alpha.2): Übernahme während des Kopierens beenden, danach neu starten. Keine halben Dateien in der Galerie, die neue Übernahme läuft durch (11.16).
+10. **Kacheln eines beendeten Space** (neu seit alpha.2): Fotos und Video antippen, das Video spielt ab. Eine Kachel ohne lokale Datei ist nicht antippbar (10.41).
+11. **„Jetzt löschen“ auf breitem Display** (neu seit alpha.2): Erinnerung antippen, Liste bleibt sichtbar, Bestätigung öffnet sich, „Zurück“ führt zur Galerie (10.46).
+12. **Meldungen statt stiller Fehler** (neu seit alpha.2): „Die Frist wurde nicht geändert.“ bei abgelehnter Frist. „Aus der Liste entfernen geht nur bei einem gelöschten Space.“ bei einem Umweg dorthin (10.43, 10.44).
+13. **Teildatei nach Absturz beim Löschen** (neu seit alpha.2, [Entwickler], Ausnahme zur Regel unten): Eine Datei `tmp-test.part` im Ordner eines gelöschten Space anlegen, App neu starten. Die Datei ist weg, Titelbild und Eintrag bleiben (10.40).
+14. **Teilnehmerzahl** (unverändert): Ein Gast erscheint live in der Teilnehmerliste und in der Zahl (5.16).
+15. **Gäste-Seite mit vielen Fotos** (unverändert): Scrollen, während Uploads laufen: flüssig, kein Neuladen (6.22).
 
-**Neu bzw. geändert seit `v0.3.0-alpha.1`:** Standort-Nachkontrolle bei jedem Upload (9.7), Teilnehmerzahl live (5.16), Namen in Kacheln (6.1, 8.2), Video in der Gastgeber-App (8.11), Vorschau-Rückfall, Gäste-Seite flüssig (6.22), Wiederaufnahme mit „Verbindung wird hergestellt…“ bzw. „Neu beitreten“ (5.23), Vorschau ohne neuen Upload (6.21), Upload während des Löschens (10.36), Pakete 3.6a, 3.6b und 3.6c (Abschnitt 10).
+**Neu seit `v0.3.0-alpha.2`:** Standort-Bereinigung für MP4, HEIC und PNG (9.8 bis 9.12, 9.8 nur als Entwicklerlauf), Start abbrechen (4.27, 4.29, 4.30), Faltdisplay (4.28, 11.11), Übernahme in die Galerie (Abschnitt 11, Paket 3.7), Härtung (10.40 bis 10.47, 11.14 bis 11.18), schnellere CI (nicht nutzerrelevant).
 
-**Überspringen:** Punkte mit „[Entwickler]“ und Punkte mit „folgt“ (Paket 3.7, Abschnitt 11). Umgesetzte Punkte in denselben Abschnitten gelten dagegen.
+**Überspringen:** Punkte mit „[Entwickler]“, außer 10.40 aus der Liste oben, und Punkte mit „folgt“. Umgesetzte Punkte in denselben Abschnitten gelten dagegen.
 
-**Rückmeldung:** per Punktnummer, etwa „4.12 ok“ oder „6.3 Fehler: …“.
+**Rückmeldung:** per Punktnummer, etwa „4.28 ok“ oder „9.9 Fehler: …“.
 
 ## So liest man den Katalog
 
