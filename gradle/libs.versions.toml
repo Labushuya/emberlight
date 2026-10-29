@@ -18,24 +18,24 @@ spotless = "8.10.4"
 ktlint = "1.8.0"
 ktlint-compose-rules = "0.6.8"
 kover = "0.9.11"
-roborazzi = "1.76.0"
+roborazzi = "1.77.0"
 kotlinx-coroutines = "1.11.0"
 turbine = "1.2.1"
 coil = "3.6.3"
-datastore = "1.2.1"
+datastore = "1.3.0"
 # Vollbild-Viewer (ADR 0010). Telephoto: Kern ohne Coil-Modul, siehe ADR 0010 zur Begründung.
 telephoto = "0.19.0"
 # EXIF lesen für den Infobereich (ADR 0010, Kurzer Blick und Infobereich). Stabil, keine Play-Services-Abhängigkeit.
 exifinterface = "1.4.2"
 # Nur Tests (Paket 3.1b, ADR 0015): unabhängige Gegenprobe, ob ein Standort noch lesbar ist. Apache-2.0, kein Laufzeitcode.
-metadata-extractor = "2.21.0"
+metadata-extractor = "2.22.0"
 media3 = "1.11.1"
 # Eingebetteter Server (Paket 3.0, ADR 0012). Ktor 3.6.0 ist laut Maven Central die neueste stabile Version.
 ktor = "3.6.0"
 # Medien-Index des Space (Paket 3.1a, ADR 0014). Room über KSP.
 room = "2.8.5"
 # JSON für die Server-Antworten (CLAUDE.md, Technik). Keine Play-Services-Abhängigkeit.
-kotlinx-serialization = "1.11.0"
+kotlinx-serialization = "1.12.0"
 # QR-Codes erzeugen und lesen (Paket 3.4, ADR 0018). Apache-2.0, keine Play-Services-Abhängigkeit. Nur die Kernbibliothek.
 zxing = "3.5.4"
 # Lizenzliste der Laufzeitabhängigkeiten (ADR 0020). Apache-2.0, ohne Play-Services-Bezug. Das Plugin liest nur die Release-Laufzeit.
