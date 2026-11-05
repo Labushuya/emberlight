@@ -68,7 +68,7 @@ jobs:
       # ihn nicht (Hinweis „no-encryption-key“ in der Job-Zusammenfassung). Der Schlüssel dient nur dieser Verschlüsselung,
       # nicht dem Signieren der APK. Siehe docs/adr/0006.
       - name: Gradle einrichten
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
@@ -220,7 +220,7 @@ jobs:
 
       # Eigener Gradle-Cache dieses Jobs (kein Austausch mit dem Test-Job innerhalb desselben Laufs).
       - name: Gradle einrichten
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
