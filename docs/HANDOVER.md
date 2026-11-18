@@ -23,10 +23,9 @@ Aktueller Stand:
 
 ## 3. Ordner und Arbeitsweise
 
-- **Hauptklon:** `H:\DEV\github\emberlight` (Branch `main`). Dort committet und pusht der Nutzer selbst.
-- **Claude-Worktree:** `H:\DEV\#claude\emberlight` (Ruhe-Branch `claude/work`). Claude arbeitet nur hier. Pro Aufgabe ein Branch von aktuellem `origin/main`, dann PR. Claude merged nie selbst.
-- **Build-Artefakte:** `H:\DEV\#claude\emberlight-builds`.
-- **Umstellung am 15.11.2026:** Das Projekt war bisher ein eigenständiger Klon. Er wurde auf Hauptklon und Worktree umgestellt. Der alte Klon liegt unverändert in `H:\DEV\_backups\emberlight-klon-20261115`.
+- **Hauptklon und Claude-Worktree:** Hauptklon auf `main` plus Claude-Worktree auf Branch `claude/work`, lokale Pfade siehe Memory. Der Nutzer committet und pusht im Hauptklon selbst. Claude arbeitet nur im Worktree. Pro Aufgabe ein Branch von aktuellem `origin/main`, dann PR. Claude merged nie selbst.
+- **Build-Artefakte:** lokaler Build-Ordner (siehe Memory).
+- **Umstellung am 15.11.2026:** Das Projekt war bisher ein eigenständiger Klon. Er wurde auf Hauptklon und Worktree umgestellt.
 - **Release-Flow:** kein release-please. Der Workflow `.github/workflows/release.yml` läuft bei Tags `vX.Y.Z` oder Vorab-Tags (`-alpha.N`, `-beta.N`, `-rc.N`). Die Monotonie des `versionCode` wird gegen die veröffentlichten Releases geprüft. Details, Secrets und Fehlerbilder stehen in [RELEASE.md](RELEASE.md). Tags setzt der Nutzer, sie werden nicht verschoben.
 - **Regeln:** Doku, README und Commit-Beschreibungen auf Deutsch, Code und Bezeichner auf Englisch. Commits im Conventional-Commits-Format. `main` ist geschützt, Merge per Squash durch den Nutzer. Pflicht-Check ist „Build, Lint und Tests“ (`ci.yml`). UI-Änderungen brauchen aktualisierte Screenshot-Goldens im selben PR. Jedes Paket schreibt den Testkatalog fort.
 
@@ -34,7 +33,7 @@ Aktueller Stand:
 
 ### a) Netlab-Messung
 
-Die APK liegt unter `H:\DEV\#claude\emberlight-builds\emberlight-netlab-8b80efe.apk`.
+Die APK `emberlight-netlab-8b80efe.apk` liegt im lokalen Build-Ordner (siehe Memory).
 
 **Ehrlich:** Auf einem echten Handy ist Netlab noch nie gelaufen. Hotspot, Gast-Verbindung und Kamera lassen sich nur dort prüfen. Genau dafür ist die Messung da.
 
@@ -46,26 +45,28 @@ Die APK liegt unter `H:\DEV\#claude\emberlight-builds\emberlight-netlab-8b80efe.
 
 **Geräteliste des Nutzers:**
 
-- HONOR Magic v2
-- Samsung Galaxy Note 20 Ultra 5G
-- Sony Xperia 1 IV
-- HTC OnePlus 3T Midnight Black
-- Samsung Galaxy Note 3 (zu alt für die Installation von Netlab, testet nur den Browser)
-- Sony Xperia Arc (eigentlich nicht mehr verwendbar, nicht Teil der Messung)
+- Gerät A (Gastgeber)
+- Gerät B (App-Gast)
+- Gerät C (App-Gast und Browser-Test)
+- Gerät D (älteres Android, WLAN-Verbindung von Hand)
+- Gerät E (zu alt für Netlab, nur Browser-Test)
+- Gerät F (eigentlich nicht mehr verwendbar, nicht Teil der Messung)
 
-**Vorbereitung:** Die APK auf Honor, Xperia 1 IV, Note 20 und OnePlus 3T kopieren und installieren. Das Note 3 testet nur den Browser. Alternativ installiert Claude Netlab per USB, wenn die Handys nacheinander angeschlossen werden und USB-Debugging aktiv ist.
+Die Zuordnung zu den konkreten Geräten steht in der lokalen Claude-Memory, nicht im Repo.
+
+**Vorbereitung:** Die APK auf Gerät A, B, C und D kopieren und installieren. Gerät E testet nur den Browser. Alternativ installiert Claude Netlab per USB, wenn die Handys nacheinander angeschlossen werden und USB-Debugging aktiv ist.
 
 **Ablauf (etwa 30 bis 45 Minuten):**
 
-1. **Honor als Gastgeber:** WLAN und mobile Daten an. In Netlab „Gastgeber“ wählen, dann „Hotspot starten“. Netlab offen lassen.
-2. **Xperia als App-Gast:** mobile Daten an. „Gast“ wählen, den App-QR vom Honor scannen, verbinden und „Messungen starten“. Drei Durchläufe.
-3. **Note 20:** wie Schritt 2.
-4. **OnePlus 3T:** wie Schritt 2. Netlab zeigt hier die Zugangsdaten. Damit von Hand in den WLAN-Einstellungen verbinden, dann zurück in Netlab und messen.
+1. **Gerät A als Gastgeber:** WLAN und mobile Daten an. In Netlab „Gastgeber“ wählen, dann „Hotspot starten“. Netlab offen lassen.
+2. **Gerät B als App-Gast:** mobile Daten an. „Gast“ wählen, den App-QR von Gerät A scannen, verbinden und „Messungen starten“. Drei Durchläufe.
+3. **Gerät C:** wie Schritt 2.
+4. **Gerät D:** wie Schritt 2. Netlab zeigt hier die Zugangsdaten. Damit von Hand in den WLAN-Einstellungen verbinden, dann zurück in Netlab und messen.
 5. **Browser-Test (wichtigste Frage):**
-   1. Auf dem Note 20 Netlab schließen, mobile Daten an lassen.
-   2. Mit der Kamera den WLAN-QR vom Honor scannen und verbinden, dann den Browser-QR scannen.
+   1. Auf Gerät C Netlab schließen, mobile Daten an lassen.
+   2. Mit der Kamera den WLAN-QR von Gerät A scannen und verbinden, dann den Browser-QR scannen.
    3. Zeigt die Seite „Verbunden“?
-6. **Note 3:** Das WLAN von Hand mit den Daten vom Honor verbinden. Dann die Adresse unter dem Browser-QR in Chrome eintippen. Zeigt die Seite „Verbunden“?
+6. **Gerät E:** Das WLAN von Hand mit den Daten von Gerät A verbinden. Dann die Adresse unter dem Browser-QR in Chrome eintippen. Zeigt die Seite „Verbunden“?
 7. **Am Ende:** Auf jedem Handy mit Netlab „Bericht teilen“ wählen und den Text in die Claude-Session einfügen. Name und Passwort des WLANs sind darin unkenntlich gemacht. Für Schritt 5 und 6 reicht das Ergebnis: Ja oder Nein.
 
 Falls auf einem Handy eine VPN-App installiert ist: Schritt 2 auf diesem Handy einmal mit eingeschaltetem VPN wiederholen.
@@ -85,9 +86,9 @@ Vorgeschlagene Änderungen an `CLAUDE.md`:
 
 ### c) Endtest rc.1
 
-Priorität laut letzter Absprache: **nach Netlab**. Der Testkatalog steht in [TESTKATALOG-M3.md](TESTKATALOG-M3.md), Abschnitt „Endtest in Kürze“. Kurzfassung der Schritte mit dem Honor als Gastgeber und einem zweiten Handy:
+Priorität laut letzter Absprache: **nach Netlab**. Der Testkatalog steht in [TESTKATALOG-M3.md](TESTKATALOG-M3.md), Abschnitt „Endtest in Kürze“. Kurzfassung der Schritte mit Gerät A als Gastgeber und einem zweiten Handy:
 
-1. **Standort 9.7:** Honor-Kamera mit Standort ein Foto machen. Im Browser hochladen und „Standort entfernen“ wählen. In der Gastgeber-App darf keine Markierung „Standort enthalten“ stehen. Das Foto im Browser herunterladen und in der Galerie unter Details prüfen: kein Ort.
+1. **Standort 9.7:** Kamera von Gerät A mit Standort ein Foto machen. Im Browser hochladen und „Standort entfernen“ wählen. In der Gastgeber-App darf keine Markierung „Standort enthalten“ stehen. Das Foto im Browser herunterladen und in der Galerie unter Details prüfen: kein Ort.
 2. **Faltdisplay 4.28:** „Space starten“ im aufgeklappten Zustand antippen. Es muss sofort reagieren.
 3. **Start abbrechen 4.29:** Einen Space beenden und gleich einen zweiten starten. Der zweite wartet. „Start abbrechen“ tippen: Er wird wieder Entwurf.
 4. **Übernahme in die Galerie 11.1, 11.2, 11.14:** Im Space „In Galerie übernehmen“ wählen. Die Auswahl muss Vorschaubilder zeigen. Einige Fotos übernehmen. In der Galerie liegen sie unter `Emberlight/<Space>`. Noch einmal übernehmen: Es dürfen keine Doppelten entstehen.
@@ -95,7 +96,7 @@ Priorität laut letzter Absprache: **nach Netlab**. Der Testkatalog steht in [TE
 6. **Beendeter Space 10.41:** Ein Foto antippen, es muss sich öffnen.
 7. **Sonst:** Teilnehmerzahl (5.16), Gäste-Seite mit vielen Fotos flüssig (6.22).
 
-Offen dazu: Welche **Chrome-Version** ist auf dem Note 3 installiert? Chrome, Einstellungen, Über Google Chrome.
+Offen dazu: Welche **Chrome-Version** ist auf Gerät E installiert? Chrome, Einstellungen, Über Google Chrome.
 
 ## 5. Offene technische Punkte
 
@@ -117,5 +118,5 @@ Stand der Status: 15.11.2026, mit `gh` geprüft.
 
 ## 7. Quellen
 
-- Die bisherige Hauptsession lief mit cwd `H:\DEV`. Transkript `2e4d5592-383a-4d97-b66c-1c5388baef2d` im Claude-Projektordner „H--“.
+- Frühere Sessions: lokal, Verweis in der Memory.
 - Relevante Dokumente im Repo: [CLAUDE.md](../CLAUDE.md), [KONZEPT.md](KONZEPT.md), [KONZEPT-M4.md](KONZEPT-M4.md), [PLAN-M3.md](PLAN-M3.md), [PLAN-M4.md](PLAN-M4.md), [TESTKATALOG-M3.md](TESTKATALOG-M3.md), [RELEASE.md](RELEASE.md).
